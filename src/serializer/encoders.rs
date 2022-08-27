@@ -173,7 +173,6 @@ impl Encoder for IterableFieldEncoder {
             result.push(self.encoder.load(i.unwrap())?);
         }
         self.py_class.call1(value.py(), (result,))
-        // Ok(result.into_py(value.py()))
     }
 }
 
