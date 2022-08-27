@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use pyo3::exceptions::PyTypeError;
 use pyo3::ffi::PyTypeObject;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode, PyMapping};
+use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode, PyMapping, PyInt, PyLong};
 use pyo3::{ffi, AsPyPointer, Py, PyAny, PyResult};
 use pyo3::{PyObject, Python};
 
@@ -177,7 +177,8 @@ impl Encoder for IterableFieldEncoder {
     #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let iterable = value.iter()?;
-        let mut result = vec![];
+        let len: usize = py_len(value)?.extract()?;
+        let mut result = Vec::with_capacity(len);
         for i in iterable {
             result.push(self.encoder.load(i.unwrap())?);
         }
@@ -443,4 +444,10 @@ fn py_iterable_to_type(type_: &PyAny) -> PyResult<&PyAny> {
     Ok(mapping
         .get(&origin.as_ptr())
         .map_or(origin, |t| builtins.getattr(t).unwrap()))
+}
+
+
+fn py_len(obj: &PyAny) -> PyResult<&PyLong> {
+    let builtins = PyModule::import(obj.py(), "builtins")?;
+    Ok(builtins.getattr("len")?.call1((obj,))?.downcast()?)
 }
