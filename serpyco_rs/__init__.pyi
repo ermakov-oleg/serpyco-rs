@@ -7,7 +7,7 @@ class Serializer(Generic[T]):
     def dump(self, value: T) -> Any:
         pass
 
-    def loads(self, data: dict[str, Any]) -> T:
+    def load(self, data: dict[str, Any]) -> T:
         pass
 
 def make_serializer(py_class: Type[T]) -> Serializer[T]:

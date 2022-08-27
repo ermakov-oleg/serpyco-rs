@@ -20,13 +20,14 @@ def test_dump_simple_fields_types():
         bool_f=True,
         str_f='Test',
     )
-
-    assert serializer.dump(obj) == {
+    expected = {
         'bool_f': True,
         'float_f': 3.14,
         'int_f': 123,
         'str_f': 'Test'
     }
+    assert serializer.dump(obj) == expected
+    assert serializer.load(expected) == obj
 
 
 def test_dump_simple_nested_dataclasses():
@@ -54,15 +55,18 @@ def test_dump_simple_nested_dataclasses():
         ),
     )
 
-    assert serializer.dump(obj) == {
+    expected = {
         'int_f': 123,
         'nested': {
             'nested': {'value': 1},
             'value': 'test'}
     }
 
+    assert serializer.dump(obj) == expected
+    assert serializer.load(expected) == obj
 
-def test_dump_optional():
+
+def test_dump_nested():
     @dataclass
     class C:
         value: int
@@ -86,13 +90,14 @@ def test_dump_optional():
             nested=C(value=1)
         ),
     )
-
-    assert serializer.dump(obj) == {
+    expected = {
         'int_f': 123,
         'nested': {
             'nested': {'value': 1},
             'value': 'test'}
     }
+    assert serializer.dump(obj) == expected
+    assert serializer.load(expected) == obj
 
 
 def test_union_optional__dump_load__ok():
@@ -109,12 +114,12 @@ def test_union_optional__dump_load__ok():
     foo = UnionClass(name=None, count=None)
     dict_foo = {"name": None, "count": None}
     assert serializer.dump(foo) == dict_foo
-    # assert foo == serializer.loads(dict_foo)
+    assert foo == serializer.load(dict_foo)
 
     bar = UnionClass(name='try', count=5)
     dict_bar = {"name": 'try', "count": 5}
     assert serializer.dump(bar) == dict_bar
-    # assert bar == serializer.loads(dict_bar)
+    assert bar == serializer.load(dict_bar)
 
 
 def test_dump_iterables():
@@ -143,7 +148,7 @@ def test_dump_iterables():
         iterable_builtins_sequence=[1, 2, 3],
     )
 
-    assert serializer.dump(obj) == {
+    expected = {
         'iterable_builtins_list': [1, 2, 3],
         'iterable_typing_list': [1, 2, 3],
         'iterable_builtins_set': [1, 2, 3],
@@ -152,3 +157,6 @@ def test_dump_iterables():
         'iterable_typing_tuple': [1, 2, 3],
         'iterable_builtins_sequence': [1, 2, 3],
     }
+
+    assert serializer.dump(obj) == expected
+    assert serializer.load(expected) == obj

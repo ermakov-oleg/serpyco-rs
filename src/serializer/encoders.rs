@@ -1,13 +1,11 @@
-use std::ffi::CStr;
-use std::fmt::{format, Debug, Formatter};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
 use pyo3::exceptions::PyTypeError;
 use pyo3::ffi::PyTypeObject;
 use pyo3::prelude::*;
-use pyo3::types::{
-    PyDict, PyInt, PyIterator, PyList, PyModule, PySequence, PyTuple, PyType, PyUnicode,
-};
-use pyo3::{Py, PyAny, PyResult};
+use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode};
+use pyo3::{ffi, AsPyPointer, Py, PyAny, PyResult};
 use pyo3::{PyObject, Python};
 
 use crate::serializer::types;
@@ -26,7 +24,7 @@ impl Serializer {
     }
 
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let mut kwargs = PyDict::new(value.py());
+        let kwargs = PyDict::new(value.py());
 
         for field in &self.fields {
             let val = value.getattr(&field.name)?;
@@ -34,6 +32,27 @@ impl Serializer {
             kwargs.set_item(&field.dict_key, dump_result)?
         }
         Ok(Py::from(kwargs))
+    }
+
+    fn load<'a>(&'a self, data: &'a PyAny) -> PyResult<Py<PyAny>> {
+        let obj = make_new_object(self.py_class.as_ref(data.py()))?;
+        for field in &self.fields {
+            let val = match data.get_item(&field.dict_key) {
+                Ok(val) => field.encoder.load(val)?,
+                Err(e) => match (&field.default, &field.default_factory) {
+                    (Some(val), _) => val.clone(),
+                    (_, Some(val)) => val.call0(data.py())?,
+                    (None, _) => {
+                        return Err(PyTypeError::new_err(format!(
+                            "data dictionary is missing required parameter {} (err: {})",
+                            &field.name, e
+                        )))
+                    }
+                },
+            };
+            obj.setattr(&field.name, val)?;
+        }
+        Ok(Py::from(obj))
     }
 }
 
@@ -103,7 +122,7 @@ pub enum ObjectType {
 
 pub trait Encoder: Debug {
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
-    // fn loads(value: Py<PyAny>) -> &PyAny where Self: Sized;
+    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
 }
 
 #[derive(Debug)]
@@ -111,6 +130,10 @@ struct BuiltinsEncoder;
 
 impl Encoder for BuiltinsEncoder {
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        Ok(value.into())
+    }
+
+    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         Ok(value.into())
     }
 }
@@ -124,22 +147,35 @@ impl Encoder for DataClassEncoder {
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         self.serializer.dump(value).into()
     }
+    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        self.serializer.load(value).into()
+    }
 }
 
 #[derive(Debug)]
 struct IterableFieldEncoder {
     encoder: Box<dyn Encoder + Send>,
+    py_class: Py<PyAny>,
 }
 
 impl Encoder for IterableFieldEncoder {
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let iterable = value.iter()?;
-        let mut result = PyList::empty(value.py());
+        let result = PyList::empty(value.py());
         for i in iterable {
             result.append(self.encoder.dump(i.unwrap())?)?;
         }
 
         Ok(result.into())
+    }
+    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        let iterable = value.iter()?;
+        let mut result = vec![];
+        for i in iterable {
+            result.push(self.encoder.load(i.unwrap())?);
+        }
+        self.py_class.call1(value.py(), (result,))
+        // Ok(result.into_py(value.py()))
     }
 }
 
@@ -147,7 +183,7 @@ pub fn get_encoder_for_type(type_: &PyAny) -> PyResult<Box<dyn Encoder + Send>> 
     let mut type_ = type_;
     if is_union_type(type_)? {
         let args = get_args(type_)?;
-        type_ = TMP_get_arg1(args)?;
+        type_ = get_arg0(args)?;
     }
     let obj_type = get_object_type(type_)?;
 
@@ -161,10 +197,11 @@ pub fn get_encoder_for_type(type_: &PyAny) -> PyResult<Box<dyn Encoder + Send>> 
             serializer: make_serializer(type_)?,
         }),
         ObjectType::Iterable => {
-            let items_type = TMP_get_arg1(get_args(type_)?)?;
+            let items_type = get_arg0(get_args(type_)?)?;
 
             Box::new(IterableFieldEncoder {
                 encoder: get_encoder_for_type(items_type)?,
+                py_class: py_iterable_to_type(type_)?.into(),
             })
         }
         ObjectType::Unknown(t) => {
@@ -186,7 +223,7 @@ fn get_object_type(type_: &PyAny) -> PyResult<ObjectType> {
         Ok(ObjectType::Int)
     } else if is_native_type(type_, unsafe { types::NONE_TYPE }) {
         Ok(ObjectType::None)
-    } else if is_generic(type_, get_iterable_type(type_.py())?)? {
+    } else if is_generic(type_, get_iterable_type(&type_.py(), "Iterable")?)? {
         Ok(ObjectType::Iterable)
     } else if is_dataclass(type_)? {
         Ok(ObjectType::DataClass)
@@ -205,7 +242,7 @@ fn get_object_type(type_: &PyAny) -> PyResult<ObjectType> {
 
 fn is_native_type(type_: &PyAny, native_type: *mut PyTypeObject) -> bool {
     match type_.downcast::<PyType>() {
-        Ok(object_type) => object_type.as_type_ptr() == unsafe { native_type },
+        Ok(object_type) => object_type.as_type_ptr() == native_type,
         Err(_) => false,
     }
 }
@@ -269,6 +306,11 @@ fn is_none_type(type_: &PyAny) -> bool {
     }
 }
 
+fn get_origin(field_type: &PyAny) -> PyResult<&PyAny> {
+    let typing_inspect = PyModule::import(field_type.py(), "typing_inspect")?;
+    typing_inspect.getattr("get_origin")?.call1((field_type,))
+}
+
 fn is_generic(field_type: &PyAny, types: &PyAny) -> PyResult<bool> {
     let typing_inspect = PyModule::import(field_type.py(), "typing_inspect")?;
 
@@ -282,28 +324,63 @@ fn is_generic(field_type: &PyAny, types: &PyAny) -> PyResult<bool> {
         .is_true()?;
 
     if is_generic_type || is_tuple_type {
-        let origin = typing_inspect.getattr("get_origin")?.call1((field_type,))?;
-        is_subclass(origin, types)
+        is_subclass(get_origin(field_type)?, types)
     } else {
         Ok(false)
     }
 }
 
-fn get_iterable_type(py: Python) -> PyResult<&PyAny> {
-    let typing = PyModule::import(py, "typing")?;
-    typing.getattr("Iterable")
+fn get_iterable_type<'py>(py: &'py Python, type_: &str) -> PyResult<&'py PyAny> {
+    let typing = PyModule::import(*py, "typing")?;
+    typing.getattr(type_)
+}
+
+fn get_collections_abc_type<'py>(py: &'py Python, type_: &str) -> PyResult<&'py PyAny> {
+    let typing = PyModule::import(*py, "collections.abc")?;
+    typing.getattr(type_)
+}
+
+fn get_builtin_item(py: Python, key: &str) -> PyResult<PyObject> {
+    let builtins = PyModule::import(py, "builtins")?;
+    Ok(builtins.getattr(key)?.into())
 }
 
 fn is_subclass(cls: &PyAny, types: &PyAny) -> PyResult<bool> {
-    let builtins = PyModule::import(cls.py(), "builtins")?;
-    builtins.getattr("issubclass")?.call1((cls, types))?.is_true()
+    let py = cls.py();
+    get_builtin_item(cls.py(), "issubclass")?
+        .call1(py, (cls, types))?
+        .is_true(py)
 }
 
-fn TMP_get_arg1(args: &PyTuple) -> PyResult<&PyAny> {
+fn make_new_object(cls: &PyAny) -> PyResult<&PyAny> {
+    let py = cls.py();
+    let builtins = PyModule::import(py, "builtins")?;
+    let object = builtins.getattr("object")?;
+    Ok(object.getattr("__new__")?.call1((cls,))?.into())
+}
+
+fn get_arg0(args: &PyTuple) -> PyResult<&PyAny> {
     let filtered: Vec<&PyAny> = args.iter().filter(|it| !is_none_type(it)).collect();
-    // if filtered.len() > 1 {
-    //     Err(PyTypeError::new_err("Invalid args"))
-    // } else {
     Ok(filtered[0])
-    // }
+}
+
+fn py_iterable_to_type(type_: &PyAny) -> PyResult<&PyAny> {
+    let origin = get_origin(type_)?;
+    let py = type_.py();
+
+    let mapping: HashMap<*mut ffi::PyObject, &str> = HashMap::from([
+        (get_iterable_type(&py, "Tuple")?.as_ptr(), "tuple"),
+        (get_iterable_type(&py, "List")?.as_ptr(), "list"),
+        (get_iterable_type(&py, "Sequence")?.as_ptr(), "list"),
+        (get_iterable_type(&py, "Iterable")?.as_ptr(), "list"),
+        (get_iterable_type(&py, "Set")?.as_ptr(), "list"),
+        (get_collections_abc_type(&py, "Sequence")?.as_ptr(), "list"),
+        (get_collections_abc_type(&py, "Iterable")?.as_ptr(), "list"),
+    ]);
+
+    let builtins = PyModule::import(py, "builtins")?;
+
+    Ok(mapping
+        .get(&origin.as_ptr())
+        .map_or(origin, |t| builtins.getattr(t).unwrap()))
 }
