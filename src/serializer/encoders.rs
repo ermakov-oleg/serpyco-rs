@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use pyo3::exceptions::PyTypeError;
 use pyo3::ffi::PyTypeObject;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode};
+use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode, PyMapping};
 use pyo3::{ffi, AsPyPointer, Py, PyAny, PyResult};
 use pyo3::{PyObject, Python};
 
@@ -114,9 +114,7 @@ pub enum ObjectType {
     Float,
     DataClass,
     Iterable,
-    // Dict,
-    // Tuple,
-    // Enum,
+    Mapping,
     Unknown(String),
 }
 
@@ -179,6 +177,47 @@ impl Encoder for IterableFieldEncoder {
     }
 }
 
+
+#[derive(Debug)]
+struct DictFieldEncoder {
+    key_encoder: Box<dyn Encoder + Send>,
+    value_encoder: Box<dyn Encoder + Send>,
+}
+
+
+impl Encoder for DictFieldEncoder {
+    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        let result = PyDict::new(value.py());
+        let items = value.downcast::<PyMapping>()?.items()?;
+        for i in 0..items.len()? {
+            let item = items.get_item(i)?;
+            let key = item.get_item(0)?;
+            let value = item.get_item(1)?;
+            result.set_item(
+                self.key_encoder.dump(key)?,
+                self.value_encoder.dump(value)?
+            )?
+        }
+
+        Ok(result.into())
+    }
+    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        let result = PyDict::new(value.py());
+        let items = value.downcast::<PyMapping>()?.items()?;
+        for i in 0..items.len()? {
+            let item = items.get_item(i)?;
+            let key = item.get_item(0)?;
+            let value = item.get_item(1)?;
+            result.set_item(
+                self.key_encoder.load(key)?,
+                self.value_encoder.load(value)?
+            )?
+        }
+
+        Ok(result.into())
+    }
+}
+
 pub fn get_encoder_for_type(type_: &PyAny) -> PyResult<Box<dyn Encoder + Send>> {
     let mut type_ = type_;
     if is_union_type(type_)? {
@@ -203,6 +242,15 @@ pub fn get_encoder_for_type(type_: &PyAny) -> PyResult<Box<dyn Encoder + Send>> 
                 encoder: get_encoder_for_type(items_type)?,
                 py_class: py_iterable_to_type(type_)?.into(),
             })
+        },
+        ObjectType::Mapping => {
+            let args = get_args(type_)?;
+
+            Box::new(DictFieldEncoder {
+                key_encoder: get_encoder_for_type(args.get_item(0)?)?,
+                value_encoder: get_encoder_for_type(args.get_item(1)?)?,
+            })
+
         }
         ObjectType::Unknown(t) => {
             todo!("Unknown type: {}", t)
@@ -223,7 +271,9 @@ fn get_object_type(type_: &PyAny) -> PyResult<ObjectType> {
         Ok(ObjectType::Int)
     } else if is_native_type(type_, unsafe { types::NONE_TYPE }) {
         Ok(ObjectType::None)
-    } else if is_generic(type_, get_iterable_type(&type_.py(), "Iterable")?)? {
+    } else if is_generic(type_, get_typing_item(&type_.py(), "Mapping")?)? {
+        Ok(ObjectType::Mapping)
+    } else if is_generic(type_, get_typing_item(&type_.py(), "Iterable")?)? {
         Ok(ObjectType::Iterable)
     } else if is_dataclass(type_)? {
         Ok(ObjectType::DataClass)
@@ -330,7 +380,7 @@ fn is_generic(field_type: &PyAny, types: &PyAny) -> PyResult<bool> {
     }
 }
 
-fn get_iterable_type<'py>(py: &'py Python, type_: &str) -> PyResult<&'py PyAny> {
+fn get_typing_item<'py>(py: &'py Python, type_: &str) -> PyResult<&'py PyAny> {
     let typing = PyModule::import(*py, "typing")?;
     typing.getattr(type_)
 }
@@ -369,11 +419,11 @@ fn py_iterable_to_type(type_: &PyAny) -> PyResult<&PyAny> {
     let py = type_.py();
 
     let mapping: HashMap<*mut ffi::PyObject, &str> = HashMap::from([
-        (get_iterable_type(&py, "Tuple")?.as_ptr(), "tuple"),
-        (get_iterable_type(&py, "List")?.as_ptr(), "list"),
-        (get_iterable_type(&py, "Sequence")?.as_ptr(), "list"),
-        (get_iterable_type(&py, "Iterable")?.as_ptr(), "list"),
-        (get_iterable_type(&py, "Set")?.as_ptr(), "list"),
+        (get_typing_item(&py, "Tuple")?.as_ptr(), "tuple"),
+        (get_typing_item(&py, "List")?.as_ptr(), "list"),
+        (get_typing_item(&py, "Sequence")?.as_ptr(), "list"),
+        (get_typing_item(&py, "Iterable")?.as_ptr(), "list"),
+        (get_typing_item(&py, "Set")?.as_ptr(), "list"),
         (get_collections_abc_type(&py, "Sequence")?.as_ptr(), "list"),
         (get_collections_abc_type(&py, "Iterable")?.as_ptr(), "list"),
     ]);

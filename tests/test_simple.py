@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from serpyco_rs import make_serializer
 from typing import List, Set, Tuple
-from collections.abc import Sequence
+from collections.abc import Sequence, Mapping
 
 
 def test_dump_simple_fields_types():
@@ -30,7 +30,7 @@ def test_dump_simple_fields_types():
     assert serializer.load(expected) == obj
 
 
-def test_dump_simple_nested_dataclasses():
+def test_simple_nested_dataclasses():
     @dataclass
     class C:
         value: int
@@ -62,40 +62,6 @@ def test_dump_simple_nested_dataclasses():
             'value': 'test'}
     }
 
-    assert serializer.dump(obj) == expected
-    assert serializer.load(expected) == obj
-
-
-def test_dump_nested():
-    @dataclass
-    class C:
-        value: int
-
-    @dataclass
-    class B:
-        value: str
-        nested: C
-
-    @dataclass
-    class A:
-        int_f: int
-        nested: B
-
-    serializer = make_serializer(A)
-
-    obj = A(
-        int_f=123,
-        nested=B(
-            value='test',
-            nested=C(value=1)
-        ),
-    )
-    expected = {
-        'int_f': 123,
-        'nested': {
-            'nested': {'value': 1},
-            'value': 'test'}
-    }
     assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
 
@@ -122,7 +88,7 @@ def test_union_optional__dump_load__ok():
     assert bar == serializer.load(dict_bar)
 
 
-def test_dump_iterables():
+def test_iterables():
     @dataclass
     class A:
         iterable_builtins_list: list[int]
@@ -156,6 +122,32 @@ def test_dump_iterables():
         'iterable_builtins_tuple': [1, 2, 3],
         'iterable_typing_tuple': [1, 2, 3],
         'iterable_builtins_sequence': [1, 2, 3],
+    }
+
+    assert serializer.dump(obj) == expected
+    assert serializer.load(expected) == obj
+
+
+def test_mappings():
+    @dataclass
+    class B:
+        value: str
+
+    @dataclass
+    class A:
+        dict_field: dict[str, int]
+        mapping_field: Mapping[str, B]
+
+    serializer = make_serializer(A)
+
+    obj = A(
+        dict_field={'foo': 1},
+        mapping_field={'bar': B(value='123')}
+    )
+
+    expected = {
+        'dict_field': {'foo': 1},
+        'mapping_field': {'bar': {'value': '123'}},
     }
 
     assert serializer.dump(obj) == expected
