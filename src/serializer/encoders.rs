@@ -23,6 +23,7 @@ impl Serializer {
         format!("<Serializer: {:?}>", self)
     }
 
+    #[inline]
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let kwargs = PyDict::new(value.py());
 
@@ -34,6 +35,7 @@ impl Serializer {
         Ok(Py::from(kwargs))
     }
 
+    #[inline]
     fn load<'a>(&'a self, data: &'a PyAny) -> PyResult<Py<PyAny>> {
         let obj = make_new_object(self.py_class.as_ref(data.py()))?;
         for field in &self.fields {
@@ -127,10 +129,12 @@ pub trait Encoder: Debug {
 struct BuiltinsEncoder;
 
 impl Encoder for BuiltinsEncoder {
+    #[inline]
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         Ok(value.into())
     }
 
+    #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         Ok(value.into())
     }
@@ -142,9 +146,11 @@ struct DataClassEncoder {
 }
 
 impl Encoder for DataClassEncoder {
+    #[inline]
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         self.serializer.dump(value).into()
     }
+    #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         self.serializer.load(value).into()
     }
@@ -157,6 +163,7 @@ struct IterableFieldEncoder {
 }
 
 impl Encoder for IterableFieldEncoder {
+    #[inline]
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let iterable = value.iter()?;
         let result = PyList::empty(value.py());
@@ -166,6 +173,8 @@ impl Encoder for IterableFieldEncoder {
 
         Ok(result.into())
     }
+
+    #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let iterable = value.iter()?;
         let mut result = vec![];
@@ -185,6 +194,7 @@ struct DictFieldEncoder {
 
 
 impl Encoder for DictFieldEncoder {
+    #[inline]
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let result = PyDict::new(value.py());
         let items = value.downcast::<PyMapping>()?.items()?;
@@ -200,6 +210,7 @@ impl Encoder for DictFieldEncoder {
 
         Ok(result.into())
     }
+    #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let result = PyDict::new(value.py());
         let items = value.downcast::<PyMapping>()?.items()?;
