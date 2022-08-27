@@ -73,31 +73,3 @@ def test_load(benchmark, impl):
     benchmark.extra_info["correct"] = serializer.load(serializer.dump(test_object)) == test_object
 
     benchmark(serializer.load, test_dict, **kwargs)
-
-#
-# def test_dump_rs(benchmark):
-#     benchmark(serializer_rs.dump, test_object)
-
-#
-# def test_dump_json(benchmark):
-#     benchmark(serializer.dump_json, test_object)
-#
-
-# def test_load(benchmark):
-#     benchmark(serializer.load, test_dict, validate=False)
-
-#
-# def test_load_rs(benchmark):
-#     benchmark(serializer_rs.load, test_dict)
-
-#
-# def test_load_json(benchmark):
-#     benchmark(serializer.load_json, test_json, validate=False)
-#
-#
-# def test_validate(benchmark):
-#     benchmark(validator.validate, test_dict)
-#
-#
-# def test_validate_json(benchmark):
-#     benchmark(validator.validate_json, test_json)
