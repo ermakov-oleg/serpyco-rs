@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use pyo3::exceptions::PyTypeError;
 use pyo3::ffi::PyTypeObject;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode, PyMapping, PyInt, PyLong};
+use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode, PyMapping, PyInt, PyLong, PyIterator};
 use pyo3::{ffi, AsPyPointer, Py, PyAny, PyResult};
 use pyo3::{PyObject, Python};
 
@@ -198,11 +198,10 @@ impl Encoder for DictFieldEncoder {
     #[inline]
     fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let result = PyDict::new(value.py());
-        let items = value.downcast::<PyMapping>()?.items()?;
-        for i in 0..items.len()? {
-            let item = items.get_item(i)?;
-            let key = item.get_item(0)?;
-            let value = item.get_item(1)?;
+        for i in value.call_method0("items")?.iter()? {
+            let item = i?.downcast::<PyTuple>()?;
+            let key = &item[0];
+            let value = &item[1];
             result.set_item(
                 self.key_encoder.dump(key)?,
                 self.value_encoder.dump(value)?
