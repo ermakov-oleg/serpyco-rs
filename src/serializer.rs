@@ -1,5 +1,5 @@
-mod types;
 mod encoders;
+mod types;
 
-pub use types::init;
 pub use encoders::make_serializer;
+pub use types::init;

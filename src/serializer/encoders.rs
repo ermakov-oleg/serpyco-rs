@@ -4,7 +4,9 @@ use std::fmt::Debug;
 use pyo3::exceptions::PyTypeError;
 use pyo3::ffi::PyTypeObject;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule, PyTuple, PyType, PyUnicode, PyMapping, PyInt, PyLong, PyIterator};
+use pyo3::types::{
+    PyDict, PyInt, PyIterator, PyList, PyLong, PyMapping, PyModule, PyTuple, PyType, PyUnicode,
+};
 use pyo3::{ffi, AsPyPointer, Py, PyAny, PyResult};
 use pyo3::{PyObject, Python};
 
@@ -14,6 +16,7 @@ use crate::serializer::types;
 #[derive(Debug)]
 pub struct Serializer {
     py_class: Py<PyAny>,
+    new_method: Py<PyAny>,
     fields: Vec<Field>,
 }
 
@@ -37,7 +40,10 @@ impl Serializer {
 
     #[inline]
     fn load<'a>(&'a self, data: &'a PyAny) -> PyResult<Py<PyAny>> {
-        let obj = make_new_object(self.py_class.as_ref(data.py()))?;
+        let obj = self
+            .new_method
+            .call1(data.py(), (&self.py_class,))?
+            .into_ref(data.py());
         for field in &self.fields {
             let val = match data.get_item(&field.dict_key) {
                 Ok(val) => field.encoder.load(val)?,
@@ -101,6 +107,7 @@ pub fn make_serializer(py_class: &PyAny) -> PyResult<Serializer> {
 
     let serializer = Serializer {
         py_class: py_class.into(),
+        new_method: get_object_new_method(py_class)?.into(),
         fields,
     };
 
@@ -186,13 +193,11 @@ impl Encoder for IterableFieldEncoder {
     }
 }
 
-
 #[derive(Debug)]
 struct DictFieldEncoder {
     key_encoder: Box<dyn Encoder + Send>,
     value_encoder: Box<dyn Encoder + Send>,
 }
-
 
 impl Encoder for DictFieldEncoder {
     #[inline]
@@ -202,10 +207,7 @@ impl Encoder for DictFieldEncoder {
             let item = i?.downcast::<PyTuple>()?;
             let key = &item[0];
             let value = &item[1];
-            result.set_item(
-                self.key_encoder.dump(key)?,
-                self.value_encoder.dump(value)?
-            )?
+            result.set_item(self.key_encoder.dump(key)?, self.value_encoder.dump(value)?)?
         }
 
         Ok(result.into())
@@ -213,15 +215,11 @@ impl Encoder for DictFieldEncoder {
     #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let result = PyDict::new(value.py());
-        let items = value.downcast::<PyMapping>()?.items()?;
-        for i in 0..items.len()? {
-            let item = items.get_item(i)?;
-            let key = item.get_item(0)?;
-            let value = item.get_item(1)?;
-            result.set_item(
-                self.key_encoder.load(key)?,
-                self.value_encoder.load(value)?
-            )?
+        for i in value.call_method0("items")?.iter()? {
+            let item = i?.downcast::<PyTuple>()?;
+            let key = &item[0];
+            let value = &item[1];
+            result.set_item(self.key_encoder.load(key)?, self.value_encoder.load(value)?)?
         }
 
         Ok(result.into())
@@ -252,7 +250,7 @@ pub fn get_encoder_for_type(type_: &PyAny) -> PyResult<Box<dyn Encoder + Send>> 
                 encoder: get_encoder_for_type(items_type)?,
                 py_class: py_iterable_to_type(type_)?.into(),
             })
-        },
+        }
         ObjectType::Mapping => {
             let args = get_args(type_)?;
 
@@ -260,7 +258,6 @@ pub fn get_encoder_for_type(type_: &PyAny) -> PyResult<Box<dyn Encoder + Send>> 
                 key_encoder: get_encoder_for_type(args.get_item(0)?)?,
                 value_encoder: get_encoder_for_type(args.get_item(1)?)?,
             })
-
         }
         ObjectType::Unknown(t) => {
             todo!("Unknown type: {}", t)
@@ -412,11 +409,11 @@ fn is_subclass(cls: &PyAny, types: &PyAny) -> PyResult<bool> {
         .is_true(py)
 }
 
-fn make_new_object(cls: &PyAny) -> PyResult<&PyAny> {
+fn get_object_new_method(cls: &PyAny) -> PyResult<&PyAny> {
     let py = cls.py();
     let builtins = PyModule::import(py, "builtins")?;
     let object = builtins.getattr("object")?;
-    Ok(object.getattr("__new__")?.call1((cls,))?.into())
+    Ok(object.getattr("__new__")?.into())
 }
 
 fn get_arg0(args: &PyTuple) -> PyResult<&PyAny> {
@@ -444,7 +441,6 @@ fn py_iterable_to_type(type_: &PyAny) -> PyResult<&PyAny> {
         .get(&origin.as_ptr())
         .map_or(origin, |t| builtins.getattr(t).unwrap()))
 }
-
 
 fn py_len(obj: &PyAny) -> PyResult<&PyLong> {
     let builtins = PyModule::import(obj.py(), "builtins")?;
