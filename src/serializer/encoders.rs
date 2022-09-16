@@ -128,7 +128,7 @@ impl Encoder for ArrayEncoder {
 
 #[derive(Debug)]
 pub struct EntityEncoder {
-    pub(crate) py_type: Py<PyAny>,
+    pub(crate) create_new_object_args: Py<PyTuple>,
     pub(crate) fields: Vec<Field>,
 }
 
@@ -157,7 +157,7 @@ impl Encoder for EntityEncoder {
     #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let py = value.py();
-        let obj = create_new_object(&self.py_type.as_ref(py))?;
+        let obj = create_new_object(&self.create_new_object_args.as_ref(py))?;
         for field in &self.fields {
             let val = match value.get_item(&field.dict_key) {
                 Ok(val) => field.encoder.load(val)?,

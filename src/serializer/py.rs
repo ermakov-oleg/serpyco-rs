@@ -1,5 +1,5 @@
 use once_cell::sync::OnceCell;
-use pyo3::types::PyLong;
+use pyo3::types::{PyLong, PyTuple};
 use pyo3::{Py, PyAny, PyErr, PyObject, PyResult, Python};
 
 static DECIMAL: OnceCell<PyObject> = OnceCell::new();
@@ -46,7 +46,7 @@ pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
     Ok(not_set.is(obj))
 }
 
-pub fn create_new_object(cls: &PyAny) -> PyResult<&PyAny> {
+pub fn create_new_object(cls: &PyTuple) -> PyResult<&PyAny> {
     let py = cls.py();
     let __new__ = OBJECT_NEW
         .get_or_try_init(|| {
@@ -54,5 +54,5 @@ pub fn create_new_object(cls: &PyAny) -> PyResult<&PyAny> {
             Ok::<Py<PyAny>, PyErr>(builtins.getattr("object")?.getattr("__new__")?.into())
         })
         .map(|o| o.as_ref(py))?;
-    __new__.call1((cls,))
+    __new__.call1(cls)
 }

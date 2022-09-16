@@ -7,7 +7,7 @@ use crate::serializer::encoders::{
 use crate::serializer::py::is_not_set;
 use crate::serializer::types::{get_object_type, Type};
 use pyo3::prelude::*;
-use pyo3::types::PyUnicode;
+use pyo3::types::{PyTuple, PyUnicode};
 
 #[pyfunction]
 pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
@@ -77,7 +77,9 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
                 fields.push(fld);
             }
 
-            Box::new(EntityEncoder { py_type, fields })
+            let create_new_object_args = PyTuple::new(py, vec![py_type.clone()]).into();
+
+            Box::new(EntityEncoder { create_new_object_args, fields })
         }
         t => todo!("add support new types {:?}", t),
     };
