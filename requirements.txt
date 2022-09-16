@@ -2,3 +2,4 @@ pytest
 maturin
 serpyco
 pytest-benchmark
+pytz

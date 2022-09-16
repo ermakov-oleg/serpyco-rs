@@ -1,37 +1,124 @@
-use pyo3::ffi::{
-    PyDict_New, PyFloat_FromDouble, PyList_New, PyLong_FromLongLong, PyObject, PyTuple_New,
-    PyTypeObject, PyUnicode_New, Py_None, Py_TYPE, Py_True,
-};
-use std::{os::raw::c_char, sync::Once};
+use pyo3::ffi::PyObject;
+use pyo3::types::PyModule;
+use pyo3::Python;
+use pyo3::{AsPyPointer, Py, PyAny, PyResult};
+use std::sync::Once;
 
-pub static mut TRUE: *mut pyo3::ffi::PyObject = 0 as *mut pyo3::ffi::PyObject;
-
-pub static mut STR_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut INT_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut BOOL_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut NONE_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut FLOAT_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut LIST_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut DICT_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut TUPLE_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
+pub static mut INTEGER_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut STRING_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut FLOAT_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut DECIMAL_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut BOOLEAN_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut UUID_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut TIME_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut DATETIME_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut DATE_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut ENUM_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut ENTITY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut OPTIONAL_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut ARRAY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
-/// Set empty type object pointers with their actual values.
-/// We need these Python-side type objects for direct comparison during conversion to serde types
-/// NOTE. This function should be called before any serialization logic
-pub fn init() {
+#[derive(Clone, Debug)]
+pub enum Type {
+    IntegerType(Py<PyAny>),
+    StringType(Py<PyAny>),
+    BytesType(Py<PyAny>),
+    FloatType(Py<PyAny>),
+    DecimalType(Py<PyAny>),
+    BooleanType(Py<PyAny>),
+    UUIDType(Py<PyAny>),     // todo: implement
+    TimeType(Py<PyAny>),     // todo: implement
+    DateTimeType(Py<PyAny>), // todo: implement
+    DateType(Py<PyAny>),     // todo: implement
+    EnumType(Py<PyAny>),     // todo: implement
+    EntityType(Py<PyAny>),
+    OptionalType(Py<PyAny>), // todo: implement
+    ArrayType(Py<PyAny>),
+    DictionaryType(Py<PyAny>),
+    TupleType(Py<PyAny>), // todo: implement
+    AnyType(Py<PyAny>),
+}
+
+pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
+    if check_type!(type_info, INTEGER_TYPE) {
+        Ok(Type::IntegerType(type_info.into()))
+    } else if check_type!(type_info, STRING_TYPE) {
+        Ok(Type::StringType(type_info.into()))
+    } else if check_type!(type_info, BYTES_TYPE) {
+        Ok(Type::BytesType(type_info.into()))
+    } else if check_type!(type_info, FLOAT_TYPE) {
+        Ok(Type::FloatType(type_info.into()))
+    } else if check_type!(type_info, DECIMAL_TYPE) {
+        Ok(Type::DecimalType(type_info.into()))
+    } else if check_type!(type_info, BOOLEAN_TYPE) {
+        Ok(Type::BooleanType(type_info.into()))
+    } else if check_type!(type_info, UUID_TYPE) {
+        Ok(Type::UUIDType(type_info.into()))
+    } else if check_type!(type_info, TIME_TYPE) {
+        Ok(Type::TimeType(type_info.into()))
+    } else if check_type!(type_info, DATETIME_TYPE) {
+        Ok(Type::DateTimeType(type_info.into()))
+    } else if check_type!(type_info, DATE_TYPE) {
+        Ok(Type::DateType(type_info.into()))
+    } else if check_type!(type_info, ENUM_TYPE) {
+        Ok(Type::EnumType(type_info.into()))
+    } else if check_type!(type_info, ENTITY_TYPE) {
+        Ok(Type::EntityType(type_info.into()))
+    } else if check_type!(type_info, OPTIONAL_TYPE) {
+        Ok(Type::OptionalType(type_info.into()))
+    } else if check_type!(type_info, ARRAY_TYPE) {
+        Ok(Type::ArrayType(type_info.into()))
+    } else if check_type!(type_info, DICTIONARY_TYPE) {
+        Ok(Type::DictionaryType(type_info.into()))
+    } else if check_type!(type_info, TUPLE_TYPE) {
+        Ok(Type::TupleType(type_info.into()))
+    } else if check_type!(type_info, ANY_TYPE) {
+        Ok(Type::AnyType(type_info.into()))
+    } else {
+        todo!("py Error 'Unsupported type'")
+    }
+}
+
+pub fn init(py: Python<'_>) {
     INIT.call_once(|| unsafe {
-        TRUE = Py_True();
-        STR_TYPE = Py_TYPE(PyUnicode_New(0, 255));
-        DICT_TYPE = Py_TYPE(PyDict_New());
-        TUPLE_TYPE = Py_TYPE(PyTuple_New(0_isize));
-        LIST_TYPE = Py_TYPE(PyList_New(0_isize));
-        NONE_TYPE = Py_TYPE(Py_None());
-        BOOL_TYPE = Py_TYPE(TRUE);
-        INT_TYPE = Py_TYPE(PyLong_FromLongLong(0));
-        FLOAT_TYPE = Py_TYPE(PyFloat_FromDouble(0.0));
-        VALUE_STR = pyo3::ffi::PyUnicode_InternFromString("value\0".as_ptr().cast::<c_char>());
+        let describe = PyModule::import(py, "serpyco_rs._describe").unwrap();
+        INTEGER_TYPE = get_attr_ptr!(describe, "IntegerType");
+        STRING_TYPE = get_attr_ptr!(describe, "StringType");
+        BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
+        FLOAT_TYPE = get_attr_ptr!(describe, "FloatType");
+        DECIMAL_TYPE = get_attr_ptr!(describe, "DecimalType");
+        BOOLEAN_TYPE = get_attr_ptr!(describe, "BooleanType");
+        UUID_TYPE = get_attr_ptr!(describe, "UUIDType");
+        TIME_TYPE = get_attr_ptr!(describe, "TimeType");
+        DATETIME_TYPE = get_attr_ptr!(describe, "DateTimeType");
+        DATE_TYPE = get_attr_ptr!(describe, "DateType");
+        ENUM_TYPE = get_attr_ptr!(describe, "EnumType");
+        ENTITY_TYPE = get_attr_ptr!(describe, "EntityType");
+        OPTIONAL_TYPE = get_attr_ptr!(describe, "OptionalType");
+        ARRAY_TYPE = get_attr_ptr!(describe, "ArrayType");
+        DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
+        TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
+        ANY_TYPE = get_attr_ptr!(describe, "AnyType");
     });
 }
+
+macro_rules! check_type {
+    ($py_obj:ident, $type:expr) => {
+        $py_obj.get_type().as_ptr() == unsafe { $type }
+    };
+}
+
+macro_rules! get_attr_ptr {
+    ($mod:expr, $type:expr) => {
+        $mod.getattr($type).unwrap().as_ptr()
+    };
+}
+
+pub(crate) use check_type;
+pub(crate) use get_attr_ptr;

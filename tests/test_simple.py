@@ -93,13 +93,6 @@ def test_iterables():
     class A:
         iterable_builtins_list: list[int]
         iterable_typing_list: List[int]
-
-        iterable_builtins_set: set[int]
-        iterable_typing_set: Set[int]
-
-        iterable_builtins_tuple: tuple[int, ...]
-        iterable_typing_tuple: Tuple[int, ...]
-
         iterable_builtins_sequence: Sequence[int]
 
     serializer = make_serializer(A)
@@ -107,20 +100,12 @@ def test_iterables():
     obj = A(
         iterable_builtins_list=[1, 2, 3],
         iterable_typing_list=[1, 2, 3],
-        iterable_builtins_set={1, 2, 3},
-        iterable_typing_set={1, 2, 3},
-        iterable_builtins_tuple=(1, 2, 3),
-        iterable_typing_tuple=(1, 2, 3),
         iterable_builtins_sequence=[1, 2, 3],
     )
 
     expected = {
         'iterable_builtins_list': [1, 2, 3],
         'iterable_typing_list': [1, 2, 3],
-        'iterable_builtins_set': [1, 2, 3],
-        'iterable_typing_set': [1, 2, 3],
-        'iterable_builtins_tuple': [1, 2, 3],
-        'iterable_typing_tuple': [1, 2, 3],
         'iterable_builtins_sequence': [1, 2, 3],
     }
 
