@@ -79,7 +79,10 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
 
             let create_new_object_args = PyTuple::new(py, vec![py_type.clone()]).into();
 
-            Box::new(EntityEncoder { create_new_object_args, fields })
+            Box::new(EntityEncoder {
+                create_new_object_args,
+                fields,
+            })
         }
         t => todo!("add support new types {:?}", t),
     };

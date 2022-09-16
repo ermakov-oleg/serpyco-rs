@@ -53,7 +53,7 @@ impl Encoder for DecimalEncoder {
 
     #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        match decimal(value.py())?.call1((value,)) {
+        match decimal(value.py()).call1((value,)) {
             Ok(val) => Ok(Py::from(val)),
             Err(e) => Err(ValidationError::new_err(format!(
                 "invalid Decimal value: {:?} error: {:?}",

@@ -1,58 +1,77 @@
-use once_cell::sync::OnceCell;
+use pyo3::once_cell::GILOnceCell;
 use pyo3::types::{PyLong, PyTuple};
 use pyo3::{Py, PyAny, PyErr, PyObject, PyResult, Python};
 
-static DECIMAL: OnceCell<PyObject> = OnceCell::new();
-static BUILTINS: OnceCell<PyObject> = OnceCell::new();
-static PY_LEN: OnceCell<PyObject> = OnceCell::new();
-static NOT_SET: OnceCell<PyObject> = OnceCell::new();
-static OBJECT_NEW: OnceCell<PyObject> = OnceCell::new();
+static DECIMAL: GILOnceCell<PyObject> = GILOnceCell::new();
+static BUILTINS: GILOnceCell<PyObject> = GILOnceCell::new();
+static PY_LEN: GILOnceCell<PyObject> = GILOnceCell::new();
+static NOT_SET: GILOnceCell<PyObject> = GILOnceCell::new();
+static OBJECT_NEW: GILOnceCell<PyObject> = GILOnceCell::new();
 
-pub fn decimal(py: Python) -> PyResult<&PyAny> {
+pub fn decimal(py: Python) -> &PyAny {
     DECIMAL
-        .get_or_try_init(|| Ok(py.import("decimal")?.getattr("Decimal")?.into()))
-        .map(|o| o.as_ref(py))
+        .get_or_init(py, || {
+            py.import("decimal")
+                .expect("Error when importing decimal.Decimal")
+                .getattr("Decimal")
+                .expect("Error when importing decimal.Decimal")
+                .into()
+        })
+        .as_ref(py)
 }
 
-fn builtins(py: Python) -> PyResult<&PyAny> {
+fn builtins(py: Python) -> &PyAny {
     BUILTINS
-        .get_or_try_init(|| Ok(py.import("builtins")?.into()))
-        .map(|o| o.as_ref(py))
+        .get_or_init(py, || {
+            py.import("builtins")
+                .expect("Error when importing builtins")
+                .into()
+        })
+        .as_ref(py)
 }
 
 pub fn py_len(obj: &PyAny) -> PyResult<&PyLong> {
     let py = obj.py();
     let len = PY_LEN
-        .get_or_try_init(|| {
-            let builtins = builtins(py)?;
-            Ok::<Py<PyAny>, PyErr>(builtins.getattr("len")?.into())
+        .get_or_init(py, || {
+            let builtins = builtins(py);
+            builtins
+                .getattr("len")
+                .expect("Error when importing builtins.len")
+                .into()
         })
-        .map(|o| o.as_ref(py))?;
+        .as_ref(py);
     Ok(len.call1((obj,))?.downcast()?)
 }
 
 pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
     let py = obj.py();
     let not_set = NOT_SET
-        .get_or_try_init(|| {
-            Ok::<Py<PyAny>, PyErr>(
-                py.import("serpyco_rs")?
-                    .getattr("_describe")?
-                    .getattr("NOT_SET")?
-                    .into(),
-            )
+        .get_or_init(py, || {
+            py.import("serpyco_rs")
+                .expect("Error when importing serpyco_rs")
+                .getattr("_describe")
+                .expect("Error when importing serpyco_rs._describe")
+                .getattr("NOT_SET")
+                .expect("Error when importing serpyco_rs._describe.NOT_SET")
+                .into()
         })
-        .map(|o| o.as_ref(py))?;
+        .as_ref(py);
     Ok(not_set.is(obj))
 }
 
 pub fn create_new_object(cls: &PyTuple) -> PyResult<&PyAny> {
     let py = cls.py();
     let __new__ = OBJECT_NEW
-        .get_or_try_init(|| {
-            let builtins = builtins(py)?;
-            Ok::<Py<PyAny>, PyErr>(builtins.getattr("object")?.getattr("__new__")?.into())
+        .get_or_init(py, || {
+            let builtins = builtins(py);
+            builtins
+                .getattr("object")
+                .expect("Error when importing builtins.object")
+                .getattr("__new__")
+                .expect("Error getattr builtins.object.__new__")
+                .into()
         })
-        .map(|o| o.as_ref(py))?;
+        .as_ref(py);
     __new__.call1(cls)
 }
