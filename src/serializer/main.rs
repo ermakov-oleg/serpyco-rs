@@ -7,7 +7,7 @@ use crate::serializer::encoders::{
 use crate::serializer::py::is_not_set;
 use crate::serializer::types::{get_object_type, Type};
 use pyo3::prelude::*;
-use pyo3::types::{PyTuple, PyUnicode};
+use pyo3::types::{PyString, PyTuple, PyUnicode};
 
 #[pyfunction]
 pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
@@ -56,7 +56,7 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
 
             for field in class_fields.as_ref(py).iter()? {
                 let field = field?;
-                let f_name: &PyUnicode = field.getattr("name")?.downcast()?;
+                let f_name: &PyString = field.getattr("name")?.downcast()?;
                 let f_type = get_object_type(field.getattr("type")?)?;
                 let f_default = field.getattr("default")?;
                 let f_default_factory = field.getattr("default_factory")?;

@@ -1,13 +1,14 @@
 use crate::serializer::py::{create_new_object, decimal, py_len};
 use pyo3::exceptions::PyException;
-use pyo3::types::{PyDict, PyList, PyTuple, PyUnicode};
-use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, ToPyObject};
+use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyUnicode};
+use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, ToPyObject, AsPyPointer, Python};
 use std::fmt::Debug;
+use pyo3_ffi::{Py_ssize_t, PyObject};
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
 pub trait Encoder: Debug {
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
 }
 
@@ -20,7 +21,9 @@ pub struct Serializer {
 #[pymethods]
 impl Serializer {
     pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        self.encoder.dump(value)
+        unsafe {
+            Ok(Py::from_owned_ptr(value.py(), self.encoder.dump(value.as_ptr())?))
+        }
     }
     pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         self.encoder.load(value)
@@ -32,8 +35,8 @@ pub struct NoopEncoder;
 
 impl Encoder for NoopEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        Ok(value.into())
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Ok(value)
     }
 
     #[inline]
@@ -47,8 +50,8 @@ pub struct DecimalEncoder;
 
 impl Encoder for DecimalEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        Ok(value.into())
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Ok(value)
     }
 
     #[inline]
@@ -71,16 +74,23 @@ pub struct DictionaryEncoder {
 
 impl Encoder for DictionaryEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let result = PyDict::new(value.py());
-        for i in value.call_method0("items")?.iter()? {
-            let item = i?.downcast::<PyTuple>()?;
-            let key = &item[0];
-            let value = &item[1];
-            result.set_item(self.key_encoder.dump(key)?, self.value_encoder.dump(value)?)?
-        }
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
 
-        Ok(result.into())
+        Python::with_gil(|py| {
+            let value: Py<PyAny> = unsafe {Py::from_owned_ptr(py, value)};
+
+            for i in value.call_method0(py, "items")?.as_ref(py).iter()? {
+                let item = i?.downcast::<PyTuple>()?;
+                let key = self.key_encoder.dump(item[0].as_ptr())?;
+                let value = self.value_encoder.dump(item[1].as_ptr())?;
+
+                ffi!(PyDict_SetItem(dict_ptr, key, value));
+            }
+            PyResult::Ok(())
+        })?;
+
+        Ok(dict_ptr)
     }
 
     #[inline]
@@ -104,21 +114,31 @@ pub struct ArrayEncoder {
 
 impl Encoder for ArrayEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let iterable = value.iter()?;
-        let result = PyList::empty(value.py());
-        for i in iterable {
-            result.append(self.encoder.dump(i.unwrap())?)?;
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let len = Python::with_gil(|py| {
+            let value: Py<PyAny> = unsafe {Py::from_owned_ptr(py, value)};
+            py_len(value.as_ref(py))
+        })?;
+
+
+        let list = ffi!(PyList_New(len));
+
+        for i in 0..len {
+            let item = ffi!(PyList_GetItem(value, i));
+            let val = self.encoder.dump(item)?;
+
+            ffi!(PyList_SetItem(list, i, val));
+
         }
 
-        Ok(result.into())
+        Ok(list)
     }
 
     #[inline]
     fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let iterable = value.iter()?;
-        let len: usize = py_len(value)?.extract()?;
-        let mut result = Vec::with_capacity(len);
+        let len: Py_ssize_t = py_len(value)?;
+        let mut result = Vec::with_capacity(len as usize);
         for i in iterable {
             result.push(self.encoder.load(i.unwrap())?);
         }
@@ -134,8 +154,8 @@ pub struct EntityEncoder {
 
 #[derive(Debug)]
 pub struct Field {
-    pub(crate) name: Py<PyUnicode>,
-    pub(crate) dict_key: Py<PyUnicode>,
+    pub(crate) name: Py<PyString>,
+    pub(crate) dict_key: Py<PyString>,
     pub(crate) encoder: Box<dyn Encoder + Send>,
     pub(crate) default: Option<Py<PyAny>>,
     pub(crate) default_factory: Option<Py<PyAny>>,
@@ -143,15 +163,16 @@ pub struct Field {
 
 impl Encoder for EntityEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let kwargs = PyDict::new(value.py());
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
 
         for field in &self.fields {
-            let val = value.getattr(&field.name)?;
-            let dump_result = field.encoder.dump(val.into())?;
-            kwargs.set_item(&field.dict_key, dump_result)?
+            let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr()));
+            let dump_result = field.encoder.dump(field_val)?;
+            ffi!(PyDict_SetItem(dict_ptr, field.dict_key.as_ptr(), dump_result));
         }
-        Ok(Py::from(kwargs))
+
+        Ok(dict_ptr)
     }
 
     #[inline]
@@ -172,8 +193,34 @@ impl Encoder for EntityEncoder {
                     }
                 },
             };
-            obj.setattr(&field.name, val)?;
+            obj.setattr(field.name.as_ref(py), val)?;
         }
         Ok(Py::from(obj))
     }
 }
+
+
+
+macro_rules! ffi {
+    ($fn:ident()) => {
+        unsafe { pyo3_ffi::$fn() }
+    };
+
+    ($fn:ident($obj1:expr)) => {
+        unsafe { pyo3_ffi::$fn($obj1) }
+    };
+
+    ($fn:ident($obj1:expr, $obj2:expr)) => {
+        unsafe { pyo3_ffi::$fn($obj1, $obj2) }
+    };
+
+    ($fn:ident($obj1:expr, $obj2:expr, $obj3:expr)) => {
+        unsafe { pyo3_ffi::$fn($obj1, $obj2, $obj3) }
+    };
+
+    ($fn:ident($obj1:expr, $obj2:expr, $obj3:expr, $obj4:expr)) => {
+        unsafe { pyo3_ffi::$fn($obj1, $obj2, $obj3, $obj4) }
+    };
+}
+
+pub(crate) use ffi;

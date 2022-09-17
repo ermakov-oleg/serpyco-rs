@@ -1,6 +1,7 @@
 use pyo3::once_cell::GILOnceCell;
 use pyo3::types::{PyLong, PyTuple};
 use pyo3::{Py, PyAny, PyErr, PyObject, PyResult, Python};
+use pyo3_ffi::Py_ssize_t;
 
 static DECIMAL: GILOnceCell<PyObject> = GILOnceCell::new();
 static BUILTINS: GILOnceCell<PyObject> = GILOnceCell::new();
@@ -30,7 +31,7 @@ fn builtins(py: Python) -> &PyAny {
         .as_ref(py)
 }
 
-pub fn py_len(obj: &PyAny) -> PyResult<&PyLong> {
+pub fn py_len(obj: &PyAny) -> PyResult<Py_ssize_t> {
     let py = obj.py();
     let len = PY_LEN
         .get_or_init(py, || {
@@ -41,7 +42,7 @@ pub fn py_len(obj: &PyAny) -> PyResult<&PyLong> {
                 .into()
         })
         .as_ref(py);
-    Ok(len.call1((obj,))?.downcast()?)
+    Ok(len.call1((obj,))?.extract()?)
 }
 
 pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
