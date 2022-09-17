@@ -11,5 +11,8 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
-dependencies = ["typing-inspect>=0.8.0"]
+dependencies = [
+    "typing-inspect>=0.8.0",
+    "attributes-doc",
+]
 

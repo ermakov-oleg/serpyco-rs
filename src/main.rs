@@ -1,5 +1,3 @@
 mod serializer;
 
-fn main() {
-    // serializer::Serializer
-}
+fn main() {}
