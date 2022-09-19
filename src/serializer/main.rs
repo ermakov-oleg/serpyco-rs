@@ -7,7 +7,7 @@ use crate::serializer::encoders::{
 use crate::serializer::py::is_not_set;
 use crate::serializer::types::{get_object_type, Type};
 use pyo3::prelude::*;
-use pyo3::types::{PyString, PyTuple, PyUnicode};
+use pyo3::types::{PyString, PyTuple};
 
 #[pyfunction]
 pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {

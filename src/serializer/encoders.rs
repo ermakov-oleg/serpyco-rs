@@ -1,9 +1,9 @@
 use crate::serializer::py::{create_new_object, decimal, py_len};
 use pyo3::exceptions::PyException;
-use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyUnicode};
-use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, ToPyObject, AsPyPointer, Python};
+use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python, ToPyObject};
+use pyo3_ffi::{PyObject, Py_ssize_t};
 use std::fmt::Debug;
-use pyo3_ffi::{Py_ssize_t, PyObject};
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
@@ -22,7 +22,10 @@ pub struct Serializer {
 impl Serializer {
     pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         unsafe {
-            Ok(Py::from_owned_ptr(value.py(), self.encoder.dump(value.as_ptr())?))
+            Ok(Py::from_owned_ptr(
+                value.py(),
+                self.encoder.dump(value.as_ptr())?,
+            ))
         }
     }
     pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
@@ -78,7 +81,7 @@ impl Encoder for DictionaryEncoder {
         let dict_ptr = ffi!(PyDict_New());
 
         Python::with_gil(|py| {
-            let value: Py<PyAny> = unsafe {Py::from_owned_ptr(py, value)};
+            let value: Py<PyAny> = unsafe { Py::from_owned_ptr(py, value) };
 
             for i in value.call_method0(py, "items")?.as_ref(py).iter()? {
                 let item = i?.downcast::<PyTuple>()?;
@@ -116,10 +119,9 @@ impl Encoder for ArrayEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         let len = Python::with_gil(|py| {
-            let value: Py<PyAny> = unsafe {Py::from_owned_ptr(py, value)};
+            let value: Py<PyAny> = unsafe { Py::from_owned_ptr(py, value) };
             py_len(value.as_ref(py))
         })?;
-
 
         let list = ffi!(PyList_New(len));
 
@@ -128,7 +130,6 @@ impl Encoder for ArrayEncoder {
             let val = self.encoder.dump(item)?;
 
             ffi!(PyList_SetItem(list, i, val));
-
         }
 
         Ok(list)
@@ -169,7 +170,11 @@ impl Encoder for EntityEncoder {
         for field in &self.fields {
             let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr()));
             let dump_result = field.encoder.dump(field_val)?;
-            ffi!(PyDict_SetItem(dict_ptr, field.dict_key.as_ptr(), dump_result));
+            ffi!(PyDict_SetItem(
+                dict_ptr,
+                field.dict_key.as_ptr(),
+                dump_result
+            ));
         }
 
         Ok(dict_ptr)
@@ -198,8 +203,6 @@ impl Encoder for EntityEncoder {
         Ok(Py::from(obj))
     }
 }
-
-
 
 macro_rules! ffi {
     ($fn:ident()) => {
