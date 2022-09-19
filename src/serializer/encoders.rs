@@ -1,7 +1,11 @@
-use crate::serializer::py::{create_new_object, decimal, py_len};
+use crate::serializer::macros::ffi;
+use crate::serializer::py::{
+    create_new_object, error_on_minusone, iter_over_dict_items, py_len, py_object_get_item,
+    py_object_set_attr, py_tuple_get_item, to_decimal, to_iter,
+};
 use pyo3::exceptions::PyException;
 use pyo3::types::{PyDict, PyString, PyTuple};
-use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python, ToPyObject};
+use pyo3::{intern, pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python, ToPyObject};
 use pyo3_ffi::{PyObject, Py_ssize_t};
 use std::fmt::Debug;
 
@@ -9,7 +13,7 @@ pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
 pub trait Encoder: Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
 }
 
 #[pyclass]
@@ -22,14 +26,19 @@ pub struct Serializer {
 impl Serializer {
     pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         unsafe {
-            Ok(Py::from_owned_ptr(
+            Ok(Py::from_borrowed_ptr(
                 value.py(),
                 self.encoder.dump(value.as_ptr())?,
             ))
         }
     }
     pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        self.encoder.load(value)
+        unsafe {
+            Ok(Py::from_borrowed_ptr(
+                value.py(),
+                self.encoder.load(value.as_ptr())?,
+            ))
+        }
     }
 }
 
@@ -43,8 +52,8 @@ impl Encoder for NoopEncoder {
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        Ok(value.into())
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Ok(value)
     }
 }
 
@@ -58,14 +67,10 @@ impl Encoder for DecimalEncoder {
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        match decimal(value.py()).call1((value,)) {
-            Ok(val) => Ok(Py::from(val)),
-            Err(e) => Err(ValidationError::new_err(format!(
-                "invalid Decimal value: {:?} error: {:?}",
-                value, e
-            ))),
-        }
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        to_decimal(value).map_err(|e| {
+            ValidationError::new_err(format!("invalid Decimal value: {:?} error: {:?}", value, e))
+        })
     }
 }
 
@@ -80,33 +85,29 @@ impl Encoder for DictionaryEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         let dict_ptr = ffi!(PyDict_New());
 
-        Python::with_gil(|py| {
-            let value: Py<PyAny> = unsafe { Py::from_owned_ptr(py, value) };
+        for i in iter_over_dict_items(value)? {
+            let item = i?;
+            let key = self.key_encoder.dump(py_tuple_get_item(item, 0)?)?;
+            let value = self.value_encoder.dump(py_tuple_get_item(item, 1)?)?;
 
-            for i in value.call_method0(py, "items")?.as_ref(py).iter()? {
-                let item = i?.downcast::<PyTuple>()?;
-                let key = self.key_encoder.dump(item[0].as_ptr())?;
-                let value = self.value_encoder.dump(item[1].as_ptr())?;
-
-                ffi!(PyDict_SetItem(dict_ptr, key, value));
-            }
-            PyResult::Ok(())
-        })?;
+            ffi!(PyDict_SetItem(dict_ptr, key, value));
+        }
 
         Ok(dict_ptr)
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let result = PyDict::new(value.py());
-        for i in value.call_method0("items")?.iter()? {
-            let item = i?.downcast::<PyTuple>()?;
-            let key = &item[0];
-            let value = &item[1];
-            result.set_item(self.key_encoder.load(key)?, self.value_encoder.load(value)?)?
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
+
+        for i in iter_over_dict_items(value)? {
+            let item = i?;
+            let key = self.key_encoder.load(py_tuple_get_item(item, 0)?)?;
+            let value = self.value_encoder.load(py_tuple_get_item(item, 1)?)?;
+            ffi!(PyDict_SetItem(dict_ptr, key, value));
         }
 
-        Ok(result.into())
+        Ok(dict_ptr)
     }
 }
 
@@ -118,10 +119,7 @@ pub struct ArrayEncoder {
 impl Encoder for ArrayEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let len = Python::with_gil(|py| {
-            let value: Py<PyAny> = unsafe { Py::from_owned_ptr(py, value) };
-            py_len(value.as_ref(py))
-        })?;
+        let len = py_len(value)?;
 
         let list = ffi!(PyList_New(len));
 
@@ -136,14 +134,15 @@ impl Encoder for ArrayEncoder {
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let iterable = value.iter()?;
-        let len: Py_ssize_t = py_len(value)?;
-        let mut result = Vec::with_capacity(len as usize);
-        for i in iterable {
-            result.push(self.encoder.load(i.unwrap())?);
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let len = py_len(value)?;
+        let list = ffi!(PyList_New(len));
+        for i in 0..len {
+            let item = ffi!(PyList_GetItem(value, i));
+            let val = self.encoder.load(item)?;
+            ffi!(PyList_SetItem(list, i, val));
         }
-        Ok(result.to_object(value.py()))
+        Ok(list)
     }
 }
 
@@ -181,49 +180,26 @@ impl Encoder for EntityEncoder {
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let py = value.py();
-        let obj = create_new_object(&self.create_new_object_args.as_ref(py))?;
-        for field in &self.fields {
-            let val = match value.get_item(&field.dict_key) {
-                Ok(val) => field.encoder.load(val)?,
-                Err(e) => match (&field.default, &field.default_factory) {
-                    (Some(val), _) => val.clone(),
-                    (_, Some(val)) => val.call0(py)?,
-                    (None, _) => {
-                        return Err(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {} (err: {})",
-                            &field.name, e
-                        )))
-                    }
-                },
-            };
-            obj.setattr(field.name.as_ref(py), val)?;
-        }
-        Ok(Py::from(obj))
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Python::with_gil(|py| {
+            let obj = create_new_object(&self.create_new_object_args.as_ref(py))?;
+            for field in &self.fields {
+                let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
+                    Ok(val) => field.encoder.load(val)?,
+                    Err(e) => match (&field.default, &field.default_factory) {
+                        (Some(val), _) => val.clone().as_ptr(),
+                        (_, Some(val)) => val.call0(py)?.as_ptr(),
+                        (None, _) => {
+                            return Err(ValidationError::new_err(format!(
+                                "data dictionary is missing required parameter {} (err: {})",
+                                &field.name, e
+                            )))
+                        }
+                    },
+                };
+                py_object_set_attr(obj, field.name.as_ptr(), val)?
+            }
+            Ok(obj)
+        })
     }
 }
-
-macro_rules! ffi {
-    ($fn:ident()) => {
-        unsafe { pyo3_ffi::$fn() }
-    };
-
-    ($fn:ident($obj1:expr)) => {
-        unsafe { pyo3_ffi::$fn($obj1) }
-    };
-
-    ($fn:ident($obj1:expr, $obj2:expr)) => {
-        unsafe { pyo3_ffi::$fn($obj1, $obj2) }
-    };
-
-    ($fn:ident($obj1:expr, $obj2:expr, $obj3:expr)) => {
-        unsafe { pyo3_ffi::$fn($obj1, $obj2, $obj3) }
-    };
-
-    ($fn:ident($obj1:expr, $obj2:expr, $obj3:expr, $obj4:expr)) => {
-        unsafe { pyo3_ffi::$fn($obj1, $obj2, $obj3, $obj4) }
-    };
-}
-
-pub(crate) use ffi;
