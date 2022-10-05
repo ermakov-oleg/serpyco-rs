@@ -1,9 +1,9 @@
 use crate::serializer::macros::ffi;
 use crate::serializer::types::ITEMS_STR;
 use pyo3::once_cell::GILOnceCell;
-use pyo3::types::{PyString, PyTuple};
-use pyo3::{ffi, intern, AsPyPointer, Py, PyAny, PyErr, PyObject, PyResult, Python, ToPyObject};
+use pyo3::{ffi, AsPyPointer, Py, PyAny, PyErr, PyObject, PyResult, Python, ToPyObject};
 use pyo3_ffi::Py_ssize_t;
+use pyo3::types::PyTuple;
 use std::os::raw::{c_char, c_int};
 use std::ptr::NonNull;
 
@@ -89,7 +89,6 @@ pub fn iter_over_dict_items(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterato
 }
 
 pub fn to_py_string(s: &str) -> *mut ffi::PyObject {
-    let ptr = s.as_ptr() as *const c_char;
     ffi!(PyUnicode_InternFromString(s.as_ptr() as *const c_char))
 }
 
@@ -154,7 +153,7 @@ pub fn error_on_minusone(result: c_int) -> PyResult<()> {
     }
 }
 
-pub fn to_iter(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterator> {
+fn to_iter(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterator> {
     let internal = PyObjectIterator(from_ptr_or_err(ffi!(PyObject_GetIter(obj)))?);
     Ok(internal)
 }
