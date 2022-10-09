@@ -41,7 +41,6 @@ def test_to_json_schema():
         n: Any
         o: int | None
 
-    print(describe_type(Data))
     schema = to_json_schema(describe_type(Data)).dump()
 
     assert schema == {
@@ -78,6 +77,8 @@ def test_to_json_schema():
             },
             "k": {"items": {"type": "integer"}, "type": "array"},
             "l": {
+                "maxItems": 3,
+                "minItems": 3,
                 "prefixItems": [
                     {"type": "integer"},
                     {"type": "string"},
