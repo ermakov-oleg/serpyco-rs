@@ -1,4 +1,5 @@
 mod encoders;
+mod macros;
 mod main;
 mod py;
 mod types;

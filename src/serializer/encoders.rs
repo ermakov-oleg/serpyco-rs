@@ -1,14 +1,19 @@
-use crate::serializer::py::{create_new_object, decimal, py_len};
+use crate::serializer::macros::ffi;
+use crate::serializer::py::{
+    create_new_object, iter_over_dict_items, py_len, py_object_get_item,
+    py_object_set_attr, py_tuple_get_item, to_decimal,
+};
 use pyo3::exceptions::PyException;
-use pyo3::types::{PyDict, PyList, PyTuple, PyUnicode};
-use pyo3::{pyclass, pymethods, Py, PyAny, PyResult, ToPyObject};
+use pyo3::types::{PyString, PyTuple};
+use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
+use pyo3_ffi::{PyObject};
 use std::fmt::Debug;
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
 pub trait Encoder: Debug {
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>>;
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
 }
 
 #[pyclass]
@@ -20,10 +25,20 @@ pub struct Serializer {
 #[pymethods]
 impl Serializer {
     pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        self.encoder.dump(value)
+        unsafe {
+            Ok(Py::from_borrowed_ptr(
+                value.py(),
+                self.encoder.dump(value.as_ptr())?,
+            ))
+        }
     }
     pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        self.encoder.load(value)
+        unsafe {
+            Ok(Py::from_borrowed_ptr(
+                value.py(),
+                self.encoder.load(value.as_ptr())?,
+            ))
+        }
     }
 }
 
@@ -32,13 +47,13 @@ pub struct NoopEncoder;
 
 impl Encoder for NoopEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        Ok(value.into())
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Ok(value)
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        Ok(value.into())
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Ok(value)
     }
 }
 
@@ -47,19 +62,15 @@ pub struct DecimalEncoder;
 
 impl Encoder for DecimalEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        Ok(value.into())
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Ok(value)
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        match decimal(value.py()).call1((value,)) {
-            Ok(val) => Ok(Py::from(val)),
-            Err(e) => Err(ValidationError::new_err(format!(
-                "invalid Decimal value: {:?} error: {:?}",
-                value, e
-            ))),
-        }
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        to_decimal(value).map_err(|e| {
+            ValidationError::new_err(format!("invalid Decimal value: {:?} error: {:?}", value, e))
+        })
     }
 }
 
@@ -71,29 +82,32 @@ pub struct DictionaryEncoder {
 
 impl Encoder for DictionaryEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let result = PyDict::new(value.py());
-        for i in value.call_method0("items")?.iter()? {
-            let item = i?.downcast::<PyTuple>()?;
-            let key = &item[0];
-            let value = &item[1];
-            result.set_item(self.key_encoder.dump(key)?, self.value_encoder.dump(value)?)?
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
+
+        for i in iter_over_dict_items(value)? {
+            let item = i?;
+            let key = self.key_encoder.dump(py_tuple_get_item(item, 0)?)?;
+            let value = self.value_encoder.dump(py_tuple_get_item(item, 1)?)?;
+
+            ffi!(PyDict_SetItem(dict_ptr, key, value));
         }
 
-        Ok(result.into())
+        Ok(dict_ptr)
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let result = PyDict::new(value.py());
-        for i in value.call_method0("items")?.iter()? {
-            let item = i?.downcast::<PyTuple>()?;
-            let key = &item[0];
-            let value = &item[1];
-            result.set_item(self.key_encoder.load(key)?, self.value_encoder.load(value)?)?
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
+
+        for i in iter_over_dict_items(value)? {
+            let item = i?;
+            let key = self.key_encoder.load(py_tuple_get_item(item, 0)?)?;
+            let value = self.value_encoder.load(py_tuple_get_item(item, 1)?)?;
+            ffi!(PyDict_SetItem(dict_ptr, key, value));
         }
 
-        Ok(result.into())
+        Ok(dict_ptr)
     }
 }
 
@@ -104,25 +118,31 @@ pub struct ArrayEncoder {
 
 impl Encoder for ArrayEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let iterable = value.iter()?;
-        let result = PyList::empty(value.py());
-        for i in iterable {
-            result.append(self.encoder.dump(i.unwrap())?)?;
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let len = py_len(value)?;
+
+        let list = ffi!(PyList_New(len));
+
+        for i in 0..len {
+            let item = ffi!(PyList_GetItem(value, i));
+            let val = self.encoder.dump(item)?;
+
+            ffi!(PyList_SetItem(list, i, val));
         }
 
-        Ok(result.into())
+        Ok(list)
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let iterable = value.iter()?;
-        let len: usize = py_len(value)?.extract()?;
-        let mut result = Vec::with_capacity(len);
-        for i in iterable {
-            result.push(self.encoder.load(i.unwrap())?);
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let len = py_len(value)?;
+        let list = ffi!(PyList_New(len));
+        for i in 0..len {
+            let item = ffi!(PyList_GetItem(value, i));
+            let val = self.encoder.load(item)?;
+            ffi!(PyList_SetItem(list, i, val));
         }
-        Ok(result.to_object(value.py()))
+        Ok(list)
     }
 }
 
@@ -134,8 +154,8 @@ pub struct EntityEncoder {
 
 #[derive(Debug)]
 pub struct Field {
-    pub(crate) name: Py<PyUnicode>,
-    pub(crate) dict_key: Py<PyUnicode>,
+    pub(crate) name: Py<PyString>,
+    pub(crate) dict_key: Py<PyString>,
     pub(crate) encoder: Box<dyn Encoder + Send>,
     pub(crate) default: Option<Py<PyAny>>,
     pub(crate) default_factory: Option<Py<PyAny>>,
@@ -143,37 +163,43 @@ pub struct Field {
 
 impl Encoder for EntityEncoder {
     #[inline]
-    fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let kwargs = PyDict::new(value.py());
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
 
         for field in &self.fields {
-            let val = value.getattr(&field.name)?;
-            let dump_result = field.encoder.dump(val.into())?;
-            kwargs.set_item(&field.dict_key, dump_result)?
+            let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr()));
+            let dump_result = field.encoder.dump(field_val)?;
+            ffi!(PyDict_SetItem(
+                dict_ptr,
+                field.dict_key.as_ptr(),
+                dump_result
+            ));
         }
-        Ok(Py::from(kwargs))
+
+        Ok(dict_ptr)
     }
 
     #[inline]
-    fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        let py = value.py();
-        let obj = create_new_object(&self.create_new_object_args.as_ref(py))?;
-        for field in &self.fields {
-            let val = match value.get_item(&field.dict_key) {
-                Ok(val) => field.encoder.load(val)?,
-                Err(e) => match (&field.default, &field.default_factory) {
-                    (Some(val), _) => val.clone(),
-                    (_, Some(val)) => val.call0(py)?,
-                    (None, _) => {
-                        return Err(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {} (err: {})",
-                            &field.name, e
-                        )))
-                    }
-                },
-            };
-            obj.setattr(&field.name, val)?;
-        }
-        Ok(Py::from(obj))
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        Python::with_gil(|py| {
+            let obj = create_new_object(&self.create_new_object_args.as_ref(py))?;
+            for field in &self.fields {
+                let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
+                    Ok(val) => field.encoder.load(val)?,
+                    Err(e) => match (&field.default, &field.default_factory) {
+                        (Some(val), _) => val.clone().as_ptr(),
+                        (_, Some(val)) => val.call0(py)?.as_ptr(),
+                        (None, _) => {
+                            return Err(ValidationError::new_err(format!(
+                                "data dictionary is missing required parameter {} (err: {})",
+                                &field.name, e
+                            )))
+                        }
+                    },
+                };
+                py_object_set_attr(obj, field.name.as_ptr(), val)?
+            }
+            Ok(obj)
+        })
     }
 }

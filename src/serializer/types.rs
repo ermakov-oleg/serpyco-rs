@@ -21,6 +21,7 @@ pub static mut ARRAY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -105,6 +106,8 @@ pub fn init(py: Python<'_>) {
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
         ANY_TYPE = get_attr_ptr!(describe, "AnyType");
+
+        ITEMS_STR = to_py_string("items");
     });
 }
 
@@ -120,5 +123,6 @@ macro_rules! get_attr_ptr {
     };
 }
 
+use crate::serializer::py::to_py_string;
 pub(crate) use check_type;
 pub(crate) use get_attr_ptr;
