@@ -6,7 +6,7 @@ from ._describe import describe_type
 from ._impl import make_encoder, Serializer
 
 
-T = TypeVar('T', bound=Any)
+T = TypeVar("T", bound=Any)
 
 
 def make_serializer(t: type[T]) -> Serializer[T]:

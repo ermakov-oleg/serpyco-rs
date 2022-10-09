@@ -44,32 +44,33 @@ test_object = Dataclass(
 
 
 serializers = {
-    'cython': serializer_cython,
-    'rust': serializer_rs,
+    "cython": serializer_cython,
+    "rust": serializer_rs,
 }
 
 
-@pytest.mark.parametrize('impl', ['cython', 'rust'])
+@pytest.mark.parametrize("impl", ["cython", "rust"])
 def test_dump(benchmark, impl):
     serializer = serializers[impl]
-    benchmark.group = 'dump'
+    benchmark.group = "dump"
     benchmark.extra_info["impl"] = impl
-    benchmark.extra_info["correct"] = serializer.load(serializer.dump(test_object)) == test_object
+    benchmark.extra_info["correct"] = (
+        serializer.load(serializer.dump(test_object)) == test_object
+    )
     benchmark(serializer.dump, test_object)
 
 
-@pytest.mark.parametrize('impl', ['cython', 'rust'])
+@pytest.mark.parametrize("impl", ["cython", "rust"])
 def test_load(benchmark, impl):
     serializer = serializers[impl]
     test_dict = serializer.dump(test_object)
 
-    kwargs = {
-        'cython': {'validate': False},
-        'rust': {}
-    }[impl]
+    kwargs = {"cython": {"validate": False}, "rust": {}}[impl]
 
-    benchmark.group = 'load'
+    benchmark.group = "load"
     benchmark.extra_info["impl"] = impl
-    benchmark.extra_info["correct"] = serializer.load(serializer.dump(test_object)) == test_object
+    benchmark.extra_info["correct"] = (
+        serializer.load(serializer.dump(test_object)) == test_object
+    )
 
     benchmark(serializer.load, test_dict, **kwargs)

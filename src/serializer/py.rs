@@ -9,7 +9,6 @@ use std::ptr::NonNull;
 
 static DECIMAL: GILOnceCell<PyObject> = GILOnceCell::new();
 static BUILTINS: GILOnceCell<PyObject> = GILOnceCell::new();
-static PY_LEN: GILOnceCell<PyObject> = GILOnceCell::new();
 static NOT_SET: GILOnceCell<PyObject> = GILOnceCell::new();
 static OBJECT_NEW: GILOnceCell<PyObject> = GILOnceCell::new();
 
