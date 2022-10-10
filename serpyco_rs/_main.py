@@ -10,7 +10,6 @@ T = TypeVar("T", bound=Any)
 
 
 class Serializer(Generic[T]):
-
     def __init__(self, t: type[T]) -> None:
         type_info = describe_type(t)
         self._encoder = make_encoder(type_info)

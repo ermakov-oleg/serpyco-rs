@@ -275,12 +275,16 @@ def _describe_dataclass(t: type[Any], generics: Mapping[TypeVar, Any]) -> Entity
                 type=describe_type(
                     _replace_generics(types.get(field.name, field.type), generics)
                 ),
-                default=field.default
-                if field.default is not dataclasses.MISSING
-                else NOT_SET,
-                default_factory=field.default_factory
-                if field.default_factory is not dataclasses.MISSING
-                else NOT_SET,
+                default=(
+                    field.default
+                    if field.default is not dataclasses.MISSING
+                    else NOT_SET
+                ),
+                default_factory=(
+                    field.default_factory
+                    if field.default_factory is not dataclasses.MISSING
+                    else NOT_SET
+                ),
                 is_property=False,
             )
         )

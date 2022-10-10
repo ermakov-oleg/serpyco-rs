@@ -7,7 +7,6 @@ T = TypeVar("T")
 class ValidationError(Exception):
     pass
 
-
 class Serializer(Generic[T]):
     def dump(self, value: T) -> Any:
         pass
