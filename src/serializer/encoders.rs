@@ -1,12 +1,12 @@
 use crate::serializer::macros::ffi;
 use crate::serializer::py::{
-    create_new_object, iter_over_dict_items, py_len, py_object_get_item,
-    py_object_set_attr, py_tuple_get_item, to_decimal,
+    create_new_object, iter_over_dict_items, py_len, py_object_get_item, py_object_set_attr,
+    py_tuple_get_item, to_decimal,
 };
 use pyo3::exceptions::PyException;
-use pyo3::types::{PyString, PyTuple};
+use pyo3::types::{PyBool, PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
-use pyo3_ffi::{PyObject};
+use pyo3_ffi::PyObject;
 use std::fmt::Debug;
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);

@@ -14,5 +14,6 @@ classifiers = [
 dependencies = [
     "typing-inspect>=0.8.0",
     "attributes-doc",
+    "orjson",
 ]
 

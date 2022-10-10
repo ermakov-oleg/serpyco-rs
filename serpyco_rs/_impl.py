@@ -1,1 +1,1 @@
-from .serpyco_rs import ValidationError, make_encoder, Serializer
+from .serpyco_rs import ValidationError, make_encoder, Serializer, Validator

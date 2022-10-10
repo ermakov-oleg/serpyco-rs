@@ -31,7 +31,7 @@ class Dataclass(object):
 
 
 serializer_cython = serpyco.Serializer(Dataclass)
-serializer_rs = serpyco_rs.make_serializer(Dataclass)
+serializer_rs = serpyco_rs.Serializer(Dataclass)
 
 test_object = Dataclass(
     name="Foo",
@@ -61,16 +61,15 @@ def test_dump(benchmark, impl):
 
 
 @pytest.mark.parametrize("impl", ["cython", "rust"])
-def test_load(benchmark, impl):
+@pytest.mark.parametrize("validate", [True, False])
+def test_load(benchmark, impl, validate):
     serializer = serializers[impl]
     test_dict = serializer.dump(test_object)
 
-    kwargs = {"cython": {"validate": False}, "rust": {}}[impl]
-
-    benchmark.group = "load"
+    benchmark.group = "load" if validate else "load without validation"
     benchmark.extra_info["impl"] = impl
     benchmark.extra_info["correct"] = (
         serializer.load(serializer.dump(test_object)) == test_object
     )
 
-    benchmark(serializer.load, test_dict, **kwargs)
+    benchmark(serializer.load, test_dict, validate=validate)

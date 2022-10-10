@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from serpyco_rs import make_serializer
+from serpyco_rs import Serializer
 from typing import List, Set, Tuple
 from collections.abc import Sequence, Mapping
 
@@ -12,7 +12,7 @@ def test_dump_simple_fields_types():
         bool_f: bool
         str_f: str
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(
         int_f=123,
@@ -40,7 +40,7 @@ def test_simple_nested_dataclasses():
         int_f: int
         nested: B
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(
         int_f=123,
@@ -61,7 +61,7 @@ def test_union_optional__dump_load__ok():
         count: None | int
 
     # act
-    serializer = make_serializer(UnionClass)
+    serializer = Serializer(UnionClass)
 
     # assert
     foo = UnionClass(name=None, count=None)
@@ -82,7 +82,7 @@ def test_iterables():
         iterable_typing_list: List[int]
         iterable_builtins_sequence: Sequence[int]
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(
         iterable_builtins_list=[1, 2, 3],
@@ -110,7 +110,7 @@ def test_mappings():
         dict_field: dict[str, int]
         mapping_field: Mapping[str, B]
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(dict_field={"foo": 1}, mapping_field={"bar": B(value="123")})
 
@@ -119,5 +119,5 @@ def test_mappings():
         "mapping_field": {"bar": {"value": "123"}},
     }
 
-    assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
+    assert serializer.dump(obj) == expected

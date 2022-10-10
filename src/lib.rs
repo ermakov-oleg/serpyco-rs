@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 fn serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
     serializer::init(py);
     m.add_class::<serializer::Serializer>()?;
+    m.add_class::<serializer::Validator>()?;
     m.add_function(wrap_pyfunction!(serializer::make_encoder, m)?)?;
     m.add(
         "ValidationError",
