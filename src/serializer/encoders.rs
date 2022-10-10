@@ -1,8 +1,9 @@
 use crate::serializer::macros::ffi;
 use crate::serializer::py::{
-    create_new_object, iter_over_dict_items, py_len, py_object_get_item, py_object_set_attr,
-    py_tuple_get_item, to_decimal,
+    create_new_object, iter_over_dict_items, obj_to_str, py_len, py_object_call1_make_tuple_or_err,
+    py_object_get_attr, py_object_get_item, py_object_set_attr, py_tuple_get_item, to_decimal,
 };
+use crate::serializer::types::{UUID_PY_TYPE, VALUE_STR};
 use pyo3::exceptions::PyException;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
@@ -63,7 +64,7 @@ pub struct DecimalEncoder;
 impl Encoder for DecimalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        Ok(value)
+        obj_to_str(value)
     }
 
     #[inline]
@@ -201,5 +202,37 @@ impl Encoder for EntityEncoder {
             }
             Ok(obj)
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct UUIDEncoder;
+
+impl Encoder for UUIDEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        obj_to_str(value)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        py_object_call1_make_tuple_or_err(unsafe { UUID_PY_TYPE }, value)
+    }
+}
+
+#[derive(Debug)]
+pub struct EnumEncoder {
+    pub(crate) enum_type: pyo3::PyObject,
+}
+
+impl Encoder for EnumEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        obj_to_str(py_object_get_attr(value, unsafe { VALUE_STR })?)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        py_object_call1_make_tuple_or_err(self.enum_type.as_ptr(), value)
     }
 }

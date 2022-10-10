@@ -4,6 +4,7 @@ use pyo3::once_cell::GILOnceCell;
 use pyo3::types::PyTuple;
 use pyo3::{ffi, AsPyPointer, Py, PyAny, PyErr, PyObject, PyResult, Python, ToPyObject};
 use pyo3_ffi::Py_ssize_t;
+use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
 use std::ptr::NonNull;
 
@@ -87,8 +88,14 @@ pub fn iter_over_dict_items(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterato
     to_iter(items)
 }
 
+pub fn obj_to_str(obj: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
+    from_ptr_or_err(ffi!(PyObject_Str(obj)))
+}
+
 pub fn to_py_string(s: &str) -> *mut ffi::PyObject {
-    ffi!(PyUnicode_InternFromString(s.as_ptr() as *const c_char))
+    let c_str = CString::new(s).unwrap();
+    let c_world: *const c_char = c_str.as_ptr() as *const c_char;
+    ffi!(PyUnicode_InternFromString(c_world))
 }
 
 fn py_object_call1_or_err(
@@ -105,7 +112,7 @@ fn py_object_callmethod_noargs(
     from_ptr_or_err(ffi!(PyObject_CallMethodNoArgs(obj, name)))
 }
 
-fn py_object_call1_make_tuple_or_err(
+pub fn py_object_call1_make_tuple_or_err(
     obj: *mut ffi::PyObject,
     arg: *mut ffi::PyObject,
 ) -> PyResult<*mut ffi::PyObject> {
@@ -122,6 +129,13 @@ pub fn py_object_set_attr(
 ) -> PyResult<()> {
     let ret = ffi!(PyObject_SetAttr(obj, attr_name, value));
     error_on_minusone(ret)
+}
+
+pub fn py_object_get_attr(
+    obj: *mut ffi::PyObject,
+    attr_name: *mut ffi::PyObject,
+) -> PyResult<*mut ffi::PyObject> {
+    from_ptr_or_err(ffi!(PyObject_GetAttr(obj, attr_name)))
 }
 
 pub fn py_tuple_get_item(obj: *mut ffi::PyObject, index: usize) -> PyResult<*mut ffi::PyObject> {

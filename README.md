@@ -38,11 +38,9 @@ The main use-case for serpyco-rs is to serialize objects for an API, but it can 
 
 ## Todo
 
-- implement UUIDType
 - implement TimeType
 - implement DateTimeType
 - implement DateType
-- implement EnumType
 - implement OptionalType
 - implement TupleType
 - run tests in CI
