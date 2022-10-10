@@ -1,5 +1,7 @@
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import Enum
 
 import pytest
 
@@ -23,7 +25,9 @@ def test_simple_types(type, value):
 
 def test_decimal():
     serializer = Serializer(Decimal)
-    assert serializer.dump(Decimal(123)) == serializer.load(123) == Decimal(123)
+    assert serializer.dump(Decimal(123)) == "123"
+    assert serializer.load(123) == Decimal(123)
+    assert serializer.load("123") == Decimal(123)
 
 
 def test_decimal_invalid_value__raise_validation_error():
@@ -35,12 +39,9 @@ def test_decimal_invalid_value__raise_validation_error():
 
 def test_dict_encoder():
     serializer = Serializer(dict[str, Decimal])
-    val = {
-        "a": Decimal(
-            "123.3",
-        )
-    }
-    assert serializer.dump(val) == serializer.load({"a": "123.3"}) == val
+    val = {"a": Decimal("123.3")}
+    assert serializer.dump(val) == {"a": "123.3"}
+    assert serializer.load({"a": "123.3"}) == val
 
 
 def test_array_encoder():
@@ -68,3 +69,19 @@ def test_entity_encoder():
     expected = {"bool_f": True, "float_f": 3.14, "int_f": 123, "str_f": "Test"}
     assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
+
+
+def test_uuid():
+    serializer = Serializer(uuid.UUID)
+    val = uuid.uuid4()
+    assert serializer.dump(val) == str(val)
+    assert serializer.load(str(val)) == val
+
+
+def test_enum():
+    class Foo(Enum):
+        foo = "foo"
+
+    serializer = Serializer(Foo)
+    assert serializer.dump(Foo.foo) == "foo"
+    assert serializer.load("foo") == Foo.foo

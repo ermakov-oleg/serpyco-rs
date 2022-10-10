@@ -22,6 +22,8 @@ pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
+pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
+pub static mut UUID_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -107,7 +109,10 @@ pub fn init(py: Python<'_>) {
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
         ANY_TYPE = get_attr_ptr!(describe, "AnyType");
 
+        let uuid = PyModule::import(py, "uuid").unwrap();
+        UUID_PY_TYPE = get_attr_ptr!(uuid, "UUID");
         ITEMS_STR = to_py_string("items");
+        VALUE_STR = to_py_string("value");
     });
 }
 
