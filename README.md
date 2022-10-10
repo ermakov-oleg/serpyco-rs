@@ -3,7 +3,7 @@
 ## What is serpyco-rs ?
 
 
-Serpyco is a serialization library for `Python 3.9+ dataclasses <https://docs.python.org/3/library/dataclasses.html>`_ that works just by defining your dataclasses:
+Serpyco is a serialization library for [Python 3.9+ dataclasses](https://docs.python.org/3/library/dataclasses.html) that works just by defining your dataclasses:
 
 ```python
 import dataclasses
@@ -47,3 +47,6 @@ The main use-case for serpyco-rs is to serialize objects for an API, but it can 
 - implement TupleType
 - run tests in CI
 - CI checks (pylint, black, mypy, ...)
+- more tests
+- bench results
+- ...
