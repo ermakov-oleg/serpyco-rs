@@ -4,14 +4,14 @@ import orjson
 
 from ._describe import describe_type
 from ._impl import make_encoder
-from ._json_schema import ValicoValidator, to_json_schema, Validator
+from ._json_schema import JsonschemaRSValidator, to_json_schema, Validator
 
 T = TypeVar("T", bound=Any)
 
 
 class Serializer(Generic[T]):
     def __init__(
-        self, t: type[T], validator_cls: type[Validator] = ValicoValidator
+        self, t: type[T], validator_cls: type[Validator] = JsonschemaRSValidator
     ) -> None:
         type_info = describe_type(t)
         self._encoder = make_encoder(type_info)
@@ -24,8 +24,3 @@ class Serializer(Generic[T]):
         if validate:
             self._validator.validate(data)
         return self._encoder.load(data)
-
-    def load_json(self, data: str, validate: bool = True) -> T:
-        if validate:
-            self._validator.validate_json(data)
-        return self._encoder.load(orjson.loads(data))

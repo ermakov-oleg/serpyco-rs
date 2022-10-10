@@ -9,4 +9,4 @@ from ._entities import (
     ObjectType,
     ArrayType,
 )
-from ._validate import Validator, ValicoValidator, RapidJsonValidator
+from ._validate import Validator, JsonschemaRSValidator

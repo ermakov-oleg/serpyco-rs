@@ -32,7 +32,6 @@ class Dataclass(object):
 
 serializer_cython = serpyco.Serializer(Dataclass)
 serializer_rs = serpyco_rs.Serializer(Dataclass)
-serializer_rs_rapid = serpyco_rs.Serializer(Dataclass, validator_cls=serpyco_rs.RapidJsonValidator)
 
 test_object = Dataclass(
     name="Foo",
@@ -47,7 +46,6 @@ test_object = Dataclass(
 serializers = {
     "cython": serializer_cython,
     "rust": serializer_rs,
-    "rust_rapidjson": serializer_rs_rapid,
 }
 
 
@@ -75,7 +73,7 @@ def test_load(benchmark, impl):
     benchmark(serializer.load, test_dict, validate=False)
 
 
-@pytest.mark.parametrize("impl", ["cython", "rust", "rust_rapidjson"])
+@pytest.mark.parametrize("impl", ["rust", "cython"])
 def test_load_validate(benchmark, impl):
     serializer = serializers[impl]
     test_dict = serializer.dump(test_object)
