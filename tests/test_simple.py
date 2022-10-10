@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from serpyco_rs import make_serializer
+from serpyco_rs import Serializer
 from typing import List, Set, Tuple
 from collections.abc import Sequence, Mapping
 
@@ -12,20 +12,15 @@ def test_dump_simple_fields_types():
         bool_f: bool
         str_f: str
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(
         int_f=123,
         float_f=3.14,
         bool_f=True,
-        str_f='Test',
+        str_f="Test",
     )
-    expected = {
-        'bool_f': True,
-        'float_f': 3.14,
-        'int_f': 123,
-        'str_f': 'Test'
-    }
+    expected = {"bool_f": True, "float_f": 3.14, "int_f": 123, "str_f": "Test"}
     assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
 
@@ -45,22 +40,14 @@ def test_simple_nested_dataclasses():
         int_f: int
         nested: B
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(
         int_f=123,
-        nested=B(
-            value='test',
-            nested=C(value=1)
-        ),
+        nested=B(value="test", nested=C(value=1)),
     )
 
-    expected = {
-        'int_f': 123,
-        'nested': {
-            'nested': {'value': 1},
-            'value': 'test'}
-    }
+    expected = {"int_f": 123, "nested": {"nested": {"value": 1}, "value": "test"}}
 
     assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
@@ -74,7 +61,7 @@ def test_union_optional__dump_load__ok():
         count: None | int
 
     # act
-    serializer = make_serializer(UnionClass)
+    serializer = Serializer(UnionClass)
 
     # assert
     foo = UnionClass(name=None, count=None)
@@ -82,8 +69,8 @@ def test_union_optional__dump_load__ok():
     assert serializer.dump(foo) == dict_foo
     assert foo == serializer.load(dict_foo)
 
-    bar = UnionClass(name='try', count=5)
-    dict_bar = {"name": 'try', "count": 5}
+    bar = UnionClass(name="try", count=5)
+    dict_bar = {"name": "try", "count": 5}
     assert serializer.dump(bar) == dict_bar
     assert bar == serializer.load(dict_bar)
 
@@ -95,7 +82,7 @@ def test_iterables():
         iterable_typing_list: List[int]
         iterable_builtins_sequence: Sequence[int]
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
     obj = A(
         iterable_builtins_list=[1, 2, 3],
@@ -104,9 +91,9 @@ def test_iterables():
     )
 
     expected = {
-        'iterable_builtins_list': [1, 2, 3],
-        'iterable_typing_list': [1, 2, 3],
-        'iterable_builtins_sequence': [1, 2, 3],
+        "iterable_builtins_list": [1, 2, 3],
+        "iterable_typing_list": [1, 2, 3],
+        "iterable_builtins_sequence": [1, 2, 3],
     }
 
     assert serializer.dump(obj) == expected
@@ -123,17 +110,14 @@ def test_mappings():
         dict_field: dict[str, int]
         mapping_field: Mapping[str, B]
 
-    serializer = make_serializer(A)
+    serializer = Serializer(A)
 
-    obj = A(
-        dict_field={'foo': 1},
-        mapping_field={'bar': B(value='123')}
-    )
+    obj = A(dict_field={"foo": 1}, mapping_field={"bar": B(value="123")})
 
     expected = {
-        'dict_field': {'foo': 1},
-        'mapping_field': {'bar': {'value': '123'}},
+        "dict_field": {"foo": 1},
+        "mapping_field": {"bar": {"value": "123"}},
     }
 
-    assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
+    assert serializer.dump(obj) == expected

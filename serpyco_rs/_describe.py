@@ -9,7 +9,7 @@ from uuid import UUID
 from enum import Enum, IntEnum
 
 
-from ._metadata import Min, Max, MaxLength, MinLength, Places
+from .metadata import Min, Max, MaxLength, MinLength, Places
 
 from attributes_doc import get_attributes_doc
 
@@ -27,12 +27,12 @@ except ImportError:  # pragma: no cover
 
 _NoneType = type(None)
 
-_T = TypeVar('_T')
+_T = TypeVar("_T")
 
 
 class NotSet:
     def __repr__(self) -> str:
-        return 'NOT_SET'
+        return "NOT_SET"
 
 
 NOT_SET = NotSet()
@@ -118,6 +118,7 @@ class EntityType(Type):
     cls: type[Any]
     fields: Sequence[EntityField]
     generics: Mapping[TypeVar, Any] = dataclasses.field(default_factory=dict)
+    doc: Optional[str] = None
     is_presenter: bool = False
 
 
@@ -153,15 +154,15 @@ def describe_type(t: Any) -> Type:
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata: tuple[Any, ...] = ()
-    if hasattr(t, '__origin__'):
-        parameters = getattr(t.__origin__, '__parameters__', ())
+    if hasattr(t, "__origin__"):
+        parameters = getattr(t.__origin__, "__parameters__", ())
         args = t.__args__
-        metadata = getattr(t, '__metadata__', ())
+        metadata = getattr(t, "__metadata__", ())
         t = t.__origin__
     elif UnionType and isinstance(t, UnionType):  # UnionType has no __origin__
         args = t.__args__
         t = Union
-    elif hasattr(t, '__parameters__'):
+    elif hasattr(t, "__parameters__"):
         # Если передан generic-класс без type-параметров, значит по PEP-484 заменяем все параметры на Any
         parameters = t.__parameters__
         args = (Any,) * len(parameters)
@@ -227,7 +228,7 @@ def describe_type(t: Any) -> Type:
 
         if t is tuple:
             if not args or Ellipsis in args:
-                raise RuntimeError('Variable length tuples are not supported')
+                raise RuntimeError("Variable length tuples are not supported")
             return TupleType(item_types=[describe_type(arg) for arg in args])
 
         if issubclass(t, (Enum, IntEnum)):
@@ -241,14 +242,16 @@ def describe_type(t: Any) -> Type:
 
     if t in {Union}:
         if len(args) != 2 or _NoneType not in args:
-            raise RuntimeError(f'Only Unions of one type with None are supported: {t}, {args}')
+            raise RuntimeError(
+                f"Only Unions of one type with None are supported: {t}, {args}"
+            )
         inner = args[1] if args[0] is _NoneType else args[0]
         return OptionalType(describe_type(inner))
 
     if isinstance(t, TypeVar):
-        raise RuntimeError(f'Unfilled TypeVar: {t}')
+        raise RuntimeError(f"Unfilled TypeVar: {t}")
 
-    raise RuntimeError(f'Unknown type {t!r}')
+    raise RuntimeError(f"Unknown type {t!r}")
 
 
 if not TYPE_CHECKING:
@@ -269,14 +272,24 @@ def _describe_dataclass(t: type[Any], generics: Mapping[TypeVar, Any]) -> Entity
             EntityField(
                 name=field.name,
                 doc=docs.get(field.name),
-                type=describe_type(_replace_generics(types.get(field.name, field.type), generics)),
-                default=field.default if field.default is not dataclasses.MISSING else NOT_SET,
-                default_factory=field.default_factory if field.default_factory is not dataclasses.MISSING else NOT_SET,
+                type=describe_type(
+                    _replace_generics(types.get(field.name, field.type), generics)
+                ),
+                default=(
+                    field.default
+                    if field.default is not dataclasses.MISSING
+                    else NOT_SET
+                ),
+                default_factory=(
+                    field.default_factory
+                    if field.default_factory is not dataclasses.MISSING
+                    else NOT_SET
+                ),
                 is_property=False,
             )
         )
 
-    return EntityType(cls=t, fields=fields, generics=generics)
+    return EntityType(cls=t, fields=fields, generics=generics, doc=t.__doc__)
 
 
 def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any]) -> EntityType:
@@ -299,7 +312,9 @@ def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any]) -> EntityType
             EntityField(
                 name=field.name,
                 doc=docs.get(field.name),
-                type=describe_type(_replace_generics(types.get(field.name, field.type), generics)),
+                type=describe_type(
+                    _replace_generics(types.get(field.name, field.type), generics)
+                ),
                 default=default,
                 default_factory=default_factory,
                 is_property=False,
@@ -310,12 +325,12 @@ def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any]) -> EntityType
 
 def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
     try:
-        if parameters := getattr(t, '__parameters__', None):
+        if parameters := getattr(t, "__parameters__", None):
             t = t[tuple(generics[parameter] for parameter in parameters)]
         if isinstance(t, TypeVar):
             t = generics[t]
     except KeyError as exc:
-        raise RuntimeError(f'Unfilled TypeVar: {exc.args[0]}') from exc
+        raise RuntimeError(f"Unfilled TypeVar: {exc.args[0]}") from exc
     return t
 
 

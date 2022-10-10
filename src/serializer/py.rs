@@ -1,15 +1,14 @@
 use crate::serializer::macros::ffi;
 use crate::serializer::types::ITEMS_STR;
 use pyo3::once_cell::GILOnceCell;
+use pyo3::types::PyTuple;
 use pyo3::{ffi, AsPyPointer, Py, PyAny, PyErr, PyObject, PyResult, Python, ToPyObject};
 use pyo3_ffi::Py_ssize_t;
-use pyo3::types::PyTuple;
 use std::os::raw::{c_char, c_int};
 use std::ptr::NonNull;
 
 static DECIMAL: GILOnceCell<PyObject> = GILOnceCell::new();
 static BUILTINS: GILOnceCell<PyObject> = GILOnceCell::new();
-static PY_LEN: GILOnceCell<PyObject> = GILOnceCell::new();
 static NOT_SET: GILOnceCell<PyObject> = GILOnceCell::new();
 static OBJECT_NEW: GILOnceCell<PyObject> = GILOnceCell::new();
 

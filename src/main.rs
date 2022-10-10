@@ -1,3 +1,0 @@
-mod serializer;
-
-fn main() {}
