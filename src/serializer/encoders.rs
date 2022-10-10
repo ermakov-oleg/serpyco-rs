@@ -4,7 +4,7 @@ use crate::serializer::py::{
     py_tuple_get_item, to_decimal,
 };
 use pyo3::exceptions::PyException;
-use pyo3::types::{PyBool, PyString, PyTuple};
+use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;

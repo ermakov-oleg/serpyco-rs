@@ -1,9 +1,7 @@
 use pyo3::{pyclass, pymethods};
-use pyo3::{PyErr, PyResult};
-use pyo3::exceptions::PyValueError;
+use pyo3::PyResult;
 use serde_json::Value;
-use valico::json_schema;
-use valico::json_schema::{SchemaError, Scope};
+use valico::json_schema::Scope;
 
 #[pyclass]
 #[derive(Debug)]
