@@ -35,13 +35,13 @@ pub enum Type {
     FloatType(Py<PyAny>),
     DecimalType(Py<PyAny>),
     BooleanType(Py<PyAny>),
-    UUIDType(Py<PyAny>),     // todo: implement
+    UUIDType(Py<PyAny>),
     TimeType(Py<PyAny>),     // todo: implement
     DateTimeType(Py<PyAny>), // todo: implement
     DateType(Py<PyAny>),     // todo: implement
-    EnumType(Py<PyAny>),     // todo: implement
+    EnumType(Py<PyAny>),
     EntityType(Py<PyAny>),
-    OptionalType(Py<PyAny>), // todo: implement
+    OptionalType(Py<PyAny>),
     ArrayType(Py<PyAny>),
     DictionaryType(Py<PyAny>),
     TupleType(Py<PyAny>), // todo: implement

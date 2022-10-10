@@ -41,7 +41,6 @@ The main use-case for serpyco-rs is to serialize objects for an API, but it can 
 - implement TimeType
 - implement DateTimeType
 - implement DateType
-- implement OptionalType
 - implement TupleType
 - run tests in CI
 - CI checks (pylint, black, mypy, ...)
