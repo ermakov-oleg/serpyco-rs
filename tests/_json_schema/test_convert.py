@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 from datetime import time, datetime
 from decimal import Decimal
@@ -39,7 +40,6 @@ def test_to_json_schema():
         l: tuple[int, str, InnerData]
         m: dict[str, int]
         n: Any
-        o: int | None
 
     schema = to_json_schema(describe_type(Data)).dump()
 
@@ -93,7 +93,6 @@ def test_to_json_schema():
             },
             "m": {"additionalProperties": {"type": "integer"}, "type": "object"},
             "n": {},
-            "o": {"anyOf": [{"type": "null"}, {"type": "integer"}]},
         },
         "required": [
             "a",
@@ -113,3 +112,24 @@ def test_to_json_schema():
         ],
         "type": "object",
     }
+
+
+if sys.version_info >= (3, 10):
+
+    def test_to_json_schema__new_union_syntax():
+        @dataclass
+        class Data:
+            """Docs"""
+
+            a: int | None
+
+        schema = to_json_schema(describe_type(Data)).dump()
+
+        assert schema == {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "description": "Docs",
+            "properties": {
+                "a": {"anyOf": [{"type": "null"}, {"type": "integer"}]},
+            },
+            "type": "object",
+        }

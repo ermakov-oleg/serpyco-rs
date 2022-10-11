@@ -83,12 +83,12 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
                 create_new_object_args,
                 fields,
             })
-        },
+        }
         Type::UUIDType(_) => Box::new(UUIDEncoder),
         Type::EnumType(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
             Box::new(EnumEncoder { enum_type: py_type })
-        },
+        }
         t => todo!("add support new types {:?}", t),
     };
 

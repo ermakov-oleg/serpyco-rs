@@ -1,3 +1,4 @@
+import sys
 import uuid
 from dataclasses import dataclass
 from datetime import time, datetime, date
@@ -53,9 +54,7 @@ class EntityTest:
         (date, "2020-07-17"),
         (EnumTest, "foo"),
         (Optional[int], None),
-        (int | None, None),
         (Optional[int], 1),
-        (int | None, 2),
         (EntityTest, {"key": "val"}),
         (list[int], [1, 2]),
         (dict[str, int], {"a": 1}),
@@ -67,6 +66,21 @@ class EntityTest:
 def test_validate(cls, value):
     v = JsonschemaRSValidator(to_json_schema(describe_type(cls)).dump())
     v.validate(value)
+
+
+if sys.version_info >= (3, 10):
+
+    @pytest.mark.parametrize(
+        ["cls", "value"],
+        (
+            (Optional[int], None),
+            (int | None, None),
+            (int | None, 2),
+        ),
+    )
+    def test_validate(cls, value):
+        v = JsonschemaRSValidator(to_json_schema(describe_type(cls)).dump())
+        v.validate(value)
 
 
 def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
