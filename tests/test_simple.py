@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 from serpyco_rs import Serializer
 from typing import List, Set, Tuple
@@ -53,28 +54,6 @@ def test_simple_nested_dataclasses():
     assert serializer.load(expected) == obj
 
 
-def test_union_optional__dump_load__ok():
-    # arrange
-    @dataclass
-    class UnionClass:
-        name: str | None
-        count: None | int
-
-    # act
-    serializer = Serializer(UnionClass)
-
-    # assert
-    foo = UnionClass(name=None, count=None)
-    dict_foo = {"name": None, "count": None}
-    assert serializer.dump(foo) == dict_foo
-    assert foo == serializer.load(dict_foo)
-
-    bar = UnionClass(name="try", count=5)
-    dict_bar = {"name": "try", "count": 5}
-    assert serializer.dump(bar) == dict_bar
-    assert bar == serializer.load(dict_bar)
-
-
 def test_iterables():
     @dataclass
     class A:
@@ -121,3 +100,27 @@ def test_mappings():
 
     assert serializer.load(expected) == obj
     assert serializer.dump(obj) == expected
+
+
+if sys.version_info >= (3, 10):
+
+    def test_union_optional__dump_load__ok():
+        # arrange
+        @dataclass
+        class UnionClass:
+            name: str | None
+            count: None | int
+
+        # act
+        serializer = Serializer(UnionClass)
+
+        # assert
+        foo = UnionClass(name=None, count=None)
+        dict_foo = {"name": None, "count": None}
+        assert serializer.dump(foo) == dict_foo
+        assert foo == serializer.load(dict_foo)
+
+        bar = UnionClass(name="try", count=5)
+        dict_bar = {"name": "try", "count": 5}
+        assert serializer.dump(bar) == dict_bar
+        assert bar == serializer.load(dict_bar)

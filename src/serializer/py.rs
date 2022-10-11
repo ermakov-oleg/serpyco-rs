@@ -1,4 +1,4 @@
-use crate::serializer::macros::ffi;
+use crate::serializer::macros::{call_method, ffi};
 use crate::serializer::types::ITEMS_STR;
 use pyo3::once_cell::GILOnceCell;
 use pyo3::types::PyTuple;
@@ -84,7 +84,7 @@ pub fn create_new_object(cls: &PyTuple) -> PyResult<*mut ffi::PyObject> {
 }
 
 pub fn iter_over_dict_items(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterator> {
-    let items = py_object_callmethod_noargs(obj, unsafe { ITEMS_STR })?;
+    let items = call_method!(obj, ITEMS_STR)?;
     to_iter(items)
 }
 
@@ -103,13 +103,6 @@ fn py_object_call1_or_err(
     args: *mut ffi::PyObject,
 ) -> PyResult<*mut ffi::PyObject> {
     from_ptr_or_err(ffi!(PyObject_CallObject(obj, args)))
-}
-
-fn py_object_callmethod_noargs(
-    obj: *mut ffi::PyObject,
-    name: *mut ffi::PyObject,
-) -> PyResult<*mut ffi::PyObject> {
-    from_ptr_or_err(ffi!(PyObject_CallMethodNoArgs(obj, name)))
 }
 
 pub fn py_object_call1_make_tuple_or_err(
@@ -153,7 +146,7 @@ fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
     NonNull::new(ptr).map(|p| p.as_ptr())
 }
 
-fn from_ptr_or_err(ptr: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
+pub fn from_ptr_or_err(ptr: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     from_ptr_or_opt(ptr).ok_or_else(|| Python::with_gil(|py| PyErr::fetch(py)))
 }
 

@@ -1,7 +1,5 @@
 from typing import Any, TypeVar, Generic
 
-import orjson
-
 from ._describe import describe_type
 from ._impl import make_encoder
 from ._json_schema import JsonschemaRSValidator, to_json_schema, Validator
