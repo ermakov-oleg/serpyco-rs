@@ -1,8 +1,5 @@
 use crate::serializer::macros::ffi;
-use crate::serializer::py::{
-    create_new_object, iter_over_dict_items, obj_to_str, py_len, py_object_call1_make_tuple_or_err,
-    py_object_get_attr, py_object_get_item, py_object_set_attr, py_tuple_get_item, to_decimal,
-};
+use crate::serializer::py::{create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr, py_tuple_get_item, to_decimal};
 use crate::serializer::types::{UUID_PY_TYPE, VALUE_STR};
 use pyo3::exceptions::PyException;
 use pyo3::types::{PyString, PyTuple};
@@ -189,7 +186,10 @@ impl Encoder for EntityEncoder {
                     Ok(val) => field.encoder.load(val)?,
                     Err(e) => match (&field.default, &field.default_factory) {
                         (Some(val), _) => val.clone().as_ptr(),
-                        (_, Some(val)) => val.call0(py)?.as_ptr(),
+                        (_, Some(val)) => {
+                            // todo: more python versions
+                            from_ptr_or_err(ffi!(PyObject_CallNoArgs(val.as_ptr())))?
+                        },
                         (None, _) => {
                             return Err(ValidationError::new_err(format!(
                                 "data dictionary is missing required parameter {} (err: {})",

@@ -15,6 +15,7 @@ static OBJECT_NEW: GILOnceCell<PyObject> = GILOnceCell::new();
 
 fn _decimal_cls() -> Py<PyAny> {
     Python::with_gil(|py| {
+        // todo: refactor
         DECIMAL
             .get_or_init(py, || {
                 py.import("decimal")

@@ -145,7 +145,11 @@ def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
         required=[
             prop.name
             for prop in arg.fields
-            if not isinstance(prop.type, describe.OptionalType) and not prop.is_property
+            if not (
+                   prop.is_property
+                   or prop.default != describe.NOT_SET
+                   or prop.default_factory != describe.NOT_SET
+            )
         ]
         or None,
         description=arg.doc,
