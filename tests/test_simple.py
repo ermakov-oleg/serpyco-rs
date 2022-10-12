@@ -127,24 +127,24 @@ def test_required_and_nullable():
     optional_not_null = Serializer(OptionalNotNull)
     optional_nullable = Serializer(OptionalNullable)
 
-    assert req_not_null.load({'foo': 2}) == ReqNotNull(foo=2)
+    assert req_not_null.load({"foo": 2}) == ReqNotNull(foo=2)
     with pytest.raises(SchemaValidationError):
-        req_not_null.load({'foo': None})
+        req_not_null.load({"foo": None})
     with pytest.raises(SchemaValidationError):
         req_not_null.load({})
 
-    assert req_nullable.load({'foo': 2}) == ReqNullable(foo=2)
-    assert req_nullable.load({'foo': None}) == ReqNullable(foo=None)
+    assert req_nullable.load({"foo": 2}) == ReqNullable(foo=2)
+    assert req_nullable.load({"foo": None}) == ReqNullable(foo=None)
     with pytest.raises(SchemaValidationError):
         req_nullable.load({})
 
-    assert optional_not_null.load({'foo': 2}) == OptionalNotNull(foo=2)
+    assert optional_not_null.load({"foo": 2}) == OptionalNotNull(foo=2)
     with pytest.raises(SchemaValidationError):
-        assert optional_not_null.load({'foo': None})
+        assert optional_not_null.load({"foo": None})
     assert optional_not_null.load({}) == OptionalNotNull(foo=1)
 
-    assert optional_nullable.load({'foo': 2}) == OptionalNullable(foo=2)
-    assert optional_nullable.load({'foo': None}) == OptionalNullable(foo=None)
+    assert optional_nullable.load({"foo": 2}) == OptionalNullable(foo=2)
+    assert optional_nullable.load({"foo": None}) == OptionalNullable(foo=None)
     assert optional_nullable.load({}) == OptionalNullable(foo=1)
 
 
@@ -156,23 +156,22 @@ def test_required_and_nullable_list():
     entity_serializer = Serializer(Entity)
 
     assert entity_serializer.load({}) == Entity(foo=None)
-    assert entity_serializer.load({'foo': None}) == Entity(foo=None)
-    assert entity_serializer.load({'foo': []}) == Entity(foo=[])
-    assert entity_serializer.load({'foo': [1]}) == Entity(foo=[1])
-    assert entity_serializer.load({'foo': [1, None]}) == Entity(foo=[1, None])
+    assert entity_serializer.load({"foo": None}) == Entity(foo=None)
+    assert entity_serializer.load({"foo": []}) == Entity(foo=[])
+    assert entity_serializer.load({"foo": [1]}) == Entity(foo=[1])
+    assert entity_serializer.load({"foo": [1, None]}) == Entity(foo=[1, None])
 
 
 def test_defaults():
-
     @dataclass
     class Entity:
-        foo: str = '123'
+        foo: str = "123"
         bar: list[int] = field(default_factory=lambda: list([1, 2, 3]))
 
     entity_serializer = Serializer(Entity)
 
-    assert entity_serializer.load({'bar': [1]}) == Entity(foo='123', bar=[1])
-    assert entity_serializer.load({}) == Entity(foo='123', bar=[1, 2, 3])
+    assert entity_serializer.load({"bar": [1]}) == Entity(foo="123", bar=[1])
+    assert entity_serializer.load({}) == Entity(foo="123", bar=[1, 2, 3])
 
 
 if sys.version_info >= (3, 10):

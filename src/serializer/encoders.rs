@@ -1,4 +1,8 @@
-use crate::serializer::py::{create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr, py_tuple_get_item, to_decimal};
+use crate::serializer::py::{
+    create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len,
+    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
+    py_tuple_get_item, to_decimal,
+};
 use crate::serializer::types::{NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
 use pyo3::exceptions::PyException;
 use pyo3::types::{PyString, PyTuple};
@@ -187,9 +191,7 @@ impl Encoder for EntityEncoder {
                     Ok(val) => field.encoder.load(val)?,
                     Err(e) => match (&field.default, &field.default_factory) {
                         (Some(val), _) => val.clone().as_ptr(),
-                        (_, Some(val)) => {
-                            call_object!(val.as_ptr())?
-                        },
+                        (_, Some(val)) => call_object!(val.as_ptr())?,
                         (None, _) => {
                             return Err(ValidationError::new_err(format!(
                                 "data dictionary is missing required parameter {} (err: {})",
@@ -245,7 +247,7 @@ pub struct OptionalEncoder {
 impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if value == unsafe {NONE_PY_TYPE} {
+        if value == unsafe { NONE_PY_TYPE } {
             Ok(value)
         } else {
             self.encoder.dump(value)
@@ -254,10 +256,52 @@ impl Encoder for OptionalEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if value == unsafe {NONE_PY_TYPE} {
+        if value == unsafe { NONE_PY_TYPE } {
             Ok(value)
         } else {
             self.encoder.load(value)
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct TupleEncoder {
+    pub(crate) encoders: Vec<Box<dyn Encoder + Send>>,
+}
+
+impl Encoder for TupleEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let len = py_len(value)?;
+        if len != self.encoders.len() as isize {
+            return Err(ValidationError::new_err(
+                "Invalid number of items for tuple",
+            ));
+        }
+        let list = ffi!(PyList_New(len));
+        for i in 0..len {
+            let item = ffi!(PySequence_GetItem(value, i));
+            let val = self.encoders[i as usize].dump(item)?;
+            ffi!(PyList_SetItem(list, i, val));
+        }
+        Ok(list)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let len = py_len(value)?;
+        if len != self.encoders.len() as isize {
+            return Err(ValidationError::new_err(
+                "Invalid number of items for tuple",
+            ));
+        }
+
+        let list = ffi!(PyTuple_New(len));
+        for i in 0..len {
+            let item = ffi!(PyList_GetItem(value, i));
+            let val = self.encoders[i as usize].load(item)?;
+            ffi!(PyTuple_SetItem(list, i, val));
+        }
+        Ok(list)
     }
 }
