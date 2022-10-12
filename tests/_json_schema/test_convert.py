@@ -131,6 +131,6 @@ if sys.version_info >= (3, 10):
             "properties": {
                 "a": {"anyOf": [{"type": "null"}, {"type": "integer"}]},
             },
-            'required': ['a'],
+            "required": ["a"],
             "type": "object",
         }

@@ -88,6 +88,24 @@ def test_enum():
     assert serializer.load("foo") == Foo.foo
 
 
+def test_tuple():
+    serializer = Serializer(tuple[int, bool, str])
+    assert serializer.dump((1, True, "s")) == [1, True, "s"]
+    assert serializer.load([1, True, "s"]) == (1, True, "s")
+
+
+def test_tuple__invalid_number_items():
+    serializer = Serializer(tuple[int, bool, str])
+
+    with pytest.raises(ValidationError) as exec_info:
+        serializer.dump((1,))
+    assert exec_info.value.args[0] == "Invalid number of items for tuple"
+
+    with pytest.raises(ValidationError) as exec_info:
+        serializer.load((1,), validate=False)
+    assert exec_info.value.args[0] == "Invalid number of items for tuple"
+
+
 if sys.version_info >= (3, 10):
 
     def test_optional():

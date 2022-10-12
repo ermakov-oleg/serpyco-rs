@@ -119,7 +119,7 @@ pub fn init(py: Python<'_>) {
 
         ITEMS_STR = to_py_string("items");
         VALUE_STR = to_py_string("value");
-        
+
         PY_TUPLE_0 = ffi!(PyTuple_New(0));
     });
 }

@@ -1,10 +1,14 @@
-use pyo3::{PyAny, PyResult};
-
-use crate::serializer::encoders::{ArrayEncoder, DecimalEncoder, DictionaryEncoder, Encoder, EntityEncoder, EnumEncoder, Field, NoopEncoder, OptionalEncoder, Serializer, UUIDEncoder};
-use crate::serializer::py::is_not_set;
-use crate::serializer::types::{get_object_type, Type};
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
+use pyo3::{PyAny, PyResult};
+
+use super::py::is_not_set;
+use super::types::{get_object_type, Type};
+
+use super::encoders::{
+    ArrayEncoder, DecimalEncoder, DictionaryEncoder, Encoder, EntityEncoder, EnumEncoder, Field,
+    NoopEncoder, OptionalEncoder, Serializer, TupleEncoder, UUIDEncoder,
+};
 
 #[pyfunction]
 pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
@@ -27,7 +31,7 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
         Type::OptionalType(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
             let encoder = get_encoder(py, inner)?;
-            Box::new(OptionalEncoder {encoder})
+            Box::new(OptionalEncoder { encoder })
         }
         Type::DictionaryType(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;
@@ -46,6 +50,15 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
             let encoder = get_encoder(py, item_type)?;
 
             Box::new(ArrayEncoder { encoder })
+        }
+        Type::TupleType(type_info) => {
+            let mut encoders = vec![];
+            for item_type in type_info.getattr(py, "item_types")?.as_ref(py).iter()? {
+                let item_type = item_type?;
+                let encoder = get_encoder(py, get_object_type(item_type)?)?;
+                encoders.push(encoder);
+            }
+            Box::new(TupleEncoder { encoders })
         }
         Type::EntityType(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
