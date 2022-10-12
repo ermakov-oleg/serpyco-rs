@@ -1,9 +1,6 @@
 use pyo3::{PyAny, PyResult};
 
-use crate::serializer::encoders::{
-    ArrayEncoder, DecimalEncoder, DictionaryEncoder, Encoder, EntityEncoder, EnumEncoder, Field,
-    NoopEncoder, Serializer, UUIDEncoder,
-};
+use crate::serializer::encoders::{ArrayEncoder, DecimalEncoder, DictionaryEncoder, Encoder, EntityEncoder, EnumEncoder, Field, NoopEncoder, OptionalEncoder, Serializer, UUIDEncoder};
 use crate::serializer::py::is_not_set;
 use crate::serializer::types::{get_object_type, Type};
 use pyo3::prelude::*;
@@ -29,7 +26,8 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
         Type::DecimalType(_) => Box::new(DecimalEncoder),
         Type::OptionalType(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
-            get_encoder(py, inner)?
+            let encoder = get_encoder(py, inner)?;
+            Box::new(OptionalEncoder {encoder})
         }
         Type::DictionaryType(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;

@@ -1,7 +1,10 @@
 import sys
-from dataclasses import dataclass
-from serpyco_rs import Serializer
-from typing import List, Set, Tuple
+from dataclasses import dataclass, field
+
+import pytest
+
+from serpyco_rs import Serializer, SchemaValidationError
+from typing import List, Optional
 from collections.abc import Sequence, Mapping
 
 
@@ -100,6 +103,76 @@ def test_mappings():
 
     assert serializer.load(expected) == obj
     assert serializer.dump(obj) == expected
+
+
+def test_required_and_nullable():
+    @dataclass
+    class ReqNotNull:
+        foo: int
+
+    @dataclass
+    class ReqNullable:
+        foo: Optional[int]
+
+    @dataclass
+    class OptionalNotNull:
+        foo: int = 1
+
+    @dataclass
+    class OptionalNullable:
+        foo: Optional[int] = 1
+
+    req_not_null = Serializer(ReqNotNull)
+    req_nullable = Serializer(ReqNullable)
+    optional_not_null = Serializer(OptionalNotNull)
+    optional_nullable = Serializer(OptionalNullable)
+
+    assert req_not_null.load({'foo': 2}) == ReqNotNull(foo=2)
+    with pytest.raises(SchemaValidationError):
+        req_not_null.load({'foo': None})
+    with pytest.raises(SchemaValidationError):
+        req_not_null.load({})
+
+    assert req_nullable.load({'foo': 2}) == ReqNullable(foo=2)
+    assert req_nullable.load({'foo': None}) == ReqNullable(foo=None)
+    with pytest.raises(SchemaValidationError):
+        req_nullable.load({})
+
+    assert optional_not_null.load({'foo': 2}) == OptionalNotNull(foo=2)
+    with pytest.raises(SchemaValidationError):
+        assert optional_not_null.load({'foo': None})
+    assert optional_not_null.load({}) == OptionalNotNull(foo=1)
+
+    assert optional_nullable.load({'foo': 2}) == OptionalNullable(foo=2)
+    assert optional_nullable.load({'foo': None}) == OptionalNullable(foo=None)
+    assert optional_nullable.load({}) == OptionalNullable(foo=1)
+
+
+def test_required_and_nullable_list():
+    @dataclass
+    class Entity:
+        foo: Optional[list[Optional[int]]] = None
+
+    entity_serializer = Serializer(Entity)
+
+    assert entity_serializer.load({}) == Entity(foo=None)
+    assert entity_serializer.load({'foo': None}) == Entity(foo=None)
+    assert entity_serializer.load({'foo': []}) == Entity(foo=[])
+    assert entity_serializer.load({'foo': [1]}) == Entity(foo=[1])
+    assert entity_serializer.load({'foo': [1, None]}) == Entity(foo=[1, None])
+
+
+def test_defaults():
+
+    @dataclass
+    class Entity:
+        foo: str = '123'
+        bar: list[int] = field(default_factory=lambda: list([1, 2, 3]))
+
+    entity_serializer = Serializer(Entity)
+
+    assert entity_serializer.load({'bar': [1]}) == Entity(foo='123', bar=[1])
+    assert entity_serializer.load({}) == Entity(foo='123', bar=[1, 2, 3])
 
 
 if sys.version_info >= (3, 10):
