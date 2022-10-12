@@ -1,11 +1,13 @@
 use crate::serializer::macros::ffi;
 use crate::serializer::py::{create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr, py_tuple_get_item, to_decimal};
-use crate::serializer::types::{UUID_PY_TYPE, VALUE_STR};
+use crate::serializer::types::{NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
 use pyo3::exceptions::PyException;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;
+
+use super::macros::call_object;
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
@@ -187,8 +189,7 @@ impl Encoder for EntityEncoder {
                     Err(e) => match (&field.default, &field.default_factory) {
                         (Some(val), _) => val.clone().as_ptr(),
                         (_, Some(val)) => {
-                            // todo: more python versions
-                            from_ptr_or_err(ffi!(PyObject_CallNoArgs(val.as_ptr())))?
+                            call_object!(val.as_ptr())?
                         },
                         (None, _) => {
                             return Err(ValidationError::new_err(format!(
@@ -234,5 +235,30 @@ impl Encoder for EnumEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         py_object_call1_make_tuple_or_err(self.enum_type.as_ptr(), value)
+    }
+}
+
+#[derive(Debug)]
+pub struct OptionalEncoder {
+    pub(crate) encoder: Box<dyn Encoder + Send>,
+}
+
+impl Encoder for OptionalEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        if value == unsafe {NONE_PY_TYPE} {
+            Ok(value)
+        } else {
+            self.encoder.dump(value)
+        }
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        if value == unsafe {NONE_PY_TYPE} {
+            Ok(value)
+        } else {
+            self.encoder.load(value)
+        }
     }
 }
