@@ -25,6 +25,7 @@ pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut UUID_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut NONE_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut PY_TUPLE_0: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -118,6 +119,8 @@ pub fn init(py: Python<'_>) {
 
         ITEMS_STR = to_py_string("items");
         VALUE_STR = to_py_string("value");
+        
+        PY_TUPLE_0 = ffi!(PyTuple_New(0));
     });
 }
 
@@ -136,3 +139,5 @@ macro_rules! get_attr_ptr {
 use crate::serializer::py::to_py_string;
 pub(crate) use check_type;
 pub(crate) use get_attr_ptr;
+
+use super::macros::ffi;

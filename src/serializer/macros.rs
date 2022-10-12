@@ -69,7 +69,7 @@ macro_rules! call_object {
         from_ptr_or_err(unsafe {
             pyo3_ffi::PyObject_Call(
                     $obj1,
-                    std::ptr::null_mut() as *mut pyo3_ffi::PyObject,
+                    $crate::serializer::types::PY_TUPLE_0,
                     std::ptr::null_mut() as *mut pyo3_ffi::PyObject,
             )
         })
