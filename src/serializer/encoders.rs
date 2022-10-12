@@ -1,4 +1,3 @@
-use crate::serializer::macros::ffi;
 use crate::serializer::py::{create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr, py_tuple_get_item, to_decimal};
 use crate::serializer::types::{NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
 use pyo3::exceptions::PyException;
@@ -7,7 +6,7 @@ use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;
 
-use super::macros::call_object;
+use super::macros::{call_object, ffi};
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
