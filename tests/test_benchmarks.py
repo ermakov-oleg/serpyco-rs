@@ -52,6 +52,8 @@ serializers = {
 @pytest.mark.parametrize("impl", ["cython", "rust"])
 def test_dump(benchmark, impl):
     serializer = serializers[impl]
+    serializer.dump(test_object)  # warmup
+
     benchmark.group = "dump"
     benchmark.extra_info["impl"] = impl
     benchmark.extra_info["correct"] = (
@@ -64,6 +66,7 @@ def test_dump(benchmark, impl):
 def test_load(benchmark, impl):
     serializer = serializers[impl]
     test_dict = serializer.dump(test_object)
+    serializer.load(test_dict, validate=False)  # warmup
 
     benchmark.group = "load"
     benchmark.extra_info["impl"] = impl
@@ -77,6 +80,7 @@ def test_load(benchmark, impl):
 def test_load_validate(benchmark, impl):
     serializer = serializers[impl]
     test_dict = serializer.dump(test_object)
+    serializer.load(test_dict, validate=True)  # warmup
 
     benchmark.group = "load with validate"
     benchmark.extra_info["impl"] = impl
