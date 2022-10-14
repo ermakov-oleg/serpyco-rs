@@ -1,16 +1,18 @@
+use crate::serializer::dateutil::{parse_date, parse_time};
 use crate::serializer::py::{
     create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len,
     py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
-    py_tuple_get_item, to_decimal,
+    py_str_to_str, py_tuple_get_item, to_decimal,
 };
-use crate::serializer::types::{NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
+use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
 use pyo3::exceptions::PyException;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;
 
-use super::macros::{call_object, ffi};
+use super::dateutil::parse_datetime;
+use super::macros::{call_method, call_object, ffi};
 
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
@@ -303,5 +305,50 @@ impl Encoder for TupleEncoder {
             ffi!(PyTuple_SetItem(list, i, val));
         }
         Ok(list)
+    }
+}
+
+#[derive(Debug)]
+pub struct TimeEncoder;
+
+impl Encoder for TimeEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        call_method!(value, ISOFORMAT_STR)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        parse_time(py_str_to_str(value)?)
+    }
+}
+
+#[derive(Debug)]
+pub struct DateTimeEncoder;
+
+impl Encoder for DateTimeEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        call_method!(value, ISOFORMAT_STR)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        parse_datetime(py_str_to_str(value)?)
+    }
+}
+
+#[derive(Debug)]
+pub struct DateEncoder;
+
+impl Encoder for DateEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        call_method!(value, ISOFORMAT_STR)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        parse_date(py_str_to_str(value)?)
     }
 }

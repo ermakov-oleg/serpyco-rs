@@ -22,6 +22,7 @@ pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
+pub static mut ISOFORMAT_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut UUID_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut NONE_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -38,15 +39,15 @@ pub enum Type {
     DecimalType(Py<PyAny>),
     BooleanType(Py<PyAny>),
     UUIDType(Py<PyAny>),
-    TimeType(Py<PyAny>),     // todo: implement
-    DateTimeType(Py<PyAny>), // todo: implement
-    DateType(Py<PyAny>),     // todo: implement
+    TimeType(Py<PyAny>),
+    DateTimeType(Py<PyAny>),
+    DateType(Py<PyAny>),
     EnumType(Py<PyAny>),
     EntityType(Py<PyAny>),
     OptionalType(Py<PyAny>),
     ArrayType(Py<PyAny>),
     DictionaryType(Py<PyAny>),
-    TupleType(Py<PyAny>), // todo: implement
+    TupleType(Py<PyAny>),
     AnyType(Py<PyAny>),
 }
 
@@ -119,6 +120,7 @@ pub fn init(py: Python<'_>) {
 
         ITEMS_STR = to_py_string("items");
         VALUE_STR = to_py_string("value");
+        ISOFORMAT_STR = to_py_string("isoformat");
 
         PY_TUPLE_0 = ffi!(PyTuple_New(0));
     });
