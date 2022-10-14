@@ -40,6 +40,8 @@ The main use-case for serpyco-rs is to serialize objects for an API, but it can 
 
 - parse DateTime without timezone
 - parse timezone for datetime.time
+- omit_none
+- camelcase_fields (`Annotated[Foo, CamelcaseFields]`)
 - run tests in CI
 - CI checks (pylint, black, mypy, ...)
 - more tests
