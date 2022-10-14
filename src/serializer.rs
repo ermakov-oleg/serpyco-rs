@@ -1,3 +1,4 @@
+mod dateutil;
 mod encoders;
 mod macros;
 mod main;

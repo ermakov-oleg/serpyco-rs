@@ -125,6 +125,33 @@ pub fn py_object_set_attr(
     error_on_minusone(ret)
 }
 
+#[inline]
+pub fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
+    let utf8_slice = {
+        cfg_if::cfg_if! {
+            if #[cfg(any(Py_3_10, not(Py_LIMITED_API)))] {
+                // PyUnicode_AsUTF8AndSize only available on limited API starting with 3.10.
+                let mut size: ffi::Py_ssize_t = 0;
+                let data = ffi!(PyUnicode_AsUTF8AndSize(obj, &mut size));
+                if data.is_null() {
+                    return Err(Python::with_gil(|py| PyErr::fetch(py)));
+                } else {
+                    unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) }
+                }
+            } else {
+                let ptr = from_ptr_or_err(ffi!(PyUnicode_AsUTF8String(obj)))?;
+                unsafe {
+                    let buffer = ffi!(PyBytes_AsString(ptr)) as *const u8;
+                    let length = ffi!(PyBytes_Size(ptr)) as usize;
+                    debug_assert!(!buffer.is_null());
+                    std::slice::from_raw_parts(buffer, length)
+                }
+            }
+        }
+    };
+    Ok(unsafe { std::str::from_utf8_unchecked(utf8_slice) })
+}
+
 pub fn py_object_get_attr(
     obj: *mut ffi::PyObject,
     attr_name: *mut ffi::PyObject,

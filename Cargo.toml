@@ -8,8 +8,10 @@ name = "serpyco_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.17.1", features = ["extension-module"] }
+pyo3 = { version = "0.17.2", features = ["extension-module"] }
 pyo3-ffi = "*"
+cfg-if = "*"
+chrono = { version = "*"}
 
 [build-dependencies]
 pyo3-build-config = { version = "0.17.2", features = ["resolve-config"] }

@@ -1,8 +1,10 @@
 import sys
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta, time, date
 from decimal import Decimal
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -104,6 +106,87 @@ def test_tuple__invalid_number_items():
     with pytest.raises(ValidationError) as exec_info:
         serializer.load((1,), validate=False)
     assert exec_info.value.args[0] == "Invalid number of items for tuple"
+
+
+@pytest.mark.parametrize(
+    ["value", "expected"],
+    (
+        (datetime(2022, 10, 10, 14, 23, 43), "2022-10-10T14:23:43"),
+        (datetime(2022, 10, 10, 14, 23, 43, 123456), "2022-10-10T14:23:43.123456"),
+        (
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone.utc),
+            "2022-10-10T14:23:43+00:00",
+        ),
+        (
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone(timedelta(hours=1))),
+            "2022-10-10T14:23:43+01:00",
+        ),
+        (
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=ZoneInfo("Europe/Berlin")),
+            "2022-10-10T14:23:43+02:00",
+        ),
+    ),
+)
+def test_datetime_dump(value, expected):
+    serializer = Serializer(datetime)
+    assert serializer.dump(value) == expected
+
+
+@pytest.mark.parametrize(
+    ["value", "expected"],
+    (
+        # ('2022-10-10T14:23:43', datetime(2022, 10, 10, 14, 23, 43)),
+        # ('2022-10-10T14:23:43.123456', datetime(2022, 10, 10, 14, 23, 43, 123456)),
+        (
+            "2022-10-10T14:23:43+00:00",
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone.utc),
+        ),
+        (
+            "2022-10-10T14:23:43+01:00",
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone(timedelta(hours=1))),
+        ),
+        (
+            "2022-10-10T14:23:43+02:00",
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=ZoneInfo("Europe/Berlin")),
+        ),
+    ),
+)
+def test_datetime_load(value, expected):
+    serializer = Serializer(datetime)
+    assert serializer.load(value) == expected
+
+
+@pytest.mark.parametrize(
+    ["value", "expected"],
+    [
+        ("12:34", time(12, 34)),
+        ("12:34:56", time(12, 34, 56)),
+        ("12:34:56.000078", time(12, 34, 56, 78)),
+        # ('12:34:56.000078+00:00', time(12, 34, 56, 78, tzinfo=tzoffset(None, 0))),
+    ],
+)
+def test_time_load(value, expected):
+    serializer = Serializer(time)
+    assert serializer.load(value) == expected
+
+
+@pytest.mark.parametrize(
+    ["value", "expected"],
+    [
+        (time(12, 34), "12:34:00"),
+        (time(12, 34, 56), "12:34:56"),
+        (time(12, 34, 56, 78), "12:34:56.000078"),
+    ],
+)
+def test_time_dump(value, expected):
+    serializer = Serializer(time)
+    assert serializer.dump(value) == expected
+
+
+def test_date():
+    serializer = Serializer(date)
+    assert serializer.load("2022-10-14") == date(2022, 10, 14)
+    assert serializer.dump(date(2022, 10, 13)) == "2022-10-13"
 
 
 if sys.version_info >= (3, 10):

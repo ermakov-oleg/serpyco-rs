@@ -38,9 +38,8 @@ The main use-case for serpyco-rs is to serialize objects for an API, but it can 
 
 ## Todo
 
-- implement TimeType
-- implement DateTimeType
-- implement DateType
+- parse DateTime without timezone
+- added support parse timezone for datetime.time
 - run tests in CI
 - CI checks (pylint, black, mypy, ...)
 - more tests

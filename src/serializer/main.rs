@@ -1,3 +1,4 @@
+use crate::serializer::encoders::{DateEncoder, DateTimeEncoder, TimeEncoder};
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{PyAny, PyResult};
@@ -100,6 +101,9 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
             let py_type = type_info.getattr(py, "cls")?;
             Box::new(EnumEncoder { enum_type: py_type })
         }
+        Type::DateTimeType(_) => Box::new(DateTimeEncoder),
+        Type::TimeType(_) => Box::new(TimeEncoder),
+        Type::DateType(_) => Box::new(DateEncoder),
         t => todo!("add support new types {:?}", t),
     };
 

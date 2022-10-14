@@ -50,7 +50,11 @@ class EntityTest:
         (time, "12:34:56.000078+03:00"),
         (time, "12:34:56.000078+00:00"),
         # todo: add datetime exemplars
+        (datetime, "2022-10-10T14:23:43"),
+        (datetime, "2022-10-10T14:23:43.123456"),
+        (datetime, "2022-10-10T14:23:43.123456Z"),
         (datetime, "2022-10-10T14:23:43.123456+00:00"),
+        (datetime, "2022-10-10T14:23:43.123456-30:00"),
         (date, "2020-07-17"),
         (EnumTest, "foo"),
         (Optional[int], None),
