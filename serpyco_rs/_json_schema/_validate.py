@@ -21,10 +21,10 @@ class JsonschemaRSValidator(Validator):
         self._validator = jsonschema_rs.JSONSchema(schema)
 
     def validate(self, data: Any) -> None:
-        errors = list(self._validator.iter_errors(data))
-
-        if errors:
-            raise SchemaValidationError([self._map_err(e) for e in errors])
+        if not self._validator.is_valid(data):
+            errors = list(self._validator.iter_errors(data))
+            if errors:
+                raise SchemaValidationError([self._map_err(e) for e in errors])
 
     def _map_err(self, err: jsonschema_rs.ValidationError) -> ErrorItem:
         return ErrorItem(
