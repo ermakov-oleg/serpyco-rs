@@ -29,6 +29,13 @@ You can also embed other dataclasses in a definition.
 
 The main use-case for serpyco-rs is to serialize objects for an API, but it can be helpful whenever you need to transform objects to/from builtin Python types.
 
+## Installation
+Use pip to install:
+
+```bash
+$ pip install serpyco-rs
+```
+
 
 ## Features
 
@@ -36,9 +43,24 @@ The main use-case for serpyco-rs is to serialize objects for an API, but it can 
 - Validation of input/output data
 - Very fast
 
+## Supported field types
+There is support for generic types from the standard typing module:
+
+* Decimal
+* UUID
+* Time
+* Date
+* DateTime
+* Enum
+* List
+* Dict
+* Mapping
+* Sequence
+* Tuple (fixed size)
+
+
 ## Todo
 
-- parse DateTime without timezone
 - parse timezone for datetime.time
 - omit_none
 - run tests in CI

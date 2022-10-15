@@ -105,7 +105,6 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
         Type::DateTimeType(_) => Box::new(DateTimeEncoder),
         Type::TimeType(_) => Box::new(TimeEncoder),
         Type::DateType(_) => Box::new(DateEncoder),
-        t => todo!("add support new types {:?}", t),
     };
 
     Ok(encoder)
