@@ -189,15 +189,16 @@ def test_date():
     assert serializer.dump(date(2022, 10, 13)) == "2022-10-13"
 
 
-if sys.version_info >= (3, 10):
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="New style unions available after 3.10"
+)
+def test_optional():
+    @dataclass
+    class T:
+        foo: int | None = None
 
-    def test_optional():
-        @dataclass
-        class T:
-            foo: int | None = None
-
-        serializer = Serializer(T)
-        assert serializer.dump(T()) == {"foo": None}
-        assert serializer.dump(T(foo=1)) == {"foo": 1}
-        assert serializer.load({}) == T()
-        assert serializer.load({"foo": 12}) == T(foo=12)
+    serializer = Serializer(T)
+    assert serializer.dump(T()) == {"foo": None}
+    assert serializer.dump(T(foo=1)) == {"foo": 1}
+    assert serializer.load({}) == T()
+    assert serializer.load({"foo": 12}) == T(foo=12)
