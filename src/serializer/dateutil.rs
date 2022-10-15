@@ -1,6 +1,8 @@
 use std::os::raw::c_int;
 
-use chrono::{DateTime, Datelike, FixedOffset, NaiveDate, NaiveTime, Offset, Timelike};
+use chrono::{
+    DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Offset, Timelike,
+};
 use pyo3::{PyErr, PyResult};
 use pyo3_ffi::{PyObject, PyTimeZone_FromOffset};
 
@@ -14,7 +16,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
         .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M"))
         .map_err(|e| InnerParseError::from(e))?;
     let api = ensure_datetime_api();
-    let (micros, fold) = chrono_to_micros_and_fold(time);
+    let (micros, fold) = chrono_to_micros_and_fold(&time);
     unsafe {
         let ptr = (api.Time_FromTimeAndFold)(
             c_int::from(time.hour() as u8),
@@ -45,30 +47,45 @@ pub fn parse_date(value: &str) -> PyResult<*mut PyObject> {
 }
 
 pub fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
-    let datetime = DateTime::parse_from_rfc3339(value).map_err(|e| InnerParseError::from(e))?;
-    let tz = datetime.offset().fix();
-    let (micros, fold) = chrono_to_micros_and_fold(datetime);
+    match DateTime::parse_from_rfc3339(value) {
+        Ok(datetime) => {
+            let tz = datetime.offset().fix();
+            let py_tz = py_timezone_from_fixed_offset(tz)?;
+            make_py_datetime(datetime, datetime, Some(py_tz))
+        }
+        Err(_) => {
+            let datetime = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
+                .map_err(|e| InnerParseError::from(e))?;
+            make_py_datetime(datetime, datetime, None)
+        }
+    }
+}
+
+fn make_py_datetime(
+    date: impl Datelike,
+    time: impl Timelike,
+    tz: Option<*mut PyObject>,
+) -> PyResult<*mut PyObject> {
+    let (micros, fold) = chrono_to_micros_and_fold(&time);
     let api = ensure_datetime_api();
-    let py_tz = py_timezone_from_fixed_offset(tz)?;
     let ptr = unsafe {
         (api.DateTime_FromDateAndTimeAndFold)(
-            datetime.year(),
-            c_int::from(datetime.month() as u8),
-            c_int::from(datetime.day() as u8),
-            c_int::from(datetime.hour() as u8),
-            c_int::from(datetime.minute() as u8),
-            c_int::from(datetime.second() as u8),
+            date.year(),
+            c_int::from(date.month() as u8),
+            c_int::from(date.day() as u8),
+            c_int::from(time.hour() as u8),
+            c_int::from(time.minute() as u8),
+            c_int::from(time.second() as u8),
             micros as c_int,
-            py_tz,
+            tz.unwrap_or(NONE_PY_TYPE),
             c_int::from(fold),
             api.DateTimeType,
         )
     };
-
     from_ptr_or_err(ptr)
 }
 
-fn chrono_to_micros_and_fold(time: impl chrono::Timelike) -> (u32, bool) {
+fn chrono_to_micros_and_fold(time: &impl Timelike) -> (u32, bool) {
     if let Some(folded_nanos) = time.nanosecond().checked_sub(1_000_000_000) {
         (folded_nanos / 1000, true)
     } else {
