@@ -5,6 +5,7 @@ from datetime import datetime, time, date
 from decimal import Decimal
 from typing import Annotated, Any, Generic, Optional, Sequence, TypeVar, Union
 from uuid import UUID
+from unittest import mock
 
 import attr
 import pytest
@@ -32,8 +33,15 @@ from serpyco_rs._describe import (
     UUIDType,
     describe_type,
 )
-from serpyco_rs.metadata import Max, MaxLength, Min, MinLength, Places
-
+from serpyco_rs.metadata import (
+    Max,
+    MaxLength,
+    Min,
+    MinLength,
+    Places,
+    CamelCase,
+    NoFormat,
+)
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -327,7 +335,7 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
         cls=SomeOtherEntity,
         generics={T: int},
         fields=[EntityField(name="x", type=IntegerType(), dict_key="x")],
-        doc='SomeOtherEntity(x: ~T)',
+        doc="SomeOtherEntity(x: ~T)",
     )
 
 
@@ -374,11 +382,11 @@ def test_describe__dataclass_and_annotated_with_min_max__parsed():
         fields=[
             EntityField(
                 name="x",
-                dict_key='x',
+                dict_key="x",
                 type=IntegerType(min=10, max=20),
             )
         ],
-        doc='SomeEntity(x: typing.Annotated[int, Min(value=10), Max(value=20)])',
+        doc="SomeEntity(x: typing.Annotated[int, Min(value=10), Max(value=20)])",
     )
 
 
@@ -394,11 +402,11 @@ def test_describe__dataclass_and_annotated_with_min_max_length__parsed():
         fields=[
             EntityField(
                 name="x",
-                dict_key='x',
+                dict_key="x",
                 type=StringType(min_length=10, max_length=20),
             )
         ],
-        doc='SomeEntity(x: typing.Annotated[str, MinLength(value=10), MaxLength(value=20)])',
+        doc="SomeEntity(x: typing.Annotated[str, MinLength(value=10), MaxLength(value=20)])",
     )
 
 
@@ -465,6 +473,7 @@ def test_describe__attrs_and_annotated_with_min_max__parsed():
         fields=[
             EntityField(
                 name="x",
+                dict_key="x",
                 type=IntegerType(min=10, max=20),
             )
         ],
@@ -483,6 +492,7 @@ def test_describe__attrs_and_annotated_with_min_max_length__parsed():
         fields=[
             EntityField(
                 name="x",
+                dict_key="x",
                 type=StringType(min_length=10, max_length=20),
             )
         ],
@@ -535,3 +545,50 @@ def test_describe__invalid_tuple__error(t):
 
 def test_describe__decimal_with_places__parsed():
     assert describe_type(Annotated[Decimal, Places(3)]) == DecimalType(places=3)
+
+
+def test_describe__dataclass_field_format__parsed():
+    @dataclass
+    class InnerEntity:
+        foo_field: str
+        bar_field: Annotated[int, CamelCase]
+
+    @dataclass
+    class Entity:
+        inner_entity: Annotated[list[InnerEntity], NoFormat]
+        some_filed: str
+
+    assert describe_type(Annotated[Entity, CamelCase]) == EntityType(
+        cls=Entity,
+        fields=[
+            EntityField(
+                name="inner_entity",
+                dict_key="inner_entity",
+                type=ArrayType(
+                    is_sequence=False,
+                    item_type=EntityType(
+                        cls=InnerEntity,
+                        fields=[
+                            EntityField(
+                                name="foo_field",
+                                dict_key="foo_field",
+                                type=StringType(),
+                            ),
+                            EntityField(
+                                name="bar_field",
+                                dict_key="barField",
+                                type=IntegerType(),
+                            ),
+                        ],
+                        doc=mock.ANY,
+                    ),
+                ),
+            ),
+            EntityField(
+                name="some_filed",
+                dict_key="someFiled",
+                type=StringType(),
+            ),
+        ],
+        doc=mock.ANY,
+    )

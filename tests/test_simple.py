@@ -4,8 +4,10 @@ from dataclasses import dataclass, field
 import pytest
 
 from serpyco_rs import Serializer, SchemaValidationError
-from typing import List, Optional
+from typing import List, Optional, Annotated
 from collections.abc import Sequence, Mapping
+
+from serpyco_rs.metadata import NoFormat, CamelCase
 
 
 def test_dump_simple_fields_types():
@@ -196,3 +198,37 @@ if sys.version_info >= (3, 10):
         dict_bar = {"name": "try", "count": 5}
         assert serializer.dump(bar) == dict_bar
         assert bar == serializer.load(dict_bar)
+
+
+def test_serializer_with_camelcase():
+    @dataclass
+    class C:
+        foo_field: int
+
+    @dataclass
+    class B:
+        some_value: str
+        another_value: Annotated[C, CamelCase]
+
+    @dataclass
+    class A:
+        dict_field: dict[str, int]
+        inner_value_one: B
+        inner_value_two: Annotated[B, NoFormat]
+
+    serializer = Serializer(A, camelcase_fields=True)
+
+    obj = A(
+        dict_field={"foo": 1},
+        inner_value_one=B(some_value="123", another_value=C(11)),
+        inner_value_two=B(some_value="1", another_value=C(22)),
+    )
+
+    expected = {
+        "dictField": {"foo": 1},
+        "innerValueOne": {"someValue": "123", "anotherValue": {"fooField": 11}},
+        "inner_value_two": {"some_value": "1", "anotherValue": {"fooField": 22}},
+    }
+
+    assert serializer.load(expected) == obj
+    assert serializer.dump(obj) == expected

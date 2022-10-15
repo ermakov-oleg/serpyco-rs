@@ -138,12 +138,12 @@ def _(arg: describe.OptionalType, doc: Optional[str] = None) -> Schema:
 def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
     return ObjectType(
         properties={
-            prop.name: to_json_schema(prop.type, prop.doc)
+            prop.dict_key: to_json_schema(prop.type, prop.doc)
             for prop in arg.fields
             if not prop.is_property
         },
         required=[
-            prop.name
+            prop.dict_key
             for prop in arg.fields
             if not (
                 prop.is_property

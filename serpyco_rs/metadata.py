@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import Enum
 from typing import Union
 
 
@@ -26,3 +27,17 @@ class MaxLength:
 @dataclass(frozen=True)
 class Places:
     value: int
+
+
+class Format(Enum):
+    no_format = "no_format"
+    camel_case = "camel_case"
+
+
+@dataclass(frozen=True)
+class FiledFormat:
+    format: Format
+
+
+CamelCase = FiledFormat(Format.camel_case)
+NoFormat = FiledFormat(Format.no_format)

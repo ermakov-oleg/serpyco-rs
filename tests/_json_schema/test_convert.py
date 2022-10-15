@@ -6,9 +6,11 @@ from enum import Enum
 from typing import Any, Annotated
 from uuid import UUID
 
+import pytest
+
 from serpyco_rs._json_schema import to_json_schema
 from serpyco_rs._describe import describe_type
-from serpyco_rs.metadata import Min, Max, MinLength, MaxLength
+from serpyco_rs.metadata import Min, Max, MinLength, MaxLength, CamelCase
 
 
 def test_to_json_schema():
@@ -40,6 +42,7 @@ def test_to_json_schema():
         l: tuple[int, str, InnerData]
         m: dict[str, int]
         n: Any
+        some_filed: Annotated[str, CamelCase]
 
     schema = to_json_schema(describe_type(Data)).dump()
 
@@ -93,6 +96,7 @@ def test_to_json_schema():
             },
             "m": {"additionalProperties": {"type": "integer"}, "type": "object"},
             "n": {},
+            "someFiled": {"type": "string"},
         },
         "required": [
             "a",
@@ -109,28 +113,30 @@ def test_to_json_schema():
             "l",
             "m",
             "n",
+            "someFiled",
         ],
         "type": "object",
     }
 
 
-if sys.version_info >= (3, 10):
+@pytest.mark.skipif(
+    sys.version_info < (3, 10), reason="New style unions available after 3.10"
+)
+def test_to_json_schema__new_union_syntax():
+    @dataclass
+    class Data:
+        """Docs"""
 
-    def test_to_json_schema__new_union_syntax():
-        @dataclass
-        class Data:
-            """Docs"""
+        a: int | None
 
-            a: int | None
+    schema = to_json_schema(describe_type(Data)).dump()
 
-        schema = to_json_schema(describe_type(Data)).dump()
-
-        assert schema == {
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "description": "Docs",
-            "properties": {
-                "a": {"anyOf": [{"type": "null"}, {"type": "integer"}]},
-            },
-            "required": ["a"],
-            "type": "object",
-        }
+    assert schema == {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "description": "Docs",
+        "properties": {
+            "a": {"anyOf": [{"type": "null"}, {"type": "integer"}]},
+        },
+        "required": ["a"],
+        "type": "object",
+    }

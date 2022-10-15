@@ -15,5 +15,6 @@ dependencies = [
     "typing-inspect>=0.8.0",
     "attributes-doc",
     "jsonschema_rs",
+    "typing-extensions",
 ]
 

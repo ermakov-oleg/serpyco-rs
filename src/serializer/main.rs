@@ -69,13 +69,14 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
             for field in class_fields.as_ref(py).iter()? {
                 let field = field?;
                 let f_name: &PyString = field.getattr("name")?.downcast()?;
+                let dict_key: &PyString = field.getattr("dict_key")?.downcast()?;
                 let f_type = get_object_type(field.getattr("type")?)?;
                 let f_default = field.getattr("default")?;
                 let f_default_factory = field.getattr("default_factory")?;
 
                 let fld = Field {
                     name: f_name.into(),
-                    dict_key: f_name.into(),
+                    dict_key: dict_key.into(),
                     encoder: get_encoder(py, f_type)?,
                     default: match is_not_set(f_default)? {
                         true => None,
