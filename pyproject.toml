@@ -4,11 +4,19 @@ build-backend = "maturin"
 
 [project]
 name = "serpyco-rs"
+repository = "https://github.com/ermakov-oleg/serpyco-rs"
 requires-python = ">=3.9"
 classifiers = [
-    "Programming Language :: Rust",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Python",
+    "Programming Language :: Rust",
 ]
 
 dependencies = [
