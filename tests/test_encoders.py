@@ -7,6 +7,7 @@ from enum import Enum
 from zoneinfo import ZoneInfo
 
 import pytest
+from dateutil.tz import tzoffset
 
 from serpyco_rs import ValidationError
 from serpyco_rs import Serializer
@@ -135,8 +136,8 @@ def test_datetime_dump(value, expected):
 @pytest.mark.parametrize(
     ["value", "expected"],
     (
-        ('2022-10-10T14:23:43', datetime(2022, 10, 10, 14, 23, 43)),
-        ('2022-10-10T14:23:43.123456', datetime(2022, 10, 10, 14, 23, 43, 123456)),
+        ("2022-10-10T14:23:43", datetime(2022, 10, 10, 14, 23, 43)),
+        ("2022-10-10T14:23:43.123456", datetime(2022, 10, 10, 14, 23, 43, 123456)),
         (
             "2022-10-10T14:23:43+00:00",
             datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone.utc),
@@ -162,7 +163,10 @@ def test_datetime_load(value, expected):
         ("12:34", time(12, 34)),
         ("12:34:56", time(12, 34, 56)),
         ("12:34:56.000078", time(12, 34, 56, 78)),
-        # ('12:34:56.000078+00:00', time(12, 34, 56, 78, tzinfo=tzoffset(None, 0))),
+        (
+            "12:34:56.000078+03:00",
+            time(12, 34, 56, 78, tzinfo=tzoffset(None, timedelta(hours=3))),
+        ),
     ],
 )
 def test_time_load(value, expected):
