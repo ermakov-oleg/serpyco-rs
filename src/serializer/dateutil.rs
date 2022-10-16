@@ -1,7 +1,8 @@
 use std::os::raw::c_int;
 
 use chrono::{
-    DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Offset, Timelike,
+    DateTime, Datelike, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Offset, ParseError,
+    Timelike, Utc,
 };
 use pyo3::{PyErr, PyResult};
 use pyo3_ffi::{PyObject, PyTimeZone_FromOffset};
@@ -12,9 +13,18 @@ use super::encoders::ValidationError;
 use super::py::from_ptr_or_err;
 
 pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
-    let time = NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
+    let (time, tz) = NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
         .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M"))
-        .map_err(|e| InnerParseError::from(e))?;
+        .map(|v| (v, None))
+        .or_else(|_| {
+            let mut datetime_raw = Utc::now().date().naive_utc().to_string();
+            datetime_raw.push_str("T");
+            datetime_raw.push_str(value);
+            let datetime = DateTime::parse_from_rfc3339(&datetime_raw)?;
+            let tz = datetime.offset().fix();
+            Ok((datetime.time(), Some(tz)))
+        })
+        .map_err(|e: ParseError| InnerParseError::from(e))?;
     let api = ensure_datetime_api();
     let (micros, fold) = chrono_to_micros_and_fold(&time);
     unsafe {
@@ -23,7 +33,8 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
             c_int::from(time.minute() as u8),
             c_int::from(time.second() as u8),
             micros as c_int,
-            NONE_PY_TYPE,
+            tz.map(py_timezone_from_fixed_offset)
+                .unwrap_or(Ok(NONE_PY_TYPE))?,
             fold as c_int,
             api.TimeType,
         );

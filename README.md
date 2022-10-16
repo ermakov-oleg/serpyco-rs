@@ -61,7 +61,6 @@ There is support for generic types from the standard typing module:
 
 ## Todo
 
-- parse timezone for datetime.time
 - omit_none
 - run tests in CI
 - CI checks (pylint, black, mypy, ...)
