@@ -3,35 +3,16 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
-from functools import lru_cache
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Optional,
-    TypeVar,
-    Union,
-    cast,
-    get_type_hints,
-    Annotated,
-    get_origin,
-)
-from typing_extensions import assert_never
-from uuid import UUID
 from enum import Enum, IntEnum
-
-from ._utils import to_camelcase
-from .metadata import (
-    Min,
-    Max,
-    MaxLength,
-    MinLength,
-    Places,
-    FiledFormat,
-    Format,
-)
+from functools import lru_cache
+from typing import TYPE_CHECKING, Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints
+from uuid import UUID
 
 from attributes_doc import get_attributes_doc
+from typing_extensions import assert_never
 
+from ._utils import to_camelcase
+from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, Places
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -338,7 +319,7 @@ def _describe_dataclass(
 
 
 def _describe_attrs(
-    t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]
+    t: type[attr.AttrsInstance], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
@@ -395,7 +376,7 @@ def _find_metadata(annotations: Iterable[Any], type_: type[_T]) -> Optional[_T]:
 def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
     def inner(type_: _T) -> _T:
         for ann in annotations:
-            type_ = Annotated[type_, ann]
+            type_ = cast(_T, Annotated[type_, ann])
         return type_
 
     return inner

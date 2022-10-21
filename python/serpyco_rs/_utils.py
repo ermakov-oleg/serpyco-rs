@@ -1,6 +1,5 @@
 import re
 
-
 CAMELCASE_RE = re.compile(r"(?!^)_([a-zA-Z])")
 
 

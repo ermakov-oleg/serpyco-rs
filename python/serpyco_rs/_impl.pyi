@@ -2,16 +2,16 @@ from typing import Any, Generic, TypeVar
 
 from ._describe import Type
 
-T = TypeVar("T")
+_T = TypeVar("_T")
 
 class ValidationError(Exception):
     pass
 
-class Serializer(Generic[T]):
-    def dump(self, value: T) -> Any:
+class Serializer(Generic[_T]):
+    def dump(self, value: _T) -> Any:
         pass
-    def load(self, data: Any) -> T:
+    def load(self, data: Any) -> _T:
         pass
 
-def make_encoder(py_class: Type) -> Serializer[T]:
+def make_encoder(py_class: Type) -> Serializer[_T]:
     pass

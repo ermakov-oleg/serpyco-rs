@@ -39,5 +39,5 @@ class FiledFormat:
     format: Format
 
 
-CamelCase = FiledFormat(Format.camel_case)
-NoFormat = FiledFormat(Format.no_format)
+CamelCase: FiledFormat = FiledFormat(Format.camel_case)
+NoFormat: FiledFormat = FiledFormat(Format.no_format)

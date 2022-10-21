@@ -2,16 +2,7 @@ from functools import singledispatch
 from typing import Any, Optional
 
 from .. import _describe as describe
-from ._entities import (
-    Schema,
-    ArrayType,
-    ObjectType,
-    Null,
-    StringType,
-    Boolean,
-    NumberType,
-    IntegerType,
-)
+from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, ObjectType, Schema, StringType
 
 
 @singledispatch
