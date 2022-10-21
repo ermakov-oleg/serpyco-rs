@@ -83,15 +83,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-
-          pip install --no-index --no-deps --find-links wheels/ serpyco-rs
-          pip install --find-links wheels/ serpyco-rs
+          
+          pip install wheels/serpyco-rs-*.whl --force-reinstall
+#          pip install --no-index --no-deps --find-links wheels/ serpyco-rs
+#          pip install --find-links wheels/ serpyco-rs
 
       - name: Test with pytest
-        run: |
-          pip freeze
-          python -c 'import serpyco_rs; print(serpyco_rs)'
-          pytest -vss
+        run: pytest -vss
 
   fmt:
     name: Rustfmt
