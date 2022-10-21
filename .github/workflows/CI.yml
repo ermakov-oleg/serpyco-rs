@@ -88,7 +88,7 @@ jobs:
       - name: lint
         run: ruff python
       - name: check types
-        if: matrix.os == 'ubuntu-latest' && python-version == '3.10'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
         run: |
           cd python/serpyco_rs
           mypy . --strict --no-warn-unused-ignores || true
@@ -125,8 +125,7 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     if: startsWith(github.event.ref, 'refs/tags')
-    needs: [ linux, test ]
-#    needs: [ macos, windows, linux, test ]
+    needs: [ macos, windows, linux, test ]
     steps:
       - uses: actions/download-artifact@v2
         with:
