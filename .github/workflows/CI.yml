@@ -18,7 +18,8 @@ jobs:
         with:
           manylinux: auto
           command: build
-          args: --release --sdist -o dist --find-interpreter
+#          args: --release --sdist -o dist --find-interpreter
+          args: --release --sdist -o dist --interpreter 3.10
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -75,6 +76,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: wheels
+          path: wheels
       - name: Display structure of downloaded files
         run: ls -R
       - name: Install dependencies
