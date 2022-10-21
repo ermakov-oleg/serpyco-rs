@@ -319,7 +319,7 @@ def _describe_dataclass(
 
 
 def _describe_attrs(
-    t: type[attr.AttrsInstance], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]
+    t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
