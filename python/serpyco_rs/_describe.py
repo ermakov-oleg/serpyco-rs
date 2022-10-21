@@ -171,9 +171,7 @@ def describe_type(t: Any) -> Type:
 
     generics = dict(zip(parameters, args))
     filed_format = _find_metadata(metadata, FiledFormat)
-    annotation_wrapper = (
-        _wrap_annotated([filed_format]) if filed_format else lambda x: x
-    )
+    annotation_wrapper = _wrap_annotated([filed_format]) if filed_format else lambda x: x
 
     if t is Any:
         return AnyType()
@@ -221,29 +219,21 @@ def describe_type(t: Any) -> Type:
 
         if t in {Sequence, list}:
             return ArrayType(
-                item_type=(
-                    describe_type(annotation_wrapper(args[0])) if args else AnyType()
-                ),
+                item_type=(describe_type(annotation_wrapper(args[0])) if args else AnyType()),
                 is_sequence=t is Sequence,
             )
 
         if t in {Mapping, dict}:
             return DictionaryType(
-                key_type=(
-                    describe_type(annotation_wrapper(args[0])) if args else AnyType()
-                ),
-                value_type=(
-                    describe_type(annotation_wrapper(args[1])) if args else AnyType()
-                ),
+                key_type=(describe_type(annotation_wrapper(args[0])) if args else AnyType()),
+                value_type=(describe_type(annotation_wrapper(args[1])) if args else AnyType()),
                 is_mapping=t is Mapping,
             )
 
         if t is tuple:
             if not args or Ellipsis in args:
                 raise RuntimeError("Variable length tuples are not supported")
-            return TupleType(
-                item_types=[describe_type(annotation_wrapper(arg)) for arg in args]
-            )
+            return TupleType(item_types=[describe_type(annotation_wrapper(arg)) for arg in args])
 
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t)
@@ -256,9 +246,7 @@ def describe_type(t: Any) -> Type:
 
     if t in {Union}:
         if len(args) != 2 or _NoneType not in args:
-            raise RuntimeError(
-                f"Only Unions of one type with None are supported: {t}, {args}"
-            )
+            raise RuntimeError(f"Only Unions of one type with None are supported: {t}, {args}")
         inner = args[1] if args[0] is _NoneType else args[0]
         return OptionalType(describe_type(annotation_wrapper(inner)))
 
@@ -301,15 +289,9 @@ def _describe_dataclass(
                 dict_key=_apply_format(field_format, field.name),
                 doc=docs.get(field.name),
                 type=field_type,
-                default=(
-                    field.default
-                    if field.default is not dataclasses.MISSING
-                    else NOT_SET
-                ),
+                default=(field.default if field.default is not dataclasses.MISSING else NOT_SET),
                 default_factory=(
-                    field.default_factory
-                    if field.default_factory is not dataclasses.MISSING
-                    else NOT_SET
+                    field.default_factory if field.default_factory is not dataclasses.MISSING else NOT_SET
                 ),
                 is_property=False,
             )
@@ -318,9 +300,7 @@ def _describe_dataclass(
     return EntityType(cls=t, fields=fields, generics=generics, doc=t.__doc__)
 
 
-def _describe_attrs(
-    t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]
-) -> EntityType:
+def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]) -> EntityType:
     docs = get_attributes_doc(t)
     try:
         types = get_type_hints(t, include_extras=True)

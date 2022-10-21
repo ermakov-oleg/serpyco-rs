@@ -56,9 +56,7 @@ def test_dump(benchmark, impl):
 
     benchmark.group = "dump"
     benchmark.extra_info["impl"] = impl
-    benchmark.extra_info["correct"] = (
-        serializer.load(serializer.dump(test_object)) == test_object
-    )
+    benchmark.extra_info["correct"] = serializer.load(serializer.dump(test_object)) == test_object
     benchmark(serializer.dump, test_object)
 
 
@@ -70,9 +68,7 @@ def test_load(benchmark, impl):
 
     benchmark.group = "load"
     benchmark.extra_info["impl"] = impl
-    benchmark.extra_info["correct"] = (
-        serializer.load(serializer.dump(test_object)) == test_object
-    )
+    benchmark.extra_info["correct"] = serializer.load(serializer.dump(test_object)) == test_object
     benchmark(serializer.load, test_dict, validate=False)
 
 
@@ -84,8 +80,6 @@ def test_load_validate(benchmark, impl):
 
     benchmark.group = "load with validate"
     benchmark.extra_info["impl"] = impl
-    benchmark.extra_info["correct"] = (
-        serializer.load(serializer.dump(test_object)) == test_object
-    )
+    benchmark.extra_info["correct"] = serializer.load(serializer.dump(test_object)) == test_object
 
     benchmark(serializer.load, test_dict, validate=True)
