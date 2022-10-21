@@ -90,9 +90,9 @@ jobs:
       - name: isort
         run: isort --check --diff python/serpyco_rs
       - name: lint
-        run: |
-          ruff python
+        run: ruff python
       - name: check types
+        run: |
           cd python/serpyco_rs
           mypy . --strict --no-warn-unused-ignores
           pyright
