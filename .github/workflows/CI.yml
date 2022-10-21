@@ -89,6 +89,7 @@ jobs:
 
       - name: Test with pytest
         run: |
+          pip freeze
           pytest -vss
 
   fmt:
@@ -109,8 +110,6 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
-        with:
-          submodules: true
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
