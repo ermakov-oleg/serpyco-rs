@@ -2,6 +2,9 @@
 requires = ["maturin>=0.13,<0.14"]
 build-backend = "maturin"
 
+[tool.maturin]
+python-source = "python"
+
 [project]
 name = "serpyco-rs"
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
