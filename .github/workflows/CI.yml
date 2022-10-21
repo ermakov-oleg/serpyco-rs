@@ -86,6 +86,7 @@ jobs:
 
           pip install --no-index --no-deps --find-links wheels/ serpyco-rs
           pip install --find-links wheels/ serpyco-rs
+          python -c 'import serpyco_rs; print(serpyco_rs)'
 
       - name: Test with pytest
         run: |
