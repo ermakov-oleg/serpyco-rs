@@ -18,52 +18,48 @@ jobs:
         with:
           manylinux: auto
           command: build
-#          args: --release --sdist -o dist --find-interpreter
-          args: --release --sdist -o dist --interpreter 3.10
+          args: --release --sdist -o dist --find-interpreter
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
           name: wheels
           path: dist
 
-#  windows:
-#    runs-on: windows-latest
-#    steps:
-#      - uses: actions/checkout@v3
-#      - uses: messense/maturin-action@v1
-#        with:
-#          command: build
-#          args: --release -o dist --find-interpreter
-#      - name: Upload wheels
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: wheels
-#          path: dist
-#
-#  macos:
-#    runs-on: macos-latest
-#    steps:
-#      - uses: actions/checkout@v3
-#      - uses: messense/maturin-action@v1
-#        with:
-#          command: build
-#          args: --release -o dist --universal2 --find-interpreter
-#      - name: Upload wheels
-#        uses: actions/upload-artifact@v2
-#        with:
-#          name: wheels
-#          path: dist
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -o dist --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -o dist --universal2 --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
 
   test:
-#    needs: [ macos, windows, linux ]
-    needs: [ linux ]
+    needs: [ macos, windows, linux ]
     strategy:
       fail-fast: false
       matrix:
-#        os: [ ubuntu-latest, macos-latest, windows-latest ]
-        os: [ ubuntu-latest ]
-#        python-version: ["3.9", "3.10", "3.11-dev"]
-        python-version: ["3.10"]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: ["3.9", "3.10", "3.11-dev"]
 
     name: Test on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
