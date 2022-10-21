@@ -32,60 +32,60 @@ static INIT: Once = Once::new();
 
 #[derive(Clone, Debug)]
 pub enum Type {
-    IntegerType(Py<PyAny>),
-    StringType(Py<PyAny>),
-    BytesType(Py<PyAny>),
-    FloatType(Py<PyAny>),
-    DecimalType(Py<PyAny>),
-    BooleanType(Py<PyAny>),
-    UUIDType(Py<PyAny>),
-    TimeType(Py<PyAny>),
-    DateTimeType(Py<PyAny>),
-    DateType(Py<PyAny>),
-    EnumType(Py<PyAny>),
-    EntityType(Py<PyAny>),
-    OptionalType(Py<PyAny>),
-    ArrayType(Py<PyAny>),
-    DictionaryType(Py<PyAny>),
-    TupleType(Py<PyAny>),
-    AnyType(Py<PyAny>),
+    Integer(Py<PyAny>),
+    String(Py<PyAny>),
+    Bytes(Py<PyAny>),
+    Float(Py<PyAny>),
+    Decimal(Py<PyAny>),
+    Boolean(Py<PyAny>),
+    UUID(Py<PyAny>),
+    Time(Py<PyAny>),
+    DateTime(Py<PyAny>),
+    Date(Py<PyAny>),
+    Enum(Py<PyAny>),
+    Entity(Py<PyAny>),
+    Optional(Py<PyAny>),
+    Array(Py<PyAny>),
+    Dictionary(Py<PyAny>),
+    Tuple(Py<PyAny>),
+    Any(Py<PyAny>),
 }
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     if check_type!(type_info, INTEGER_TYPE) {
-        Ok(Type::IntegerType(type_info.into()))
+        Ok(Type::Integer(type_info.into()))
     } else if check_type!(type_info, STRING_TYPE) {
-        Ok(Type::StringType(type_info.into()))
+        Ok(Type::String(type_info.into()))
     } else if check_type!(type_info, BYTES_TYPE) {
-        Ok(Type::BytesType(type_info.into()))
+        Ok(Type::Bytes(type_info.into()))
     } else if check_type!(type_info, FLOAT_TYPE) {
-        Ok(Type::FloatType(type_info.into()))
+        Ok(Type::Float(type_info.into()))
     } else if check_type!(type_info, DECIMAL_TYPE) {
-        Ok(Type::DecimalType(type_info.into()))
+        Ok(Type::Decimal(type_info.into()))
     } else if check_type!(type_info, BOOLEAN_TYPE) {
-        Ok(Type::BooleanType(type_info.into()))
+        Ok(Type::Boolean(type_info.into()))
     } else if check_type!(type_info, UUID_TYPE) {
-        Ok(Type::UUIDType(type_info.into()))
+        Ok(Type::UUID(type_info.into()))
     } else if check_type!(type_info, TIME_TYPE) {
-        Ok(Type::TimeType(type_info.into()))
+        Ok(Type::Time(type_info.into()))
     } else if check_type!(type_info, DATETIME_TYPE) {
-        Ok(Type::DateTimeType(type_info.into()))
+        Ok(Type::DateTime(type_info.into()))
     } else if check_type!(type_info, DATE_TYPE) {
-        Ok(Type::DateType(type_info.into()))
+        Ok(Type::Date(type_info.into()))
     } else if check_type!(type_info, ENUM_TYPE) {
-        Ok(Type::EnumType(type_info.into()))
+        Ok(Type::Enum(type_info.into()))
     } else if check_type!(type_info, ENTITY_TYPE) {
-        Ok(Type::EntityType(type_info.into()))
+        Ok(Type::Entity(type_info.into()))
     } else if check_type!(type_info, OPTIONAL_TYPE) {
-        Ok(Type::OptionalType(type_info.into()))
+        Ok(Type::Optional(type_info.into()))
     } else if check_type!(type_info, ARRAY_TYPE) {
-        Ok(Type::ArrayType(type_info.into()))
+        Ok(Type::Array(type_info.into()))
     } else if check_type!(type_info, DICTIONARY_TYPE) {
-        Ok(Type::DictionaryType(type_info.into()))
+        Ok(Type::Dictionary(type_info.into()))
     } else if check_type!(type_info, TUPLE_TYPE) {
-        Ok(Type::TupleType(type_info.into()))
+        Ok(Type::Tuple(type_info.into()))
     } else if check_type!(type_info, ANY_TYPE) {
-        Ok(Type::AnyType(type_info.into()))
+        Ok(Type::Any(type_info.into()))
     } else {
         todo!("py Error 'Unsupported type'")
     }

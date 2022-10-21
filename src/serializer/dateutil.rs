@@ -18,7 +18,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
         .map(|v| (v, None))
         .or_else(|_| {
             let mut datetime_raw = Utc::now().date().naive_utc().to_string();
-            datetime_raw.push_str("T");
+            datetime_raw.push('T');
             datetime_raw.push_str(value);
             let datetime = DateTime::parse_from_rfc3339(&datetime_raw)?;
             let tz = datetime.offset().fix();
@@ -125,16 +125,16 @@ fn py_timezone_from_fixed_offset(offset: FixedOffset) -> PyResult<*mut PyObject>
     }
 }
 
-struct InnerParseError(chrono::ParseError);
+struct InnerParseError(ParseError);
 
-impl From<chrono::ParseError> for InnerParseError {
-    fn from(other: chrono::ParseError) -> Self {
+impl From<ParseError> for InnerParseError {
+    fn from(other: ParseError) -> Self {
         Self(other)
     }
 }
 
 impl From<InnerParseError> for PyErr {
     fn from(e: InnerParseError) -> Self {
-        return ValidationError::new_err(format!("Fail parse datetime {:?}", e.0.to_string()));
+        ValidationError::new_err(format!("Fail parse datetime {:?}", e.0.to_string()))
     }
 }

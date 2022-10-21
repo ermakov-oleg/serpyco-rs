@@ -46,7 +46,7 @@ fn builtins(py: Python) -> &PyAny {
 pub fn py_len(obj: *mut ffi::PyObject) -> PyResult<Py_ssize_t> {
     let v = ffi!(PyObject_Size(obj));
     if v == -1 {
-        Err(Python::with_gil(|py| PyErr::fetch(py)))
+        Err(Python::with_gil(PyErr::fetch))
     } else {
         Ok(v)
     }
@@ -134,7 +134,7 @@ pub fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
                 let mut size: ffi::Py_ssize_t = 0;
                 let data = ffi!(PyUnicode_AsUTF8AndSize(obj, &mut size));
                 if data.is_null() {
-                    return Err(Python::with_gil(|py| PyErr::fetch(py)));
+                    return Err(Python::with_gil(PyErr::fetch));
                 } else {
                     unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) }
                 }
@@ -175,7 +175,7 @@ fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
 }
 
 pub fn from_ptr_or_err(ptr: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    from_ptr_or_opt(ptr).ok_or_else(|| Python::with_gil(|py| PyErr::fetch(py)))
+    from_ptr_or_opt(ptr).ok_or_else(|| Python::with_gil(PyErr::fetch))
 }
 
 #[inline]
@@ -183,7 +183,7 @@ pub fn error_on_minusone(result: c_int) -> PyResult<()> {
     if result != -1 {
         Ok(())
     } else {
-        Err(Python::with_gil(|py| PyErr::fetch(py)))
+        Err(Python::with_gil(PyErr::fetch))
     }
 }
 

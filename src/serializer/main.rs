@@ -22,19 +22,19 @@ pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
 
 pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder + Send>> {
     let encoder: Box<dyn Encoder + Send> = match obj_type {
-        Type::StringType(_)
-        | Type::IntegerType(_)
-        | Type::BytesType(_)
-        | Type::FloatType(_)
-        | Type::BooleanType(_)
-        | Type::AnyType(_) => Box::new(NoopEncoder),
-        Type::DecimalType(_) => Box::new(DecimalEncoder),
-        Type::OptionalType(type_info) => {
+        Type::String(_)
+        | Type::Integer(_)
+        | Type::Bytes(_)
+        | Type::Float(_)
+        | Type::Boolean(_)
+        | Type::Any(_) => Box::new(NoopEncoder),
+        Type::Decimal(_) => Box::new(DecimalEncoder),
+        Type::Optional(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
             let encoder = get_encoder(py, inner)?;
             Box::new(OptionalEncoder { encoder })
         }
-        Type::DictionaryType(type_info) => {
+        Type::Dictionary(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;
             let value_type = get_object_type(type_info.getattr(py, "value_type")?.as_ref(py))?;
 
@@ -46,13 +46,13 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
                 value_encoder,
             })
         }
-        Type::ArrayType(type_info) => {
+        Type::Array(type_info) => {
             let item_type = get_object_type(type_info.getattr(py, "item_type")?.as_ref(py))?;
             let encoder = get_encoder(py, item_type)?;
 
             Box::new(ArrayEncoder { encoder })
         }
-        Type::TupleType(type_info) => {
+        Type::Tuple(type_info) => {
             let mut encoders = vec![];
             for item_type in type_info.getattr(py, "item_types")?.as_ref(py).iter()? {
                 let item_type = item_type?;
@@ -61,7 +61,7 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
             }
             Box::new(TupleEncoder { encoders })
         }
-        Type::EntityType(type_info) => {
+        Type::Entity(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
             let class_fields = type_info.getattr(py, "fields")?;
             let mut fields = vec![];
@@ -90,21 +90,21 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
                 fields.push(fld);
             }
 
-            let create_new_object_args = PyTuple::new(py, vec![py_type.clone()]).into();
+            let create_new_object_args = PyTuple::new(py, vec![py_type]).into();
 
             Box::new(EntityEncoder {
                 create_new_object_args,
                 fields,
             })
         }
-        Type::UUIDType(_) => Box::new(UUIDEncoder),
-        Type::EnumType(type_info) => {
+        Type::UUID(_) => Box::new(UUIDEncoder),
+        Type::Enum(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
             Box::new(EnumEncoder { enum_type: py_type })
         }
-        Type::DateTimeType(_) => Box::new(DateTimeEncoder),
-        Type::TimeType(_) => Box::new(TimeEncoder),
-        Type::DateType(_) => Box::new(DateEncoder),
+        Type::DateTime(_) => Box::new(DateTimeEncoder),
+        Type::Time(_) => Box::new(TimeEncoder),
+        Type::Date(_) => Box::new(DateEncoder),
     };
 
     Ok(encoder)
