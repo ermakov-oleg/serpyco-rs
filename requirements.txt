@@ -8,3 +8,4 @@ ruff
 mypy
 pyright
 isort
+tzdata; sys_platform == 'win32'
