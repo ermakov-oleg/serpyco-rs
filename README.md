@@ -64,9 +64,7 @@ There is support for generic types from the standard typing module:
 ## Todo
 
 - omit_none
-- run tests in CI
 - fix mypy/pyright errors
-- fix clippy errors
 - more tests
 - bench results
 - write docs
