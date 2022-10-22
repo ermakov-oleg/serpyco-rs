@@ -38,7 +38,7 @@ pub enum Type {
     Float(Py<PyAny>),
     Decimal(Py<PyAny>),
     Boolean(Py<PyAny>),
-    UUID(Py<PyAny>),
+    Uuid(Py<PyAny>),
     Time(Py<PyAny>),
     DateTime(Py<PyAny>),
     Date(Py<PyAny>),
@@ -65,7 +65,7 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     } else if check_type!(type_info, BOOLEAN_TYPE) {
         Ok(Type::Boolean(type_info.into()))
     } else if check_type!(type_info, UUID_TYPE) {
-        Ok(Type::UUID(type_info.into()))
+        Ok(Type::Uuid(type_info.into()))
     } else if check_type!(type_info, TIME_TYPE) {
         Ok(Type::Time(type_info.into()))
     } else if check_type!(type_info, DATETIME_TYPE) {
@@ -122,7 +122,7 @@ pub fn init(py: Python<'_>) {
         VALUE_STR = to_py_string("value");
         ISOFORMAT_STR = to_py_string("isoformat");
 
-        PY_TUPLE_0 = ffi!(PyTuple_New(0));
+        PY_TUPLE_0 = pyo3_ffi::PyTuple_New(0);
     });
 }
 
@@ -142,4 +142,3 @@ use crate::serializer::py::to_py_string;
 pub(crate) use check_type;
 pub(crate) use get_attr_ptr;
 
-use super::macros::ffi;

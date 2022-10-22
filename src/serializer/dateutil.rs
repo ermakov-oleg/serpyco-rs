@@ -13,6 +13,7 @@ use super::encoders::ValidationError;
 use super::py::from_ptr_or_err;
 
 pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
+    #[allow(clippy::redundant_closure)]
     let (time, tz) = NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
         .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M"))
         .map(|v| (v, None))
@@ -44,7 +45,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
 
 pub fn parse_date(value: &str) -> PyResult<*mut PyObject> {
     let date =
-        NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|e| InnerParseError::from(e))?;
+        NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
     unsafe {
         let ptr = (api.Date_FromDate)(
@@ -66,7 +67,7 @@ pub fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
         }
         Err(_) => {
             let datetime = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
-                .map_err(|e| InnerParseError::from(e))?;
+                .map_err(InnerParseError::from)?;
             make_py_datetime(datetime, datetime, None)
         }
     }
