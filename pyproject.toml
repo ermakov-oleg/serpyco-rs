@@ -2,6 +2,9 @@
 requires = ["maturin>=0.13,<0.14"]
 build-backend = "maturin"
 
+[tool.maturin]
+python-source = "python"
+
 [project]
 name = "serpyco-rs"
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
@@ -26,3 +29,15 @@ dependencies = [
     "typing-extensions",
 ]
 
+[tool.black]
+line-length = 120
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.ruff]
+line-length = 120
+ignore = [
+    "F401",
+]

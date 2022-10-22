@@ -187,7 +187,7 @@ impl Encoder for EntityEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         Python::with_gil(|py| {
-            let obj = create_new_object(&self.create_new_object_args.as_ref(py))?;
+            let obj = create_new_object(self.create_new_object_args.as_ref(py))?;
             for field in &self.fields {
                 let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
                     Ok(val) => field.encoder.load(val)?,

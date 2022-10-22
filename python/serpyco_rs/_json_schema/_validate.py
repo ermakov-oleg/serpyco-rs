@@ -2,8 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any
 
 import jsonschema_rs
-
-from serpyco_rs.exceptions import SchemaValidationError, ErrorItem
+from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
 
 
 class Validator(metaclass=ABCMeta):

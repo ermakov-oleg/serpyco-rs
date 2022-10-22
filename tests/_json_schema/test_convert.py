@@ -119,9 +119,7 @@ def test_to_json_schema():
     }
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="New style unions available after 3.10"
-)
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="New style unions available after 3.10")
 def test_to_json_schema__new_union_syntax():
     @dataclass
     class Data:

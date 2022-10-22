@@ -3,3 +3,9 @@ maturin
 serpyco
 pytest-benchmark
 pytz
+black
+ruff
+mypy
+pyright
+isort
+tzdata; sys_platform == 'win32'

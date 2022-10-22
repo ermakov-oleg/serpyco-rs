@@ -13,12 +13,13 @@ use super::encoders::ValidationError;
 use super::py::from_ptr_or_err;
 
 pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
+    #[allow(clippy::redundant_closure)]
     let (time, tz) = NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
         .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M"))
         .map(|v| (v, None))
         .or_else(|_| {
             let mut datetime_raw = Utc::now().date().naive_utc().to_string();
-            datetime_raw.push_str("T");
+            datetime_raw.push('T');
             datetime_raw.push_str(value);
             let datetime = DateTime::parse_from_rfc3339(&datetime_raw)?;
             let tz = datetime.offset().fix();
@@ -43,8 +44,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
 }
 
 pub fn parse_date(value: &str) -> PyResult<*mut PyObject> {
-    let date =
-        NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(|e| InnerParseError::from(e))?;
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
     unsafe {
         let ptr = (api.Date_FromDate)(
@@ -66,7 +66,7 @@ pub fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
         }
         Err(_) => {
             let datetime = NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
-                .map_err(|e| InnerParseError::from(e))?;
+                .map_err(InnerParseError::from)?;
             make_py_datetime(datetime, datetime, None)
         }
     }
@@ -125,16 +125,16 @@ fn py_timezone_from_fixed_offset(offset: FixedOffset) -> PyResult<*mut PyObject>
     }
 }
 
-struct InnerParseError(chrono::ParseError);
+struct InnerParseError(ParseError);
 
-impl From<chrono::ParseError> for InnerParseError {
-    fn from(other: chrono::ParseError) -> Self {
+impl From<ParseError> for InnerParseError {
+    fn from(other: ParseError) -> Self {
         Self(other)
     }
 }
 
 impl From<InnerParseError> for PyErr {
     fn from(e: InnerParseError) -> Self {
-        return ValidationError::new_err(format!("Fail parse datetime {:?}", e.0.to_string()));
+        ValidationError::new_err(format!("Fail parse datetime {:?}", e.0.to_string()))
     }
 }

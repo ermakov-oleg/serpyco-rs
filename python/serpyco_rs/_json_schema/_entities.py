@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import Any
 
 
@@ -17,7 +17,7 @@ class Schema:
     oneOf: list[Schema] | None = None
 
     def dump(self) -> dict[str, Any]:
-        def factory(items: list[tuple[str, Any]]):
+        def factory(items: list[tuple[str, Any]]) -> dict[str, Any]:
             return dict(((k, v) for k, v in items if v is not None))
 
         schema = asdict(self, dict_factory=factory)
@@ -49,10 +49,8 @@ class StringType(Schema):
 class NumberType(Schema):
     type: str = "number"
     multipleOf: int | None = None
-    minimum: int | None = None
-    exclusiveMinimum: int | None = None
-    maximum: int | None = None
-    exclusiveMaximum: int | None = None
+    minimum: float | None = None
+    maximum: float | None = None
 
 
 @dataclass

@@ -196,9 +196,7 @@ def test_describe__dataclass__supported():
             ),
             EntityField(
                 name="l",
-                type=ArrayType(
-                    item_type=IntegerType(min=None, max=None), is_sequence=False
-                ),
+                type=ArrayType(item_type=IntegerType(min=None, max=None), is_sequence=False),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
@@ -207,9 +205,7 @@ def test_describe__dataclass__supported():
             ),
             EntityField(
                 name="m",
-                type=ArrayType(
-                    item_type=IntegerType(min=None, max=None), is_sequence=True
-                ),
+                type=ArrayType(item_type=IntegerType(min=None, max=None), is_sequence=True),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
@@ -275,9 +271,7 @@ def test_describe_dataclass__list_type__works_without_type_parameters():
     class SomeEntity:
         x: list
 
-    assert describe_type(SomeEntity).fields[0].type == ArrayType(
-        item_type=AnyType(), is_sequence=False
-    )
+    assert describe_type(SomeEntity).fields[0].type == ArrayType(item_type=AnyType(), is_sequence=False)
 
 
 def test_describe_dataclass__field_has_docstring__doc_filled():
@@ -524,9 +518,7 @@ def test_describe__other_unions__error():
     assert exc_info.match("Only Unions of one type with None are supported")
 
 
-@pytest.mark.skipif(
-    sys.version_info < (3, 10), reason="New style unions available after 3.10"
-)
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="New style unions available after 3.10")
 def test_describe__new_style_union_type__wrapped():
     assert describe_type(int | None) == OptionalType(IntegerType())
 

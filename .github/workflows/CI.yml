@@ -13,51 +13,122 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
-      with:
-        manylinux: auto
-        command: build
-        args: --release --sdist -o dist --find-interpreter
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
+      - uses: actions/checkout@v3
+      - uses: messense/maturin-action@v1
+        with:
+          manylinux: auto
+          command: build
+          args: --release --sdist -o dist --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
 
   windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -o dist --find-interpreter
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
+      - uses: actions/checkout@v3
+      - uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -o dist --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
 
   macos:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: messense/maturin-action@v1
-      with:
-        command: build
-        args: --release -o dist --universal2 --find-interpreter
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
+      - uses: actions/checkout@v3
+      - uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release -o dist --universal2 --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: dist
+
+  test:
+    needs: [ macos, windows, linux ]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        python-version: ["3.9", "3.10"]
+        include:
+          - python-version: "3.11-dev"
+            os: ubuntu-latest
+
+    name: Test on ${{ matrix.os}} ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v2
+        with:
+          name: wheels
+          path: wheels
+      - name: install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-index --no-deps --find-links wheels/ serpyco-rs
+          pip install --find-links wheels/ serpyco-rs
+          pip install -r requirements.txt
+      - name: tests
+        run: pytest -vss
+      - name: fmt
+        run: black --check --diff .
+      - name: isort
+        run: isort --check --diff python/serpyco_rs
+      - name: lint
+        run: ruff python
+      - name: check types
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
+        run: |
+          cd python/serpyco_rs
+          mypy . --strict --no-warn-unused-ignores || true
+          pyright || true
+          pyright --verifytypes serpyco_rs --ignoreexternal
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+      - run: cargo clippy --all-targets --all-features -- -D warnings
 
   release:
-    name: Release
+    name: release
     runs-on: ubuntu-latest
     if: startsWith(github.event.ref, 'refs/tags')
-    needs: [ macos, windows, linux ]
+    needs: [ macos, windows, linux, test ]
     steps:
       - uses: actions/download-artifact@v2
         with:

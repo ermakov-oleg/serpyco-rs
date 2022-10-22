@@ -148,9 +148,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
         (
             dict[str, int],
             {"a": "1"},
-            _mk_e(
-                m='"1" is not of type "integer"', ip="a", sp="additionalProperties/type"
-            ),
+            _mk_e(m='"1" is not of type "integer"', ip="a", sp="additionalProperties/type"),
         ),
         (
             tuple[str, int, bool],

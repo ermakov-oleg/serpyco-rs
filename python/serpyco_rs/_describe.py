@@ -3,35 +3,16 @@ import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
-from functools import lru_cache
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Optional,
-    TypeVar,
-    Union,
-    cast,
-    get_type_hints,
-    Annotated,
-    get_origin,
-)
-from typing_extensions import assert_never
-from uuid import UUID
 from enum import Enum, IntEnum
-
-from ._utils import to_camelcase
-from .metadata import (
-    Min,
-    Max,
-    MaxLength,
-    MinLength,
-    Places,
-    FiledFormat,
-    Format,
-)
+from functools import lru_cache
+from typing import TYPE_CHECKING, Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints
+from uuid import UUID
 
 from attributes_doc import get_attributes_doc
+from typing_extensions import assert_never
 
+from ._utils import to_camelcase
+from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, Places
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -190,9 +171,7 @@ def describe_type(t: Any) -> Type:
 
     generics = dict(zip(parameters, args))
     filed_format = _find_metadata(metadata, FiledFormat)
-    annotation_wrapper = (
-        _wrap_annotated([filed_format]) if filed_format else lambda x: x
-    )
+    annotation_wrapper = _wrap_annotated([filed_format]) if filed_format else lambda x: x
 
     if t is Any:
         return AnyType()
@@ -240,29 +219,21 @@ def describe_type(t: Any) -> Type:
 
         if t in {Sequence, list}:
             return ArrayType(
-                item_type=(
-                    describe_type(annotation_wrapper(args[0])) if args else AnyType()
-                ),
+                item_type=(describe_type(annotation_wrapper(args[0])) if args else AnyType()),
                 is_sequence=t is Sequence,
             )
 
         if t in {Mapping, dict}:
             return DictionaryType(
-                key_type=(
-                    describe_type(annotation_wrapper(args[0])) if args else AnyType()
-                ),
-                value_type=(
-                    describe_type(annotation_wrapper(args[1])) if args else AnyType()
-                ),
+                key_type=(describe_type(annotation_wrapper(args[0])) if args else AnyType()),
+                value_type=(describe_type(annotation_wrapper(args[1])) if args else AnyType()),
                 is_mapping=t is Mapping,
             )
 
         if t is tuple:
             if not args or Ellipsis in args:
                 raise RuntimeError("Variable length tuples are not supported")
-            return TupleType(
-                item_types=[describe_type(annotation_wrapper(arg)) for arg in args]
-            )
+            return TupleType(item_types=[describe_type(annotation_wrapper(arg)) for arg in args])
 
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t)
@@ -275,9 +246,7 @@ def describe_type(t: Any) -> Type:
 
     if t in {Union}:
         if len(args) != 2 or _NoneType not in args:
-            raise RuntimeError(
-                f"Only Unions of one type with None are supported: {t}, {args}"
-            )
+            raise RuntimeError(f"Only Unions of one type with None are supported: {t}, {args}")
         inner = args[1] if args[0] is _NoneType else args[0]
         return OptionalType(describe_type(annotation_wrapper(inner)))
 
@@ -320,15 +289,9 @@ def _describe_dataclass(
                 dict_key=_apply_format(field_format, field.name),
                 doc=docs.get(field.name),
                 type=field_type,
-                default=(
-                    field.default
-                    if field.default is not dataclasses.MISSING
-                    else NOT_SET
-                ),
+                default=(field.default if field.default is not dataclasses.MISSING else NOT_SET),
                 default_factory=(
-                    field.default_factory
-                    if field.default_factory is not dataclasses.MISSING
-                    else NOT_SET
+                    field.default_factory if field.default_factory is not dataclasses.MISSING else NOT_SET
                 ),
                 is_property=False,
             )
@@ -337,9 +300,7 @@ def _describe_dataclass(
     return EntityType(cls=t, fields=fields, generics=generics, doc=t.__doc__)
 
 
-def _describe_attrs(
-    t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]
-) -> EntityType:
+def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]) -> EntityType:
     docs = get_attributes_doc(t)
     try:
         types = get_type_hints(t, include_extras=True)
@@ -395,7 +356,7 @@ def _find_metadata(annotations: Iterable[Any], type_: type[_T]) -> Optional[_T]:
 def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
     def inner(type_: _T) -> _T:
         for ann in annotations:
-            type_ = Annotated[type_, ann]
+            type_ = cast(_T, Annotated[type_, ann])
         return type_
 
     return inner
