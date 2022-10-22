@@ -141,4 +141,3 @@ macro_rules! get_attr_ptr {
 use crate::serializer::py::to_py_string;
 pub(crate) use check_type;
 pub(crate) use get_attr_ptr;
-

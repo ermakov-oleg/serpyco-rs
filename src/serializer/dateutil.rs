@@ -44,8 +44,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
 }
 
 pub fn parse_date(value: &str) -> PyResult<*mut PyObject> {
-    let date =
-        NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(InnerParseError::from)?;
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
     unsafe {
         let ptr = (api.Date_FromDate)(
