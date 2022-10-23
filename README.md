@@ -59,13 +59,3 @@ There is support for generic types from the standard typing module:
 * Mapping
 * Sequence
 * Tuple (fixed size)
-
-
-## Todo
-
-- omit_none
-- fix mypy/pyright errors
-- more tests
-- bench results
-- write docs
-- ...
