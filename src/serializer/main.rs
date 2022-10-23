@@ -22,13 +22,10 @@ pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
 
 pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder + Send>> {
     let encoder: Box<dyn Encoder + Send> = match obj_type {
-        Type::String(_)
-        | Type::Integer(_)
-        | Type::Bytes(_)
-        | Type::Float(_)
-        | Type::Boolean(_)
-        | Type::Any(_) => Box::new(NoopEncoder),
-        Type::Decimal(_) => Box::new(DecimalEncoder),
+        Type::String | Type::Integer | Type::Bytes | Type::Float | Type::Boolean | Type::Any => {
+            Box::new(NoopEncoder)
+        }
+        Type::Decimal => Box::new(DecimalEncoder),
         Type::Optional(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
             let encoder = get_encoder(py, inner)?;
@@ -97,14 +94,14 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type) -> PyResult<Box<dyn Encoder +
                 fields,
             })
         }
-        Type::Uuid(_) => Box::new(UUIDEncoder),
+        Type::Uuid => Box::new(UUIDEncoder),
         Type::Enum(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
             Box::new(EnumEncoder { enum_type: py_type })
         }
-        Type::DateTime(_) => Box::new(DateTimeEncoder),
-        Type::Time(_) => Box::new(TimeEncoder),
-        Type::Date(_) => Box::new(DateEncoder),
+        Type::DateTime => Box::new(DateTimeEncoder),
+        Type::Time => Box::new(TimeEncoder),
+        Type::Date => Box::new(DateEncoder),
     };
 
     Ok(encoder)
