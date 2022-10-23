@@ -62,7 +62,6 @@ pub fn py_object_call1_make_tuple_or_err(
     Ok(result)
 }
 
-
 #[inline]
 pub fn py_object_get_attr(
     obj: *mut ffi::PyObject,
@@ -108,7 +107,6 @@ pub fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
     Ok(unsafe { std::str::from_utf8_unchecked(utf8_slice) })
 }
 
-
 #[inline]
 pub fn py_tuple_get_item(obj: *mut ffi::PyObject, index: usize) -> PyResult<*mut ffi::PyObject> {
     from_ptr_or_err(ffi!(PyTuple_GetItem(obj, index as Py_ssize_t)))
@@ -121,7 +119,6 @@ pub fn py_object_get_item(
 ) -> PyResult<*mut ffi::PyObject> {
     from_ptr_or_err(ffi!(PyObject_GetItem(obj, key)))
 }
-
 
 #[inline]
 pub fn iter_over_dict_items(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterator> {
@@ -148,7 +145,6 @@ impl Iterator for PyObjectIterator {
         }
     }
 }
-
 
 #[inline]
 fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
