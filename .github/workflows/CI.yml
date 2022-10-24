@@ -94,9 +94,9 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
         run: |
           cd python/serpyco_rs
-          mypy . --strict --no-warn-unused-ignores || true
-          pyright || true
-          pyright --verifytypes serpyco_rs --ignoreexternal
+          mypy . --strict --implicit-reexport --pretty
+          pyright
+          pyright --verifytypes serpyco_rs
 
   fmt:
     name: rustfmt

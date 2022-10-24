@@ -177,21 +177,24 @@ def describe_type(t: Any) -> Type:
         return AnyType()
 
     if isinstance(t, type):
-
-        if simple := {
+        simple_type_mapping: Mapping[type, type[Type]] = {
             bytes: BytesType,
             bool: BooleanType,
             date: DateType,
             time: TimeType,
             datetime: DateTimeType,
             UUID: UUIDType,
-        }.get(t):
+        }
+
+        if simple := simple_type_mapping.get(t):
             return simple()
 
-        if number_type := {
+        number_type_mapping: Mapping[type, type[IntegerType] | type[FloatType]] = {
             int: IntegerType,
             float: FloatType,
-        }.get(t):
+        }
+
+        if number_type := number_type_mapping.get(t):
             min_meta = _find_metadata(metadata, Min)
             max_meta = _find_metadata(metadata, Max)
             return number_type(
@@ -301,13 +304,14 @@ def _describe_dataclass(
 
 
 def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]) -> EntityType:
+    assert attr is not None
     docs = get_attributes_doc(t)
     try:
         types = get_type_hints(t, include_extras=True)
     except Exception:  # pylint: disable=broad-except
         types = {}
     fields = []
-    for field in attr.fields(t):
+    for field in attr.fields(t):  # pyright: ignore
         default = NOT_SET
         if field.default is not attr.NOTHING and not isinstance(field.default, attr.Factory):  # type: ignore[arg-type]
             default = field.default
@@ -356,7 +360,7 @@ def _find_metadata(annotations: Iterable[Any], type_: type[_T]) -> Optional[_T]:
 def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
     def inner(type_: _T) -> _T:
         for ann in annotations:
-            type_ = cast(_T, Annotated[type_, ann])
+            type_ = Annotated[type_, ann]  # type: ignore
         return type_
 
     return inner
