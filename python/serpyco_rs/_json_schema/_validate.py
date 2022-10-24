@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import Any
 
-import jsonschema_rs
+import jsonschema_rs  # type: ignore
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
 
 
