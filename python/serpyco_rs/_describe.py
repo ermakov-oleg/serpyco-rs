@@ -369,8 +369,8 @@ def _get_annotated_metadata(t: Any) -> tuple[Any, ...]:
 
 
 def _apply_format(f: Optional[FiledFormat], value: str) -> str:
-    if not f or f.format == Format.no_format:
+    if not f or f.format is Format.no_format:
         return value
-    if f.format == Format.camel_case:
+    if f.format is Format.camel_case:
         return to_camelcase(value)
     assert_never(f.format)
