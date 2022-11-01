@@ -10,7 +10,7 @@ from unittest import mock
 import pytest
 
 from serpyco_rs._describe import describe_type
-from serpyco_rs._json_schema import to_json_schema, JsonschemaRSValidator
+from serpyco_rs._json_schema import get_json_schema, JsonschemaRSValidator
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
 from serpyco_rs.metadata import MinLength, MaxLength, Min, Max
 
@@ -68,7 +68,7 @@ class EntityTest:
     ),
 )
 def test_validate(cls, value):
-    v = JsonschemaRSValidator(to_json_schema(describe_type(cls)).dump())
+    v = JsonschemaRSValidator(get_json_schema(describe_type(cls)))
     v.validate(value)
 
 
@@ -83,7 +83,7 @@ if sys.version_info >= (3, 10):
         ),
     )
     def test_validate(cls, value):
-        v = JsonschemaRSValidator(to_json_schema(describe_type(cls)).dump())
+        v = JsonschemaRSValidator(get_json_schema(describe_type(cls)))
         v.validate(value)
 
 
@@ -164,7 +164,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
     ),
 )
 def test_validate__validation_error(cls, value, err):
-    v = JsonschemaRSValidator(to_json_schema(describe_type(cls)).dump())
+    v = JsonschemaRSValidator(get_json_schema(describe_type(cls)))
 
     with pytest.raises(SchemaValidationError) as exc_info:
         v.validate(value)
@@ -182,7 +182,7 @@ def test_validate__error_format():
         foo: int
         bar: Inner
 
-    v = JsonschemaRSValidator(to_json_schema(describe_type(A)).dump())
+    v = JsonschemaRSValidator(get_json_schema(describe_type(A)))
 
     with pytest.raises(SchemaValidationError) as exc_info:
         v.validate({"foo": "1", "bar": {"buz": None}, "qux": 0})
@@ -191,7 +191,7 @@ def test_validate__error_format():
         ErrorItem(
             message='"baz" is a required property',
             instance_path="bar",
-            schema_path="properties/bar/required",
+            schema_path="required",
         ),
         ErrorItem(
             message='"1" is not of type "integer"',
