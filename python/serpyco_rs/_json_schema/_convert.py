@@ -146,7 +146,7 @@ def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
             if not (prop.is_property or prop.default != describe.NOT_SET or prop.default_factory != describe.NOT_SET)
         ]
         or None,
-        name=f"{arg.cls.__module__}.{arg.cls.__name__}",
+        name=arg.name,
         description=arg.doc,
     )
 
@@ -184,4 +184,4 @@ def _(_: describe.AnyType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
-    return RefType(description=doc, ref=f"#/definitions/{holder.cls.__module__}.{holder.cls.__name__}")
+    return RefType(description=doc, ref=f"#/definitions/{holder.name}")

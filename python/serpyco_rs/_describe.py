@@ -4,14 +4,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints
+from typing import Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints, overload
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
 from typing_extensions import assert_never
 
 from ._utils import to_camelcase
-from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, Places
+from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, Places, NoFormat
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -116,10 +116,10 @@ class EntityField:
 @dataclasses.dataclass
 class EntityType(Type):
     cls: type[Any]
+    name: str
     fields: Sequence[EntityField]
     generics: Mapping[TypeVar, Any] = dataclasses.field(default_factory=dict)
     doc: Optional[str] = None
-    is_presenter: bool = False
 
 
 @dataclasses.dataclass
@@ -153,13 +153,18 @@ class AnyType(Type):
 @dataclasses.dataclass
 class RecursionHolder(Type):
     cls: Any
+    name: str
+    field_format: Optional[FiledFormat]
+    state: dict[tuple[type, FiledFormat], Type]
+
+    def get_type(self):
+        if type_ := self.state[(self.cls, self.field_format)]:
+            return type_
+        raise RuntimeError("Recursive type not resolved")
 
 
-def describe_type(t: Any, state: dict[type, Type | None] | None = None) -> Type:
+def describe_type(t: Any, state: dict[tuple[type, FiledFormat], Type | None] | None = None) -> Type:
     state = state or {}
-    if t in state:
-        return RecursionHolder(cls=t)
-
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
@@ -178,8 +183,16 @@ def describe_type(t: Any, state: dict[type, Type | None] | None = None) -> Type:
         args = (Any,) * len(parameters)
 
     generics = dict(zip(parameters, args))
-    filed_format = _find_metadata(metadata, FiledFormat)
-    annotation_wrapper = _wrap_annotated([filed_format]) if filed_format else lambda x: x
+    filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
+    annotation_wrapper = _wrap_annotated([filed_format])
+
+    if (t, filed_format) in state:
+        return RecursionHolder(
+            cls=t,
+            name=_generate_name(t, filed_format),
+            field_format=filed_format,
+            state=state
+        )
 
     if t is Any:
         return AnyType()
@@ -250,15 +263,15 @@ def describe_type(t: Any, state: dict[type, Type | None] | None = None) -> Type:
             return EnumType(cls=t)
 
         if dataclasses.is_dataclass(t):
-            state[t] = None
+            state[(t, filed_format)] = None
             entity_type = _describe_dataclass(t, generics, filed_format, state)
-            state[t] = entity_type
+            state[(t, filed_format)] = entity_type
             return entity_type
 
         if attr and attr.has(t):
-            state[t] = None
+            state[(t, filed_format)] = None
             entity_type = _describe_attrs(t, generics, filed_format, state)
-            state[t] = entity_type
+            state[(t, filed_format)] = entity_type
             return entity_type
 
     if t in {Union}:
@@ -276,8 +289,8 @@ def describe_type(t: Any, state: dict[type, Type | None] | None = None) -> Type:
 def _describe_dataclass(
     t: type[Any],
     generics: Mapping[TypeVar, Any],
-    filed_format: Optional[FiledFormat],
-    state: dict[type, Type | None],
+    cls_filed_format: Optional[FiledFormat],
+    state: dict[tuple[type, FiledFormat], Type | None],
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
@@ -289,8 +302,8 @@ def _describe_dataclass(
     for field in dataclasses.fields(t):
 
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        if filed_format:
-            type_ = Annotated[type_, filed_format]
+        if cls_filed_format:
+            type_ = Annotated[type_, cls_filed_format]
 
         metadata = _get_annotated_metadata(type_)
         field_type = describe_type(type_, state)
@@ -310,14 +323,14 @@ def _describe_dataclass(
             )
         )
 
-    return EntityType(cls=t, fields=fields, generics=generics, doc=t.__doc__)
+    return EntityType(cls=t, name=_generate_name(t, cls_filed_format), fields=fields, generics=generics, doc=t.__doc__)
 
 
 def _describe_attrs(
-        t: type[Any],
-        generics: Mapping[TypeVar, Any],
-        filed_format: Optional[FiledFormat],
-        state: dict[type, Type | None],
+    t: type[Any],
+    generics: Mapping[TypeVar, Any],
+    cls_filed_format: Optional[FiledFormat],
+    state: dict[type, Type | None],
 ) -> EntityType:
     assert attr is not None
     docs = get_attributes_doc(t)
@@ -336,8 +349,8 @@ def _describe_attrs(
             default_factory = field.default.factory
 
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        if filed_format:
-            type_ = Annotated[type_, filed_format]
+        if cls_filed_format:
+            type_ = Annotated[type_, cls_filed_format]
 
         metadata = _get_annotated_metadata(type_)
         field_type = describe_type(type_, state)
@@ -354,7 +367,12 @@ def _describe_attrs(
                 is_property=False,
             )
         )
-    return EntityType(cls=t, fields=fields, generics=generics)
+    return EntityType(
+        cls=t,
+        name=_generate_name(t, cls_filed_format),
+        fields=fields,
+        generics=generics
+    )
 
 
 def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
@@ -368,8 +386,18 @@ def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
     return t
 
 
-def _find_metadata(annotations: Iterable[Any], type_: type[_T]) -> Optional[_T]:
-    return next((ann for ann in annotations if isinstance(ann, type_)), None)
+@overload
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T) -> _T:
+    ...
+
+
+@overload
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = None) -> Optional[_T]:
+    ...
+
+
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optional[_T] | _T = None) -> Optional[_T]:
+    return next((ann for ann in annotations if isinstance(ann, type_)), default)
 
 
 def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
@@ -393,3 +421,7 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
     if f.format is Format.camel_case:
         return to_camelcase(value)
     assert_never(f.format)
+
+
+def _generate_name(cls: Any, field_format: FiledFormat) -> str:
+    return f"{cls.__module__}.{cls.__name__}[{field_format.format.value}]"

@@ -20,7 +20,8 @@ class Serializer(Generic[_T]):
             t = cast(type[_T], Annotated[t, CamelCase])
         type_info = describe_type(t)
         self._encoder: _Serializer[_T] = make_encoder(type_info)
-        self._validator = validator_cls(get_json_schema(type_info))
+        self._schema = get_json_schema(type_info)
+        self._validator = validator_cls(self._schema)
 
     def dump(self, value: _T) -> Any:
         return self._encoder.dump(value)

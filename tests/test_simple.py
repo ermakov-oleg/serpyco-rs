@@ -200,7 +200,6 @@ if sys.version_info >= (3, 10):
         assert bar == serializer.load(dict_bar)
 
 
-@pytest.mark.xfail(reason="Fix format propagation")
 def test_serializer_with_camelcase():
     @dataclass
     class C:

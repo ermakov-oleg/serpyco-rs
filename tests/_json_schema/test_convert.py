@@ -47,10 +47,10 @@ def test_to_json_schema():
     schema = get_json_schema(describe_type(Data))
 
     assert schema == {
-        "$ref": "#/definitions/tests._json_schema.test_convert.Data",
+        "$ref": "#/definitions/tests._json_schema.test_convert.Data[no_format]",
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "definitions": {
-            "tests._json_schema.test_convert.Data": {
+            "tests._json_schema.test_convert.Data[no_format]": {
                 "description": "Docs",
                 "properties": {
                     "a": {
@@ -75,7 +75,7 @@ def test_to_json_schema():
                         "type": "string",
                     },
                     "i": {"enum": ["a"]},
-                    "j": {"$ref": "#/definitions/tests._json_schema.test_convert.InnerData"},
+                    "j": {"$ref": "#/definitions/tests._json_schema.test_convert.InnerData[no_format]"},
                     "k": {"items": {"type": "integer"}, "type": "array"},
                     "l": {
                         "maxItems": 3,
@@ -83,7 +83,7 @@ def test_to_json_schema():
                         "prefixItems": [
                             {"type": "integer"},
                             {"type": "string"},
-                            {"$ref": "#/definitions/tests._json_schema.test_convert.InnerData"},
+                            {"$ref": "#/definitions/tests._json_schema.test_convert.InnerData[no_format]"},
                         ],
                         "type": "array",
                     },
@@ -94,7 +94,7 @@ def test_to_json_schema():
                 "required": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "someFiled"],
                 "type": "object",
             },
-            "tests._json_schema.test_convert.InnerData": {
+            "tests._json_schema.test_convert.InnerData[no_format]": {
                 "description": "Some " "important " "entity",
                 "properties": {"foo": {"type": "string"}},
                 "required": ["foo"],
@@ -116,9 +116,9 @@ def test_to_json_schema__new_union_syntax():
 
     assert schema == {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$ref": "#/definitions/tests._json_schema.test_convert.Data",
+        "$ref": "#/definitions/tests._json_schema.test_convert.Data[no_format]",
         "definitions": {
-            "tests._json_schema.test_convert.Data": {
+            "tests._json_schema.test_convert.Data[no_format]": {
                 "description": "Docs",
                 "properties": {"a": {"anyOf": [{"type": "null"}, {"type": "integer"}]}},
                 "required": ["a"],
@@ -143,17 +143,23 @@ def test_to_json_schema__recursive_type():
 
     assert schema == {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$ref": "#/definitions/tests._json_schema.test_convert.TreeNode",
+        "$ref": "#/definitions/tests._json_schema.test_convert.TreeNode[no_format]",
         "definitions": {
-            "tests._json_schema.test_convert.TreeNode": {
+            "tests._json_schema.test_convert.TreeNode[no_format]": {
                 "description": "Node",
                 "properties": {
                     "data": {"type": "string"},
                     "left": {
-                        "anyOf": [{"type": "null"}, {"$ref": "#/definitions/tests._json_schema.test_convert.TreeNode"}]
+                        "anyOf": [
+                            {"type": "null"},
+                            {"$ref": "#/definitions/tests._json_schema.test_convert.TreeNode[no_format]"},
+                        ]
                     },
                     "right": {
-                        "anyOf": [{"type": "null"}, {"$ref": "#/definitions/tests._json_schema.test_convert.TreeNode"}]
+                        "anyOf": [
+                            {"type": "null"},
+                            {"$ref": "#/definitions/tests._json_schema.test_convert.TreeNode[no_format]"},
+                        ]
                     },
                 },
                 "required": ["data"],

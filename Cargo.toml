@@ -17,5 +17,8 @@ pyo3-ffi = "*"
 cfg-if = "*"
 chrono = { version = "*"}
 
+dyn-clone = "1.0"
+atomic_refcell = "0.1.9"
+
 [build-dependencies]
 pyo3-build-config = { version = "0.17.2", features = ["resolve-config"] }

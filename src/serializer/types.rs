@@ -23,6 +23,7 @@ pub static mut ARRAY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut RECURSION_HOLDER_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut NOT_SET: *mut PyObject = 0 as *mut PyObject;
 pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut ISOFORMAT_STR: *mut PyObject = 0 as *mut PyObject;
@@ -53,6 +54,7 @@ pub enum Type {
     Array(Py<PyAny>),
     Dictionary(Py<PyAny>),
     Tuple(Py<PyAny>),
+    RecursionHolder(Py<PyAny>),
     Any,
 }
 
@@ -91,8 +93,10 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::Tuple(type_info.into()))
     } else if check_type!(type_info, ANY_TYPE) {
         Ok(Type::Any)
+    } else if check_type!(type_info, RECURSION_HOLDER_TYPE) {
+        Ok(Type::RecursionHolder(type_info.into()))
     } else {
-        todo!("py Error 'Unsupported type'")
+        todo!("py Error 'Unsupported type' {type_info}")
     }
 }
 
@@ -115,7 +119,7 @@ pub fn init(py: Python<'_>) {
         ARRAY_TYPE = get_attr_ptr!(describe, "ArrayType");
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
-        ANY_TYPE = get_attr_ptr!(describe, "AnyType");
+        RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
         NOT_SET = get_attr_ptr!(describe, "NOT_SET");
 
         let uuid = PyModule::import(py, "uuid").unwrap();
