@@ -372,7 +372,7 @@ impl Encoder for LazyEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => encoder.dump(value),
-            None => Err(PyRuntimeError::new_err(format!("[RUST] Invalid recursive encoder")))
+            None => Err(PyRuntimeError::new_err("[RUST] Invalid recursive encoder".to_string()))
         }
     }
 
@@ -380,7 +380,7 @@ impl Encoder for LazyEncoder {
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => encoder.load(value),
-            None => Err(PyRuntimeError::new_err(format!("[RUST] Invalid recursive encoder")))
+            None => Err(PyRuntimeError::new_err("[RUST] Invalid recursive encoder".to_string()))
         }
     }
 }
