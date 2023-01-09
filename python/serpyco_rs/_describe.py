@@ -387,7 +387,7 @@ def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = 
     ...
 
 
-def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optional[_T] | _T = None) -> Optional[_T]:
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optional[_T] = None) -> Optional[_T]:
     return next((ann for ann in annotations if isinstance(ann, type_)), default)
 
 
