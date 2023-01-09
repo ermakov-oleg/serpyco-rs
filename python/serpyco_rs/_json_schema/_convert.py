@@ -7,11 +7,11 @@ from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, Object
 
 def get_json_schema(t: describe.Type) -> dict[str, Any]:
     schema = to_json_schema(t)
-    definitions = {}
-    schema = schema.dump(definitions)
+    definitions: dict[str, Any] = {}
+    schema_def = schema.dump(definitions)
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        **schema,
+        **schema_def,
         "definitions": definitions,
     }
 

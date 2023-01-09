@@ -13,5 +13,5 @@ class Serializer(Generic[_T]):
     def load(self, data: Any) -> _T:
         pass
 
-def make_encoder(py_class: Type) -> Serializer[_T]:
+def make_encoder(py_class: Type) -> Serializer:
     pass

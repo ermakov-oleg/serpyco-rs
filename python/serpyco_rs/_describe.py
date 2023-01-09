@@ -174,7 +174,8 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optiona
         parameters = getattr(t.__origin__, "__parameters__", ())
         args = t.__args__
         t = t.__origin__
-    elif UnionType and isinstance(t, UnionType):  # UnionType has no __origin__
+    # UnionType has no __origin__
+    elif UnionType and isinstance(t, UnionType):  # type: ignore[truthy-function]
         args = t.__args__
         t = Union
     elif hasattr(t, "__parameters__"):
@@ -284,8 +285,8 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optiona
 def _describe_dataclass(
     t: type[Any],
     generics: Mapping[TypeVar, Any],
-    cls_filed_format: Optional[FiledFormat],
-    state: dict[tuple[type, FiledFormat], Type | None],
+    cls_filed_format: FiledFormat,
+    state: dict[tuple[type, FiledFormat], Optional[Type]],
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
@@ -324,8 +325,8 @@ def _describe_dataclass(
 def _describe_attrs(
     t: type[Any],
     generics: Mapping[TypeVar, Any],
-    cls_filed_format: Optional[FiledFormat],
-    state: dict[type, Type | None],
+    cls_filed_format: FiledFormat,
+    state: dict[tuple[type, FiledFormat], Optional[Type]],
 ) -> EntityType:
     assert attr is not None
     docs = get_attributes_doc(t)
