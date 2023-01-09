@@ -1,18 +1,16 @@
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, time, date
+from datetime import date, datetime, time
 from decimal import Decimal
+from enum import Enum
 from typing import Annotated, Any, Generic, Optional, Sequence, TypeVar, Union
+from unittest import mock
 from unittest.mock import ANY
 from uuid import UUID
-from unittest import mock
 
 import attr
 import pytest
-from enum import Enum
-
-
 from serpyco_rs._describe import (
     NOT_SET,
     AnyType,
@@ -34,15 +32,7 @@ from serpyco_rs._describe import (
     UUIDType,
     describe_type,
 )
-from serpyco_rs.metadata import (
-    Max,
-    MaxLength,
-    Min,
-    MinLength,
-    Places,
-    CamelCase,
-    NoFormat,
-)
+from serpyco_rs.metadata import CamelCase, Max, MaxLength, Min, MinLength, NoFormat, Places
 
 T = TypeVar("T")
 U = TypeVar("U")

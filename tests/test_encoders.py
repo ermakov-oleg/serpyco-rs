@@ -1,16 +1,14 @@
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta, time, date
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
-
-from serpyco_rs import ValidationError
-from serpyco_rs import Serializer
+from serpyco_rs import Serializer, ValidationError
 
 
 @pytest.mark.parametrize(

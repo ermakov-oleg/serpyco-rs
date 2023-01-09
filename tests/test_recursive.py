@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import Optional
 from unittest.mock import ANY
 
-from serpyco_rs._describe import describe_type, EntityType, RecursionHolder, StringType, EntityField, OptionalType
-from serpyco_rs.metadata import NoFormat
 from serpyco_rs import Serializer
+from serpyco_rs._describe import EntityField, EntityType, OptionalType, RecursionHolder, StringType, describe_type
+from serpyco_rs.metadata import NoFormat
 
 
 @dataclass
@@ -62,12 +62,10 @@ def test_serializer():
 
     linked_list = Root(
         head=Node(
-            value='1',
-            next=Node(
-                value='2'
-            ),
+            value="1",
+            next=Node(value="2"),
         ),
     )
 
-    assert serializer.dump(linked_list) == {'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}
-    assert serializer.load({'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}) == linked_list
+    assert serializer.dump(linked_list) == {"head": {"next": {"next": None, "value": "2"}, "value": "1"}}
+    assert serializer.load({"head": {"next": {"next": None, "value": "2"}, "value": "1"}}) == linked_list

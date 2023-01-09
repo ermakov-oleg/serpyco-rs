@@ -1,10 +1,12 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use crate::serializer::encoders::{DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder};
+use crate::serializer::encoders::{
+    DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder,
+};
+use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{AsPyPointer, PyAny, PyResult};
-use atomic_refcell::{AtomicRefCell};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use super::py::is_not_set;
 use super::types::{get_object_type, Type};
@@ -26,7 +28,11 @@ pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
     Ok(serializer)
 }
 
-pub fn get_encoder(py: Python<'_>, obj_type: Type, encoder_state: &mut HashMap<usize, EncoderStateValue>) -> PyResult<Box<TEncoder>> {
+pub fn get_encoder(
+    py: Python<'_>,
+    obj_type: Type,
+    encoder_state: &mut HashMap<usize, EncoderStateValue>,
+) -> PyResult<Box<TEncoder>> {
     let encoder: Box<TEncoder> = match obj_type {
         Type::String | Type::Integer | Type::Bytes | Type::Float | Type::Boolean | Type::Any => {
             Box::new(NoopEncoder)
@@ -108,8 +114,9 @@ pub fn get_encoder(py: Python<'_>, obj_type: Type, encoder_state: &mut HashMap<u
             let inner_type = type_info.call_method0(py, "get_type")?;
             let python_object_id = inner_type.as_ptr() as *const _ as usize;
             let encoder = encoder_state.entry(python_object_id).or_default();
-            Box::new(LazyEncoder { inner: encoder.clone() })
-
+            Box::new(LazyEncoder {
+                inner: encoder.clone(),
+            })
         }
         Type::Uuid => Box::new(UUIDEncoder),
         Type::Enum(type_info) => {

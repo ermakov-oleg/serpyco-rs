@@ -1,16 +1,15 @@
 import sys
 from dataclasses import dataclass
-from datetime import time, datetime
+from datetime import datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Annotated, Optional
+from typing import Annotated, Any, Optional
 from uuid import UUID
 
 import pytest
-
-from serpyco_rs._json_schema import get_json_schema
 from serpyco_rs._describe import describe_type
-from serpyco_rs.metadata import Min, Max, MinLength, MaxLength, CamelCase
+from serpyco_rs._json_schema import get_json_schema
+from serpyco_rs.metadata import CamelCase, Max, MaxLength, Min, MinLength
 
 
 def test_to_json_schema():

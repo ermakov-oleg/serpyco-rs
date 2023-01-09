@@ -2,7 +2,7 @@ from functools import singledispatch
 from typing import Any, Optional
 
 from .. import _describe as describe
-from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, ObjectType, Schema, StringType, RefType
+from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, ObjectType, RefType, Schema, StringType
 
 
 def get_json_schema(t: describe.Type) -> dict[str, Any]:

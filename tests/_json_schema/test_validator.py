@@ -1,18 +1,17 @@
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import time, datetime, date
+from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Optional, Any
+from typing import Annotated, Any, Optional
 from unittest import mock
 
 import pytest
-
 from serpyco_rs._describe import describe_type
-from serpyco_rs._json_schema import get_json_schema, JsonschemaRSValidator
+from serpyco_rs._json_schema import JsonschemaRSValidator, get_json_schema
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
-from serpyco_rs.metadata import MinLength, MaxLength, Min, Max
+from serpyco_rs.metadata import Max, MaxLength, Min, MinLength
 
 
 class EnumTest(Enum):

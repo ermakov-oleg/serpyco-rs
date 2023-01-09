@@ -11,7 +11,7 @@ from attributes_doc import get_attributes_doc
 from typing_extensions import assert_never
 
 from ._utils import to_camelcase
-from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, Places, NoFormat
+from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, NoFormat, Places
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -154,16 +154,16 @@ class AnyType(Type):
 class RecursionHolder(Type):
     cls: Any
     name: str
-    field_format: Optional[FiledFormat]
-    state: dict[tuple[type, FiledFormat], Type]
+    field_format: FiledFormat
+    state: dict[tuple[type, FiledFormat], Optional[Type]]
 
-    def get_type(self):
+    def get_type(self) -> Type:
         if type_ := self.state[(self.cls, self.field_format)]:
             return type_
         raise RuntimeError("Recursive type not resolved")
 
 
-def describe_type(t: Any, state: dict[tuple[type, FiledFormat], Type | None] | None = None) -> Type:
+def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optional[Type]]] = None) -> Type:
     state = state or {}
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
@@ -187,12 +187,7 @@ def describe_type(t: Any, state: dict[tuple[type, FiledFormat], Type | None] | N
     annotation_wrapper = _wrap_annotated([filed_format])
 
     if (t, filed_format) in state:
-        return RecursionHolder(
-            cls=t,
-            name=_generate_name(t, filed_format),
-            field_format=filed_format,
-            state=state
-        )
+        return RecursionHolder(cls=t, name=_generate_name(t, filed_format), field_format=filed_format, state=state)
 
     if t is Any:
         return AnyType()
@@ -367,12 +362,7 @@ def _describe_attrs(
                 is_property=False,
             )
         )
-    return EntityType(
-        cls=t,
-        name=_generate_name(t, cls_filed_format),
-        fields=fields,
-        generics=generics
-    )
+    return EntityType(cls=t, name=_generate_name(t, cls_filed_format), fields=fields, generics=generics)
 
 
 def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:

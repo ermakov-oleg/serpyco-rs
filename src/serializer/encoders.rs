@@ -5,13 +5,13 @@ use crate::serializer::py::{
     py_str_to_str, py_tuple_get_item, to_decimal,
 };
 use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
+use atomic_refcell::AtomicRefCell;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
 use pyo3_ffi::PyObject;
-use std::fmt::{Debug};
+use std::fmt::Debug;
 use std::sync::Arc;
-use atomic_refcell::AtomicRefCell;
 
 use super::dateutil::parse_datetime;
 use super::macros::{call_method, call_object, ffi};
@@ -361,10 +361,9 @@ impl Encoder for DateEncoder {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
-    pub(crate) inner: Arc<AtomicRefCell<Option<EntityEncoder>>>
+    pub(crate) inner: Arc<AtomicRefCell<Option<EntityEncoder>>>,
 }
 
 impl Encoder for LazyEncoder {
@@ -372,7 +371,9 @@ impl Encoder for LazyEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => encoder.dump(value),
-            None => Err(PyRuntimeError::new_err("[RUST] Invalid recursive encoder".to_string()))
+            None => Err(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            )),
         }
     }
 
@@ -380,7 +381,9 @@ impl Encoder for LazyEncoder {
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => encoder.load(value),
-            None => Err(PyRuntimeError::new_err("[RUST] Invalid recursive encoder".to_string()))
+            None => Err(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            )),
         }
     }
 }
