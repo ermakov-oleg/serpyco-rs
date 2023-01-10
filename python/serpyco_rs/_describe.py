@@ -4,15 +4,14 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum, IntEnum
-from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints
+from typing import Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints, overload
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
 from typing_extensions import assert_never
 
 from ._utils import to_camelcase
-from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, Places
+from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, NoFormat, Places
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -117,10 +116,10 @@ class EntityField:
 @dataclasses.dataclass
 class EntityType(Type):
     cls: type[Any]
+    name: str
     fields: Sequence[EntityField]
     generics: Mapping[TypeVar, Any] = dataclasses.field(default_factory=dict)
     doc: Optional[str] = None
-    is_presenter: bool = False
 
 
 @dataclasses.dataclass
@@ -151,7 +150,21 @@ class AnyType(Type):
     pass
 
 
-def describe_type(t: Any) -> Type:
+@dataclasses.dataclass
+class RecursionHolder(Type):
+    cls: Any
+    name: str
+    field_format: FiledFormat
+    state: dict[tuple[type, FiledFormat], Optional[Type]]
+
+    def get_type(self) -> Type:
+        if type_ := self.state[(self.cls, self.field_format)]:
+            return type_
+        raise RuntimeError("Recursive type not resolved")
+
+
+def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optional[Type]]] = None) -> Type:
+    state = state or {}
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
@@ -161,7 +174,8 @@ def describe_type(t: Any) -> Type:
         parameters = getattr(t.__origin__, "__parameters__", ())
         args = t.__args__
         t = t.__origin__
-    elif UnionType and isinstance(t, UnionType):  # UnionType has no __origin__
+    # UnionType has no __origin__
+    elif UnionType and isinstance(t, UnionType):  # type: ignore[truthy-function]
         args = t.__args__
         t = Union
     elif hasattr(t, "__parameters__"):
@@ -170,8 +184,11 @@ def describe_type(t: Any) -> Type:
         args = (Any,) * len(parameters)
 
     generics = dict(zip(parameters, args))
-    filed_format = _find_metadata(metadata, FiledFormat)
-    annotation_wrapper = _wrap_annotated([filed_format]) if filed_format else lambda x: x
+    filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
+    annotation_wrapper = _wrap_annotated([filed_format])
+
+    if (t, filed_format) in state:
+        return RecursionHolder(cls=t, name=_generate_name(t, filed_format), field_format=filed_format, state=state)
 
     if t is Any:
         return AnyType()
@@ -222,36 +239,42 @@ def describe_type(t: Any) -> Type:
 
         if t in {Sequence, list}:
             return ArrayType(
-                item_type=(describe_type(annotation_wrapper(args[0])) if args else AnyType()),
+                item_type=(describe_type(annotation_wrapper(args[0]), state) if args else AnyType()),
                 is_sequence=t is Sequence,
             )
 
         if t in {Mapping, dict}:
             return DictionaryType(
-                key_type=(describe_type(annotation_wrapper(args[0])) if args else AnyType()),
-                value_type=(describe_type(annotation_wrapper(args[1])) if args else AnyType()),
+                key_type=(describe_type(annotation_wrapper(args[0]), state) if args else AnyType()),
+                value_type=(describe_type(annotation_wrapper(args[1]), state) if args else AnyType()),
                 is_mapping=t is Mapping,
             )
 
         if t is tuple:
             if not args or Ellipsis in args:
                 raise RuntimeError("Variable length tuples are not supported")
-            return TupleType(item_types=[describe_type(annotation_wrapper(arg)) for arg in args])
+            return TupleType(item_types=[describe_type(annotation_wrapper(arg), state) for arg in args])
 
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t)
 
         if dataclasses.is_dataclass(t):
-            return _describe_dataclass(t, generics, filed_format)
+            state[(t, filed_format)] = None
+            entity_type = _describe_dataclass(t, generics, filed_format, state)
+            state[(t, filed_format)] = entity_type
+            return entity_type
 
         if attr and attr.has(t):
-            return _describe_attrs(t, generics, filed_format)
+            state[(t, filed_format)] = None
+            entity_type = _describe_attrs(t, generics, filed_format, state)
+            state[(t, filed_format)] = entity_type
+            return entity_type
 
     if t in {Union}:
         if len(args) != 2 or _NoneType not in args:
             raise RuntimeError(f"Only Unions of one type with None are supported: {t}, {args}")
         inner = args[1] if args[0] is _NoneType else args[0]
-        return OptionalType(describe_type(annotation_wrapper(inner)))
+        return OptionalType(describe_type(annotation_wrapper(inner), state))
 
     if isinstance(t, TypeVar):
         raise RuntimeError(f"Unfilled TypeVar: {t}")
@@ -259,15 +282,11 @@ def describe_type(t: Any) -> Type:
     raise RuntimeError(f"Unknown type {t!r}")
 
 
-if not TYPE_CHECKING:
-    # Mypy считает, что типы unhashable
-    describe_type = lru_cache()(describe_type)
-
-
 def _describe_dataclass(
     t: type[Any],
     generics: Mapping[TypeVar, Any],
-    filed_format: Optional[FiledFormat],
+    cls_filed_format: FiledFormat,
+    state: dict[tuple[type, FiledFormat], Optional[Type]],
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
@@ -279,11 +298,11 @@ def _describe_dataclass(
     for field in dataclasses.fields(t):
 
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        if filed_format:
-            type_ = Annotated[type_, filed_format]
+        if cls_filed_format:
+            type_ = Annotated[type_, cls_filed_format]
 
         metadata = _get_annotated_metadata(type_)
-        field_type = describe_type(type_)
+        field_type = describe_type(type_, state)
         field_format = _find_metadata(metadata, FiledFormat)
 
         fields.append(
@@ -300,10 +319,15 @@ def _describe_dataclass(
             )
         )
 
-    return EntityType(cls=t, fields=fields, generics=generics, doc=t.__doc__)
+    return EntityType(cls=t, name=_generate_name(t, cls_filed_format), fields=fields, generics=generics, doc=t.__doc__)
 
 
-def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any], filed_format: Optional[FiledFormat]) -> EntityType:
+def _describe_attrs(
+    t: type[Any],
+    generics: Mapping[TypeVar, Any],
+    cls_filed_format: FiledFormat,
+    state: dict[tuple[type, FiledFormat], Optional[Type]],
+) -> EntityType:
     assert attr is not None
     docs = get_attributes_doc(t)
     try:
@@ -321,11 +345,11 @@ def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any], filed_format:
             default_factory = field.default.factory
 
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        if filed_format:
-            type_ = Annotated[type_, filed_format]
+        if cls_filed_format:
+            type_ = Annotated[type_, cls_filed_format]
 
         metadata = _get_annotated_metadata(type_)
-        field_type = describe_type(type_)
+        field_type = describe_type(type_, state)
         field_format = _find_metadata(metadata, FiledFormat)
 
         fields.append(
@@ -339,7 +363,7 @@ def _describe_attrs(t: type[Any], generics: Mapping[TypeVar, Any], filed_format:
                 is_property=False,
             )
         )
-    return EntityType(cls=t, fields=fields, generics=generics)
+    return EntityType(cls=t, name=_generate_name(t, cls_filed_format), fields=fields, generics=generics)
 
 
 def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
@@ -353,8 +377,18 @@ def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
     return t
 
 
-def _find_metadata(annotations: Iterable[Any], type_: type[_T]) -> Optional[_T]:
-    return next((ann for ann in annotations if isinstance(ann, type_)), None)
+@overload
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T) -> _T:
+    ...
+
+
+@overload
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = None) -> Optional[_T]:
+    ...
+
+
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optional[_T] = None) -> Optional[_T]:
+    return next((ann for ann in annotations if isinstance(ann, type_)), default)
 
 
 def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
@@ -378,3 +412,7 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
     if f.format is Format.camel_case:
         return to_camelcase(value)
     assert_never(f.format)
+
+
+def _generate_name(cls: Any, field_format: FiledFormat) -> str:
+    return f"{cls.__module__}.{cls.__name__}[{field_format.format.value}]"

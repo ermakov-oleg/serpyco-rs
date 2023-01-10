@@ -2,7 +2,18 @@ from functools import singledispatch
 from typing import Any, Optional
 
 from .. import _describe as describe
-from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, ObjectType, Schema, StringType
+from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, ObjectType, RefType, Schema, StringType
+
+
+def get_json_schema(t: describe.Type) -> dict[str, Any]:
+    schema = to_json_schema(t)
+    definitions: dict[str, Any] = {}
+    schema_def = schema.dump(definitions)
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        **schema_def,
+        "definitions": definitions,
+    }
 
 
 @singledispatch
@@ -135,6 +146,7 @@ def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
             if not (prop.is_property or prop.default != describe.NOT_SET or prop.default_factory != describe.NOT_SET)
         ]
         or None,
+        name=arg.name,
         description=arg.doc,
     )
 
@@ -168,3 +180,8 @@ def _(arg: describe.TupleType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(_: describe.AnyType, doc: Optional[str] = None) -> Schema:
     return Schema(description=doc)
+
+
+@to_json_schema.register
+def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
+    return RefType(description=doc, ref=f"#/definitions/{holder.name}")

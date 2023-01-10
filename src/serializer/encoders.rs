@@ -5,26 +5,34 @@ use crate::serializer::py::{
     py_str_to_str, py_tuple_get_item, to_decimal,
 };
 use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
-use pyo3::exceptions::PyException;
+use atomic_refcell::AtomicRefCell;
+use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use super::dateutil::parse_datetime;
 use super::macros::{call_method, call_object, ffi};
 
+use dyn_clone::{clone_trait_object, DynClone};
+
 pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
-pub trait Encoder: Debug {
+pub type TEncoder = dyn Encoder + Send + Sync;
+
+pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
 }
 
+clone_trait_object!(Encoder);
+
 #[pyclass]
 #[derive(Debug)]
 pub struct Serializer {
-    pub encoder: Box<dyn Encoder + Send>,
+    pub encoder: Box<TEncoder>,
 }
 
 #[pymethods]
@@ -47,7 +55,7 @@ impl Serializer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NoopEncoder;
 
 impl Encoder for NoopEncoder {
@@ -62,7 +70,7 @@ impl Encoder for NoopEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DecimalEncoder;
 
 impl Encoder for DecimalEncoder {
@@ -79,10 +87,10 @@ impl Encoder for DecimalEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DictionaryEncoder {
-    pub key_encoder: Box<dyn Encoder + Send>,
-    pub value_encoder: Box<dyn Encoder + Send>,
+    pub key_encoder: Box<TEncoder>,
+    pub value_encoder: Box<TEncoder>,
 }
 
 impl Encoder for DictionaryEncoder {
@@ -116,9 +124,9 @@ impl Encoder for DictionaryEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ArrayEncoder {
-    pub encoder: Box<dyn Encoder + Send>,
+    pub encoder: Box<TEncoder>,
 }
 
 impl Encoder for ArrayEncoder {
@@ -151,17 +159,17 @@ impl Encoder for ArrayEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EntityEncoder {
     pub(crate) create_new_object_args: Py<PyTuple>,
     pub(crate) fields: Vec<Field>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Field {
     pub(crate) name: Py<PyString>,
     pub(crate) dict_key: Py<PyString>,
-    pub(crate) encoder: Box<dyn Encoder + Send>,
+    pub(crate) encoder: Box<TEncoder>,
     pub(crate) default: Option<Py<PyAny>>,
     pub(crate) default_factory: Option<Py<PyAny>>,
 }
@@ -209,7 +217,7 @@ impl Encoder for EntityEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UUIDEncoder;
 
 impl Encoder for UUIDEncoder {
@@ -224,7 +232,7 @@ impl Encoder for UUIDEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnumEncoder {
     pub(crate) enum_type: pyo3::PyObject,
 }
@@ -241,9 +249,9 @@ impl Encoder for EnumEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OptionalEncoder {
-    pub(crate) encoder: Box<dyn Encoder + Send>,
+    pub(crate) encoder: Box<TEncoder>,
 }
 
 impl Encoder for OptionalEncoder {
@@ -266,9 +274,9 @@ impl Encoder for OptionalEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TupleEncoder {
-    pub(crate) encoders: Vec<Box<dyn Encoder + Send>>,
+    pub(crate) encoders: Vec<Box<TEncoder>>,
 }
 
 impl Encoder for TupleEncoder {
@@ -308,7 +316,7 @@ impl Encoder for TupleEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TimeEncoder;
 
 impl Encoder for TimeEncoder {
@@ -323,7 +331,7 @@ impl Encoder for TimeEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DateTimeEncoder;
 
 impl Encoder for DateTimeEncoder {
@@ -338,7 +346,7 @@ impl Encoder for DateTimeEncoder {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DateEncoder;
 
 impl Encoder for DateEncoder {
@@ -350,5 +358,32 @@ impl Encoder for DateEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         parse_date(py_str_to_str(value)?)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LazyEncoder {
+    pub(crate) inner: Arc<AtomicRefCell<Option<EntityEncoder>>>,
+}
+
+impl Encoder for LazyEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        match self.inner.borrow().as_ref() {
+            Some(encoder) => encoder.dump(value),
+            None => Err(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            )),
+        }
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        match self.inner.borrow().as_ref() {
+            Some(encoder) => encoder.load(value),
+            None => Err(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            )),
+        }
     }
 }

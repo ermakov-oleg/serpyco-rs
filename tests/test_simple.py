@@ -1,13 +1,11 @@
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Annotated, List, Optional
 
 import pytest
-
-from serpyco_rs import Serializer, SchemaValidationError
-from typing import List, Optional, Annotated
-from collections.abc import Sequence, Mapping
-
-from serpyco_rs.metadata import NoFormat, CamelCase
+from serpyco_rs import SchemaValidationError, Serializer
+from serpyco_rs.metadata import CamelCase, NoFormat
 
 
 def test_dump_simple_fields_types():

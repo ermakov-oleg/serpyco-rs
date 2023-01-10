@@ -1,17 +1,16 @@
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, time, date
+from datetime import date, datetime, time
 from decimal import Decimal
+from enum import Enum
 from typing import Annotated, Any, Generic, Optional, Sequence, TypeVar, Union
-from uuid import UUID
 from unittest import mock
+from unittest.mock import ANY
+from uuid import UUID
 
 import attr
 import pytest
-from enum import Enum
-
-
 from serpyco_rs._describe import (
     NOT_SET,
     AnyType,
@@ -33,15 +32,7 @@ from serpyco_rs._describe import (
     UUIDType,
     describe_type,
 )
-from serpyco_rs.metadata import (
-    Max,
-    MaxLength,
-    Min,
-    MinLength,
-    Places,
-    CamelCase,
-    NoFormat,
-)
+from serpyco_rs.metadata import CamelCase, Max, MaxLength, Min, MinLength, NoFormat, Places
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -78,6 +69,7 @@ def test_describe__dataclass__supported():
 
     assert describe_type(SomeEntity) == EntityType(
         cls=SomeEntity,
+        name=ANY,
         fields=[
             EntityField(
                 name="a",
@@ -173,6 +165,7 @@ def test_describe__dataclass__supported():
                 name="k",
                 type=EntityType(
                     cls=SomeOtherEntity,
+                    name=ANY,
                     fields=[
                         EntityField(
                             name="a",
@@ -186,7 +179,6 @@ def test_describe__dataclass__supported():
                     ],
                     generics={},
                     doc="SomeOtherEntity(a: int)",
-                    is_presenter=False,
                 ),
                 doc=None,
                 default=NOT_SET,
@@ -250,7 +242,6 @@ def test_describe__dataclass__supported():
         ],
         generics={},
         doc="Doc",
-        is_presenter=False,
     )
 
 
@@ -327,6 +318,7 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
     assert result.fields[0].type == ArrayType(IntegerType(), is_sequence=False)
     assert result.fields[1].type == EntityType(
         cls=SomeOtherEntity,
+        name=ANY,
         generics={T: int},
         fields=[EntityField(name="x", type=IntegerType(), dict_key="x")],
         doc="SomeOtherEntity(x: ~T)",
@@ -361,7 +353,7 @@ def test_describe__dataclass_with_invalid_forward_ref_annotation__parsed():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(SomeEntity)
 
-    assert exc_info.match("Unknown type 'intt'")
+    assert exc_info.match("Unknown type ForwardRef\('intt'\)")
 
 
 def test_describe__dataclass_and_annotated_with_min_max__parsed():
@@ -373,6 +365,7 @@ def test_describe__dataclass_and_annotated_with_min_max__parsed():
 
     assert result == EntityType(
         cls=SomeEntity,
+        name=ANY,
         fields=[
             EntityField(
                 name="x",
@@ -393,6 +386,7 @@ def test_describe__dataclass_and_annotated_with_min_max_length__parsed():
 
     assert result == EntityType(
         cls=SomeEntity,
+        name=ANY,
         fields=[
             EntityField(
                 name="x",
@@ -452,7 +446,7 @@ def test_describe__attrs_with_invalid_forward_ref_annotation__parsed():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(SomeEntity)
 
-    assert exc_info.match("Unknown type 'intt'")
+    assert exc_info.match("Unknown type ForwardRef\('intt'\)")
 
 
 def test_describe__attrs_and_annotated_with_min_max__parsed():
@@ -471,6 +465,7 @@ def test_describe__attrs_and_annotated_with_min_max__parsed():
                 type=IntegerType(min=10, max=20),
             )
         ],
+        name=ANY,
     )
 
 
@@ -483,6 +478,7 @@ def test_describe__attrs_and_annotated_with_min_max_length__parsed():
 
     assert result == EntityType(
         cls=SomeEntity,
+        name=ANY,
         fields=[
             EntityField(
                 name="x",
@@ -552,6 +548,7 @@ def test_describe__dataclass_field_format__parsed():
 
     assert describe_type(Annotated[Entity, CamelCase]) == EntityType(
         cls=Entity,
+        name=ANY,
         fields=[
             EntityField(
                 name="inner_entity",
@@ -559,6 +556,7 @@ def test_describe__dataclass_field_format__parsed():
                 type=ArrayType(
                     is_sequence=False,
                     item_type=EntityType(
+                        name=ANY,
                         cls=InnerEntity,
                         fields=[
                             EntityField(
