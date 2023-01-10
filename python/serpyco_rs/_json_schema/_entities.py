@@ -86,7 +86,7 @@ class IntegerType(NumberType):
     type: str = "integer"
 
 
-@dataclass(kw_only=True)
+@dataclass
 class ObjectType(Schema):
     name: str | None = None
     type: str = "object"
@@ -137,9 +137,9 @@ class ArrayType(Schema):
         return {k: v for k, v in data.items() if v is not None}
 
 
-@dataclass(kw_only=True)
+@dataclass
 class RefType(Schema):
-    ref: str
+    ref: str | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
