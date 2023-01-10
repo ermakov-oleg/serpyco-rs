@@ -44,6 +44,7 @@ $ pip install serpyco-rs
 - Serialization and unserialization of dataclasses
 - Validation of input/output data
 - Very fast
+- Support recursive schemas
 
 ## Supported field types
 There is support for generic types from the standard typing module:
