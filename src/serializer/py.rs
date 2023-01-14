@@ -28,8 +28,8 @@ pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
 }
 
 #[inline]
-pub fn create_new_object(cls: &PyTuple) -> PyResult<*mut ffi::PyObject> {
-    py_object_call1_or_err(unsafe { PY_OBJECT__NEW__ }, cls.as_ptr())
+pub fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
+    py_object_call1_or_err(unsafe { PY_OBJECT__NEW__ }, cls)
 }
 
 #[inline]

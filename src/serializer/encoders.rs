@@ -37,6 +37,7 @@ pub struct Serializer {
 
 #[pymethods]
 impl Serializer {
+    #[inline]
     pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         unsafe {
             Ok(Py::from_borrowed_ptr(
@@ -45,9 +46,11 @@ impl Serializer {
             ))
         }
     }
+
+    #[inline]
     pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         unsafe {
-            Ok(Py::from_borrowed_ptr(
+            Ok(Py::from_owned_ptr(
                 value.py(),
                 self.encoder.load(value.as_ptr())?,
             ))
@@ -194,26 +197,24 @@ impl Encoder for EntityEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        Python::with_gil(|py| {
-            let obj = create_new_object(self.create_new_object_args.as_ref(py))?;
-            for field in &self.fields {
-                let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
-                    Ok(val) => field.encoder.load(val)?,
-                    Err(e) => match (&field.default, &field.default_factory) {
-                        (Some(val), _) => val.clone().as_ptr(),
-                        (_, Some(val)) => call_object!(val.as_ptr())?,
-                        (None, _) => {
-                            return Err(ValidationError::new_err(format!(
-                                "data dictionary is missing required parameter {} (err: {})",
-                                &field.name, e
-                            )))
-                        }
-                    },
-                };
-                py_object_set_attr(obj, field.name.as_ptr(), val)?
-            }
-            Ok(obj)
-        })
+        let obj = create_new_object(self.create_new_object_args.as_ptr())?;
+        for field in &self.fields {
+            let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
+                Ok(val) => field.encoder.load(val)?,
+                Err(e) => match (&field.default, &field.default_factory) {
+                    (Some(val), _) => val.clone().as_ptr(),
+                    (_, Some(val)) => call_object!(val.as_ptr())?,
+                    (None, _) => {
+                        return Err(ValidationError::new_err(format!(
+                            "data dictionary is missing required parameter {} (err: {})",
+                            &field.name, e
+                        )))
+                    }
+                },
+            };
+            py_object_set_attr(obj, field.name.as_ptr(), val)?
+        }
+        Ok(obj)
     }
 }
 
