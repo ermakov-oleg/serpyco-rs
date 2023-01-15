@@ -7,8 +7,8 @@ use crate::serializer::py::{
 use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
 use pyo3::exceptions::{PyException, PyRuntimeError};
-use pyo3::types::{PyString, PyTuple};
-use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult, Python};
+use pyo3::types::PyString;
+use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -40,7 +40,7 @@ impl Serializer {
     #[inline]
     pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         unsafe {
-            Ok(Py::from_borrowed_ptr(
+            Ok(Py::from_owned_ptr(
                 value.py(),
                 self.encoder.dump(value.as_ptr())?,
             ))
@@ -64,11 +64,13 @@ pub struct NoopEncoder;
 impl Encoder for NoopEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        ffi!(Py_INCREF(value));
         Ok(value)
     }
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        ffi!(Py_INCREF(value));
         Ok(value)
     }
 }
@@ -140,10 +142,9 @@ impl Encoder for ArrayEncoder {
         let list = ffi!(PyList_New(len));
 
         for i in 0..len {
-            let item = ffi!(PyList_GetItem(value, i));
-            let val = self.encoder.dump(item)?;
-
-            ffi!(PyList_SetItem(list, i, val));
+            let item = ffi!(PyList_GetItem(value, i)); // rc not changed
+            let val = self.encoder.dump(item)?; // new obj or RC +1
+            ffi!(PyList_SetItem(list, i, val)); // rc not changed
         }
 
         Ok(list)
@@ -154,9 +155,9 @@ impl Encoder for ArrayEncoder {
         let len = py_len(value)?;
         let list = ffi!(PyList_New(len));
         for i in 0..len {
-            let item = ffi!(PyList_GetItem(value, i));
-            let val = self.encoder.load(item)?;
-            ffi!(PyList_SetItem(list, i, val));
+            let item = ffi!(PyList_GetItem(value, i)); // rc not changed
+            let val = self.encoder.load(item)?; // new obj or RC +1
+            ffi!(PyList_SetItem(list, i, val)); // rc not changed
         }
         Ok(list)
     }
@@ -164,7 +165,7 @@ impl Encoder for ArrayEncoder {
 
 #[derive(Debug, Clone)]
 pub struct EntityEncoder {
-    pub(crate) create_new_object_args: Py<PyTuple>,
+    pub(crate) cls: Py<PyAny>,
     pub(crate) fields: Vec<Field>,
 }
 
@@ -183,13 +184,16 @@ impl Encoder for EntityEncoder {
         let dict_ptr = ffi!(PyDict_New());
 
         for field in &self.fields {
-            let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr()));
-            let dump_result = field.encoder.dump(field_val)?;
+            let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr())); // val RC +1
+            let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
+
             ffi!(PyDict_SetItem(
                 dict_ptr,
                 field.dict_key.as_ptr(),
                 dump_result
-            ));
+            )); // key and val RC +1
+            ffi!(Py_DECREF(field_val));
+            ffi!(Py_DECREF(dump_result));
         }
 
         Ok(dict_ptr)
@@ -197,10 +201,10 @@ impl Encoder for EntityEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let obj = create_new_object(self.create_new_object_args.as_ptr())?;
+        let obj = create_new_object(self.cls.as_ptr())?;
         for field in &self.fields {
             let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
-                Ok(val) => field.encoder.load(val)?,
+                Ok(val) => field.encoder.load(val)?, // new obj or RC +1
                 Err(e) => match (&field.default, &field.default_factory) {
                     (Some(val), _) => val.clone().as_ptr(),
                     (_, Some(val)) => call_object!(val.as_ptr())?,
@@ -212,7 +216,8 @@ impl Encoder for EntityEncoder {
                     }
                 },
             };
-            py_object_set_attr(obj, field.name.as_ptr(), val)?
+            py_object_set_attr(obj, field.name.as_ptr(), val)?; // val RC +1
+            ffi!(Py_DECREF(val));
         }
         Ok(obj)
     }
@@ -259,6 +264,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         if value == unsafe { NONE_PY_TYPE } {
+            ffi!(Py_INCREF(NONE_PY_TYPE));
             Ok(value)
         } else {
             self.encoder.dump(value)
@@ -268,6 +274,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         if value == unsafe { NONE_PY_TYPE } {
+            ffi!(Py_INCREF(NONE_PY_TYPE));
             Ok(value)
         } else {
             self.encoder.load(value)
@@ -291,9 +298,10 @@ impl Encoder for TupleEncoder {
         }
         let list = ffi!(PyList_New(len));
         for i in 0..len {
-            let item = ffi!(PySequence_GetItem(value, i));
-            let val = self.encoders[i as usize].dump(item)?;
-            ffi!(PyList_SetItem(list, i, val));
+            let item = ffi!(PySequence_GetItem(value, i)); // RC +1
+            let val = self.encoders[i as usize].dump(item)?; // new obj or RC +1
+            ffi!(PyList_SetItem(list, i, val)); // RC not changed
+            ffi!(Py_DECREF(item));
         }
         Ok(list)
     }
@@ -309,9 +317,9 @@ impl Encoder for TupleEncoder {
 
         let list = ffi!(PyTuple_New(len));
         for i in 0..len {
-            let item = ffi!(PyList_GetItem(value, i));
-            let val = self.encoders[i as usize].load(item)?;
-            ffi!(PyTuple_SetItem(list, i, val));
+            let item = ffi!(PyList_GetItem(value, i)); // RC not changed
+            let val = self.encoders[i as usize].load(item)?; // new obj or RC +1
+            ffi!(PyTuple_SetItem(list, i, val)); // RC not changed
         }
         Ok(list)
     }

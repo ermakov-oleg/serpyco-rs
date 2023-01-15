@@ -3,7 +3,7 @@ use crate::serializer::encoders::{
 };
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
-use pyo3::types::{PyString, PyTuple};
+use pyo3::types::PyString;
 use pyo3::{AsPyPointer, PyAny, PyResult};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -99,11 +99,9 @@ pub fn get_encoder(
                 fields.push(fld);
             }
 
-            let create_new_object_args = PyTuple::new(py, vec![py_type]).into();
-
             let encoder = EntityEncoder {
-                create_new_object_args,
                 fields,
+                cls: py_type,
             };
             let python_object_id = type_info.as_ptr() as *const _ as usize;
             let val = encoder_state.entry(python_object_id).or_default();
