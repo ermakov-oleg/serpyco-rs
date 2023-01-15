@@ -1,6 +1,5 @@
 use crate::serializer::macros::{call_method, ffi};
 use crate::serializer::types::{DECIMAL_PY_TYPE, ITEMS_STR, NOT_SET, PY_OBJECT__NEW__};
-use pyo3::types::PyTuple;
 use pyo3::{ffi, AsPyPointer, PyAny, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 use std::ffi::CString;
@@ -28,8 +27,11 @@ pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
 }
 
 #[inline]
-pub fn create_new_object(cls: &PyTuple) -> PyResult<*mut ffi::PyObject> {
-    py_object_call1_or_err(unsafe { PY_OBJECT__NEW__ }, cls.as_ptr())
+pub fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
+    let tuple_arg = from_ptr_or_err(ffi!(PyTuple_Pack(1, cls)))?;
+    let result = py_object_call1_or_err(unsafe { PY_OBJECT__NEW__ }, tuple_arg);
+    ffi!(Py_DECREF(tuple_arg));
+    result
 }
 
 #[inline]
