@@ -2,7 +2,4 @@
 
 black
 ruff
-mypy
-pyright
 isort
-types-python-dateutil

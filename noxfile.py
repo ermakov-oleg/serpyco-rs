@@ -3,7 +3,7 @@ import platform
 
 import nox
 
-nox.options.sessions = ["test", "lint"]
+nox.options.sessions = ["test", "lint", "type_check"]
 nox.options.reuse_existing_virtualenvs = True
 
 
@@ -36,6 +36,14 @@ def lint(session):
     session.run("black", "--check", "--diff", ".")
     session.run("isort", "--check", "--diff", ".")
     session.run("ruff", ".")
+
+
+@nox.session
+def type_check(session):
+    build(session)
+    session.install("-r", "requirements/type_check.txt")
+
+    session.cd("python/serpyco_rs")
     session.run("pyright")
     session.run("pyright", "--verifytypes", "serpyco_rs")
     session.run("mypy", ".", "--strict", "--implicit-reexport", "--pretty")
