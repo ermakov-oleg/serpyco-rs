@@ -4,7 +4,6 @@ import marshmallow_dataclass
 
 from .base import Dataclass, test_object
 
-
 _schema = marshmallow_dataclass.class_schema(Dataclass)()
 
 test_object = test_object

@@ -353,7 +353,7 @@ def test_describe__dataclass_with_invalid_forward_ref_annotation__parsed():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(SomeEntity)
 
-    assert exc_info.match("Unknown type ForwardRef\('intt'\)")
+    assert exc_info.match(r"Unknown type ForwardRef\('intt'\)")
 
 
 def test_describe__dataclass_and_annotated_with_min_max__parsed():
@@ -446,7 +446,7 @@ def test_describe__attrs_with_invalid_forward_ref_annotation__parsed():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(SomeEntity)
 
-    assert exc_info.match("Unknown type ForwardRef\('intt'\)")
+    assert exc_info.match(r"Unknown type ForwardRef\('intt'\)")
 
 
 def test_describe__attrs_and_annotated_with_min_max__parsed():

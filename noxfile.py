@@ -1,24 +1,58 @@
+import os
 import platform
 
 import nox
 
+nox.options.sessions = ["test", "lint"]
+nox.options.reuse_existing_virtualenvs = True
 
-@nox.session(reuse_venv=True)
-def bench(session):
-    session.install('-r', 'requirements/bench.txt')
 
-    if platform.machine() == 'arm64' and platform.system() == 'Darwin':
+def build(session):
+    if os.environ.get("CI", None):
+        # Install form wheels
+        session.install("--no-index", "--no-deps", "--find-links", "wheels/", "serpyco-rs")
+        session.install("--find-links", "wheels/", "serpyco-rs")
+        return
+
+    if platform.machine() == "arm64" and platform.system() == "Darwin":
         # https://github.com/Stranger6667/jsonschema-rs/issues/409
-        session.install('jsonschema_rs', '--no-binary', ':all:')
+        session.install("jsonschema_rs", "--no-binary", ":all:")
+    session.run_always("maturin", "develop", "-r")
 
-    session.run('maturin', 'develop', '-r')
+
+@nox.session
+def test(session):
+    build(session)
+    session.install("-r", "requirements/dev.txt")
+    session.run("pytest", "-vss", "tests/")
+
+
+@nox.session
+def lint(session):
+    build(session)
+    session.install("-r", "requirements/lint.txt")
+
+    session.cd("python/serpyco_rs")
+    session.run("black", "--check", "--diff", ".")
+    session.run("isort", "--check", "--diff", ".")
+    session.run("ruff", ".")
+    session.run("pyright")
+    session.run("pyright", "--verifytypes", "serpyco_rs")
+    session.run("mypy", ".", "--strict", "--implicit-reexport", "--pretty")
+
+
+@nox.session
+def bench(session):
+    build(session)
+    session.install("-r", "requirements/bench.txt")
+
     session.run(
-        'pytest',
-        '--verbose',
-        '--benchmark-min-time=1',
-        '--benchmark-max-time=5',
-        '--benchmark-disable-gc',
-        '--benchmark-autosave',
-        '--benchmark-save-data',
-        'bench',
+        "pytest",
+        "--verbose",
+        "--benchmark-min-time=1",
+        "--benchmark-max-time=5",
+        "--benchmark-disable-gc",
+        "--benchmark-autosave",
+        "--benchmark-save-data",
+        "bench",
     )

@@ -8,7 +8,7 @@ use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_
 use atomic_refcell::AtomicRefCell;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::types::PyString;
-use pyo3::{pyclass, pymethods, AsPyPointer, Py, PyAny, PyResult};
+use pyo3::{AsPyPointer, Py, PyAny, PyResult};
 use pyo3_ffi::PyObject;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -28,35 +28,6 @@ pub trait Encoder: DynClone + Debug {
 }
 
 clone_trait_object!(Encoder);
-
-#[pyclass]
-#[derive(Debug)]
-pub struct Serializer {
-    pub encoder: Box<TEncoder>,
-}
-
-#[pymethods]
-impl Serializer {
-    #[inline]
-    pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        unsafe {
-            Ok(Py::from_owned_ptr(
-                value.py(),
-                self.encoder.dump(value.as_ptr())?,
-            ))
-        }
-    }
-
-    #[inline]
-    pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-        unsafe {
-            Ok(Py::from_owned_ptr(
-                value.py(),
-                self.encoder.load(value.as_ptr())?,
-            ))
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct NoopEncoder;
