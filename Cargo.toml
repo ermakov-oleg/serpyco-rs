@@ -2,6 +2,8 @@
 name = "serpyco-rs"
 version = "0.2.2"
 edition = "2021"
+homepage = "https://github.com/ermakov-oleg/serpyco-rs"
+repository = "https://github.com/ermakov-oleg/serpyco-rs"
 
 [package.metadata.maturin]
 python-source = "python"
