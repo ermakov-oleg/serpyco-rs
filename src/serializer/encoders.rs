@@ -87,7 +87,7 @@ impl Encoder for DecimalEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         to_decimal(value).map_err(|e| {
-            ValidationError::new_err(format!("invalid Decimal value: {:?} error: {:?}", value, e))
+            ValidationError::new_err(format!("invalid Decimal value: {value:?} error: {e:?}"))
         })
     }
 }
