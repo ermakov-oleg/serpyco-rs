@@ -539,7 +539,7 @@ def test_describe__dataclass_field_format__parsed():
     @dataclass
     class InnerEntity:
         foo_field: str
-        bar_field: Annotated[int, CamelCase]
+        bar_field: int
 
     @dataclass
     class Entity:
@@ -552,7 +552,7 @@ def test_describe__dataclass_field_format__parsed():
         fields=[
             EntityField(
                 name="inner_entity",
-                dict_key="inner_entity",
+                dict_key="innerEntity",
                 type=ArrayType(
                     is_sequence=False,
                     item_type=EntityType(
@@ -566,7 +566,7 @@ def test_describe__dataclass_field_format__parsed():
                             ),
                             EntityField(
                                 name="bar_field",
-                                dict_key="barField",
+                                dict_key="bar_field",
                                 type=IntegerType(),
                             ),
                         ],

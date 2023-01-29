@@ -9,7 +9,7 @@ from uuid import UUID
 import pytest
 from serpyco_rs._describe import describe_type
 from serpyco_rs._json_schema import get_json_schema
-from serpyco_rs.metadata import CamelCase, Max, MaxLength, Min, MinLength
+from serpyco_rs.metadata import CamelCase, Max, MaxLength, Min, MinLength, Alias
 
 
 def test_to_json_schema():
@@ -20,7 +20,7 @@ def test_to_json_schema():
     class InnerData:
         """Some important entity"""
 
-        foo: str
+        foo_filed: str
 
     @dataclass
     class Data:
@@ -41,7 +41,8 @@ def test_to_json_schema():
         l: tuple[int, str, InnerData]
         m: dict[str, int]
         n: Any
-        some_filed: Annotated[str, CamelCase]
+        o: Annotated[InnerData, CamelCase]
+        some_filed: Annotated[str, Alias("fooFiled")]
 
     schema = get_json_schema(describe_type(Data))
 
@@ -88,15 +89,22 @@ def test_to_json_schema():
                     },
                     "m": {"additionalProperties": {"type": "integer"}, "type": "object"},
                     "n": {},
-                    "someFiled": {"type": "string"},
+                    "o": {"$ref": "#/definitions/tests._json_schema.test_convert.InnerData[camel_case]"},
+                    "fooFiled": {"type": "string"},
                 },
-                "required": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "someFiled"],
+                "required": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "fooFiled"],
                 "type": "object",
             },
             "tests._json_schema.test_convert.InnerData[no_format]": {
                 "description": "Some " "important " "entity",
-                "properties": {"foo": {"type": "string"}},
-                "required": ["foo"],
+                "properties": {"foo_filed": {"type": "string"}},
+                "required": ["foo_filed"],
+                "type": "object",
+            },
+            "tests._json_schema.test_convert.InnerData[camel_case]": {
+                "description": "Some " "important " "entity",
+                "properties": {"fooFiled": {"type": "string"}},
+                "required": ["fooFiled"],
                 "type": "object",
             },
         },
