@@ -1,8 +1,8 @@
 from typing import Any
 
 import serpyco_rs
-from .base import Dataclass, test_object
 
+from .base import Dataclass, test_object
 
 _serializer = serpyco_rs.Serializer(Dataclass)
 

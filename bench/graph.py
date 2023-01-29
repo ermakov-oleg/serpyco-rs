@@ -5,10 +5,10 @@ import os
 
 from tabulate import tabulate
 
-
 LIBRARIES = (
     "serpyco_rs",
     "serpyco",
+    "mashumaro",
     "pydantic",
     "marshmallow",
 )
@@ -54,9 +54,7 @@ def tab(obj):
             )
         baseline = table[0][1]
         for each in table:
-            each[3] = (
-                "%.2f" % (each[1] / baseline) if isinstance(each[1], float) else None
-            )
+            each[3] = "%.2f" % (each[1] / baseline) if isinstance(each[1], float) else None
             each[1] = "%.2f" % each[1] if isinstance(each[1], float) else None
         buf.write(tabulate(table, headers, tablefmt="github") + "\n")
 

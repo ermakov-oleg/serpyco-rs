@@ -64,29 +64,36 @@ There is support for generic types from the standard typing module:
 
 ## Benchmark
 
+macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+
 #### dump
 
 | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
 |-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.05 |                 22193.4 |                 1    |
-| serpyco     |                            0.05 |                 20643.6 |                 1.07 |
-| pydantic    |                            2.64 |                   377.6 |                58.57 |
-| marshmallow |                            1.04 |                   958.9 |                23.18 |
+| serpyco_rs  |                            0.05 |                 22188.2 |                 1    |
+| serpyco     |                            0.05 |                 20878.5 |                 1.06 |
+| mashumaro   |                            0.06 |                 15602.7 |                 1.42 |
+| pydantic    |                            2.66 |                   375.6 |                59    |
+| marshmallow |                            1.05 |                   951.7 |                23.33 |
+
 
 #### load with validate
 
 | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
 |-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.24 |                  4231.7 |                 1    |
-| serpyco     |                            0.29 |                  3505.4 |                 1.21 |
-| pydantic    |                            2.05 |                   487.5 |                 8.72 |
-| marshmallow |                            4.63 |                   215.4 |                19.69 |
+| serpyco_rs  |                            0.23 |                  4400.1 |                 1    |
+| serpyco     |                            0.28 |                  3546.4 |                 1.24 |
+| mashumaro   |                            0.23 |                  4377.7 |                 1.01 |
+| pydantic    |                            2.01 |                   497.3 |                 8.86 |
+| marshmallow |                            4.55 |                   219.9 |                20.03 |
 
-#### load
+
+#### load (only serpyco and serpyco_rs supported load without validate)
 
 | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
 |-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.07 |                 13766.2 |                 1    |
-| serpyco     |                            0.08 |                 12263.8 |                 1.12 |
-| pydantic    |                            2.04 |                   490   |                27.97 |
-| marshmallow |                            4.59 |                   217.9 |                63.14 |
+| serpyco_rs  |                            0.07 |                 13882.9 |                 1    |
+| serpyco     |                            0.08 |                 12424.5 |                 1.12 |
+| mashumaro   |                            0.23 |                  4382.9 |                 3.17 |
+| pydantic    |                            2.02 |                   494.4 |                28.09 |
+| marshmallow |                            4.59 |                   217.5 |                63.8  |

@@ -1,6 +1,7 @@
 from typing import Any
 
 import serpyco
+
 from .base import Dataclass, test_object
 
 _serializer = serpyco.Serializer(Dataclass)

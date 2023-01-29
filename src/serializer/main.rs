@@ -13,19 +13,48 @@ use super::types::{get_object_type, Type};
 
 use super::encoders::{
     ArrayEncoder, DecimalEncoder, DictionaryEncoder, EntityEncoder, EnumEncoder, Field,
-    NoopEncoder, OptionalEncoder, Serializer, TupleEncoder, UUIDEncoder,
+    NoopEncoder, OptionalEncoder, TupleEncoder, UUIDEncoder,
 };
 
 type EncoderStateValue = Arc<AtomicRefCell<Option<EntityEncoder>>>;
 
-#[pyfunction]
-pub fn make_encoder(type_info: &PyAny) -> PyResult<Serializer> {
-    let obj_type = get_object_type(type_info)?;
-    let mut encoder_state: HashMap<usize, EncoderStateValue> = HashMap::new();
-    let serializer = Serializer {
-        encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state)?,
-    };
-    Ok(serializer)
+#[pyclass]
+#[derive(Debug)]
+pub struct Serializer {
+    pub encoder: Box<TEncoder>,
+}
+
+#[pymethods]
+impl Serializer {
+    #[new]
+    fn new(type_info: &PyAny) -> PyResult<Self> {
+        let obj_type = get_object_type(type_info)?;
+        let mut encoder_state: HashMap<usize, EncoderStateValue> = HashMap::new();
+        let serializer = Self {
+            encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state)?,
+        };
+        Ok(serializer)
+    }
+
+    #[inline]
+    pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        unsafe {
+            Ok(Py::from_owned_ptr(
+                value.py(),
+                self.encoder.dump(value.as_ptr())?,
+            ))
+        }
+    }
+
+    #[inline]
+    pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+        unsafe {
+            Ok(Py::from_owned_ptr(
+                value.py(),
+                self.encoder.load(value.as_ptr())?,
+            ))
+        }
+    }
 }
 
 pub fn get_encoder(

@@ -2,7 +2,6 @@ from typing import Annotated, Any, Generic, TypeVar, cast
 
 from ._describe import describe_type
 from ._impl import Serializer as _Serializer
-from ._impl import make_encoder
 from ._json_schema import JsonschemaRSValidator, Validator, get_json_schema
 from .metadata import CamelCase
 
@@ -19,7 +18,7 @@ class Serializer(Generic[_T]):
         if camelcase_fields:
             t = cast(type[_T], Annotated[t, CamelCase])
         type_info = describe_type(t)
-        self._encoder: _Serializer[_T] = make_encoder(type_info)
+        self._encoder: _Serializer[_T] = _Serializer(type_info)
         self._schema = get_json_schema(type_info)
         self._validator = validator_cls(self._schema)
 

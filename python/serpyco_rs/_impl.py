@@ -1,1 +1,1 @@
-from ._serpyco_rs import Serializer, ValidationError, make_encoder  # pyright: ignore
+from ._serpyco_rs import Serializer, ValidationError  # pyright: ignore

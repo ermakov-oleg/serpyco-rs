@@ -1,15 +1,25 @@
-from typing import Any, Optional
-
-from pydantic import BaseModel
+from dataclasses import dataclass
+from typing import Optional, Any
 
 from .base import make_test_object
+from mashumaro import DataClassDictMixin
 
 
-class Nested(BaseModel):
+@dataclass
+class Nested(DataClassDictMixin):
+    """
+    A nested type for Dataclass
+    """
+
     name: str
 
 
-class Dataclass(BaseModel):
+@dataclass
+class Dataclass(DataClassDictMixin):
+    """
+    A Dataclass class
+    """
+
     name: str
     value: int
     f: float
@@ -23,8 +33,8 @@ test_object = make_test_object(Dataclass, Nested)
 
 
 def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
-    return Dataclass(**data)
+    return Dataclass.from_dict(data)
 
 
 def dump(obj: Dataclass) -> dict[str, Any]:
-    return obj.dict()
+    return obj.to_dict()

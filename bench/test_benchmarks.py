@@ -1,18 +1,13 @@
 import pytest
 
-from .libs import (
-    serpyco,
-    serpyco_rs,
-    pydantic,
-    marshmallow,
-)
-
+from .libs import marshmallow, pydantic, serpyco, serpyco_rs, mashumaro
 
 serializers = {
     "serpyco": serpyco,
     "serpyco_rs": serpyco_rs,
     "pydantic": pydantic,
     "marshmallow": marshmallow,
+    "mashumaro": mashumaro,
 }
 
 
