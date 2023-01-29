@@ -1,0 +1,6 @@
+pytest
+maturin
+pytz
+python-dateutil
+tzdata; sys_platform == 'win32'
+nox

@@ -87,9 +87,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-index --no-deps --find-links wheels/ serpyco-rs
           pip install --find-links wheels/ serpyco-rs
-          pip install -r requirements.txt
+          pip install -r requirements/lint.txt
       - name: tests
-        run: pytest -vss
+        run: pytest -vss tests/
       - name: fmt
         working-directory: ./python/serpyco_rs
         run: black --check --diff .
