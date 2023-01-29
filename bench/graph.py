@@ -8,6 +8,7 @@ from tabulate import tabulate
 LIBRARIES = (
     "serpyco_rs",
     "serpyco",
+    "mashumaro",
     "pydantic",
     "marshmallow",
 )

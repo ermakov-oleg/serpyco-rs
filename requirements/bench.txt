@@ -6,3 +6,4 @@ serpyco
 pydantic
 marshmallow
 marshmallow-dataclass
+mashumaro
