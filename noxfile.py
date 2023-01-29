@@ -8,7 +8,7 @@ nox.options.reuse_existing_virtualenvs = True
 
 
 def build(session):
-    if os.environ.get("CI", None):
+    if _is_ci():
         # Install form wheels
         session.install("--no-index", "--no-deps", "--find-links", "wheels/", "serpyco-rs")
         session.install("--find-links", "wheels/", "serpyco-rs")
@@ -33,8 +33,8 @@ def lint(session):
     session.install("-r", "requirements/lint.txt")
 
     session.cd("python/serpyco_rs")
-    session.run("black", "--check", "--diff", ".")
-    session.run("isort", "--check", "--diff", ".")
+    session.run("black", *(["--check", "--diff", "."] if _is_ci() else ["."]))
+    session.run("isort", *(["--check", "--diff", "."] if _is_ci() else ["."]))
     session.run("ruff", ".")
 
 
@@ -64,3 +64,7 @@ def bench(session):
         "--benchmark-save-data",
         "bench",
     )
+
+
+def _is_ci() -> bool:
+    return bool(os.environ.get("CI", None))

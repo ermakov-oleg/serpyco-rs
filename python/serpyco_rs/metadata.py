@@ -29,6 +29,11 @@ class Places:
     value: int
 
 
+@dataclass(frozen=True)
+class Alias:
+    value: str
+
+
 class Format(Enum):
     no_format = "no_format"
     camel_case = "camel_case"

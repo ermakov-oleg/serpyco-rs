@@ -11,7 +11,7 @@ from attributes_doc import get_attributes_doc
 from typing_extensions import assert_never
 
 from ._utils import to_camelcase
-from .metadata import FiledFormat, Format, Max, MaxLength, Min, MinLength, NoFormat, Places
+from .metadata import Alias, FiledFormat, Format, Max, MaxLength, Min, MinLength, NoFormat, Places
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -303,12 +303,12 @@ def _describe_dataclass(
 
         metadata = _get_annotated_metadata(type_)
         field_type = describe_type(type_, state)
-        field_format = _find_metadata(metadata, FiledFormat)
+        alias = _find_metadata(metadata, Alias)
 
         fields.append(
             EntityField(
                 name=field.name,
-                dict_key=_apply_format(field_format, field.name),
+                dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
                 doc=docs.get(field.name),
                 type=field_type,
                 default=(field.default if field.default is not dataclasses.MISSING else NOT_SET),

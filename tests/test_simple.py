@@ -225,7 +225,7 @@ def test_serializer_with_camelcase():
     expected = {
         "dictField": {"foo": 1},
         "innerValueOne": {"someValue": "123", "anotherValue": {"fooField": 11}},
-        "inner_value_two": {"some_value": "1", "anotherValue": {"fooField": 22}},
+        "innerValueTwo": {"some_value": "1", "another_value": {"fooField": 22}},
     }
 
     assert serializer.load(expected) == obj
