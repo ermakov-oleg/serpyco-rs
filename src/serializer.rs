@@ -5,6 +5,6 @@ mod main;
 mod py;
 mod types;
 
-pub use main::Serializer;
 pub use encoders::ValidationError;
+pub use main::Serializer;
 pub use types::init;

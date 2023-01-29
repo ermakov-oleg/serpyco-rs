@@ -18,7 +18,6 @@ use super::encoders::{
 
 type EncoderStateValue = Arc<AtomicRefCell<Option<EntityEncoder>>>;
 
-
 #[pyclass]
 #[derive(Debug)]
 pub struct Serializer {
@@ -27,7 +26,6 @@ pub struct Serializer {
 
 #[pymethods]
 impl Serializer {
-
     #[new]
     fn new(type_info: &PyAny) -> PyResult<Self> {
         let obj_type = get_object_type(type_info)?;
@@ -58,8 +56,6 @@ impl Serializer {
         }
     }
 }
-
-
 
 pub fn get_encoder(
     py: Python<'_>,
