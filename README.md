@@ -41,7 +41,7 @@ $ pip install serpyco-rs
 
 ## Features
 
-- Serialization and unserialization of dataclasses
+- Serialization and deserialization of dataclasses
 - Validation of input/output data
 - Very fast
 - Support recursive schemas
@@ -97,3 +97,97 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 | mashumaro   |                            0.23 |                  4382.9 |                 3.17 |
 | pydantic    |                            2.02 |                   494.4 |                28.09 |
 | marshmallow |                            4.59 |                   217.5 |                63.8  |
+
+
+## Supported annotations
+
+`serpyco-rs` supports changing load/dump behavior with `typing.Annotated`.
+
+Currently available:
+* Alias
+* FiledFormat (CamelCase / NoFormat)
+* Min / Max
+* MinLength / MaxLength
+
+
+### Alias
+`Alias` is needed to override the field name in the structure used for `load` / `dump`.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Alias
+
+@dataclass
+class A:
+    foo: Annotated[int, Alias('bar')]
+
+ser = Serializer(A)
+
+>>> print(ser.load({'bar': 1}))
+A(foo=1)
+
+>>> print(ser.dump(A(foo=1)))
+{'bar': 1}
+```
+
+### FiledFormat
+Used to have response bodies in camelCase while keeping your python code in snake_case.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Alias, CamelCase, NoFormat
+
+
+@dataclass
+class B:
+    buz_filed: str
+
+
+@dataclass
+class A:
+    foo_filed: int
+    bar_filed: Annotated[B, NoFormat]
+
+
+ser = Serializer(Annotated[A, CamelCase])  # or ser = Serializer(A, camelcase_fields=True)
+
+print(ser.dump(A(foo_filed=1, bar_filed=B(buz_filed='123'))))
+>> {'fooFiled': 1, 'barFiled': {'buz_filed': '123'}}
+
+print(ser.load({'fooFiled': 1, 'barFiled': {'buz_filed': '123'}}))
+>> A(foo_filed=1, bar_filed=B(buz_filed='123'))
+```
+
+
+### Min / Max
+
+Supported for `int` / `float` / `Decimal` types and only for validation on load.
+
+```python
+from typing import Annotated
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Min, Max
+
+ser = Serializer(Annotated[int, Min(1), Max(10)])
+
+ser.load(123)
+>> SchemaValidationError: [ErrorItem(message='123 is greater than the maximum of 10', instance_path='', schema_path='maximum')]
+```
+
+### MinLength / MaxLength
+`MinLength` / `MaxLength` can be used to restrict the length of loaded strings.
+
+```python
+from typing import Annotated
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import MinLength
+
+ser = Serializer(Annotated[str, MinLength(5)])
+
+ser.load("1234")
+>> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='', schema_path='minLength')]
+```
