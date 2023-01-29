@@ -1,0 +1,5 @@
+pytest
+maturin
+pytz
+tzdata; sys_platform == 'win32'
+nox

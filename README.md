@@ -60,3 +60,33 @@ There is support for generic types from the standard typing module:
 * Mapping
 * Sequence
 * Tuple (fixed size)
+
+
+## Benchmark
+
+#### dump
+
+| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+|-------------|---------------------------------|-------------------------|----------------------|
+| serpyco_rs  |                            0.05 |                 22193.4 |                 1    |
+| serpyco     |                            0.05 |                 20643.6 |                 1.07 |
+| pydantic    |                            2.64 |                   377.6 |                58.57 |
+| marshmallow |                            1.04 |                   958.9 |                23.18 |
+
+#### load with validate
+
+| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+|-------------|---------------------------------|-------------------------|----------------------|
+| serpyco_rs  |                            0.24 |                  4231.7 |                 1    |
+| serpyco     |                            0.29 |                  3505.4 |                 1.21 |
+| pydantic    |                            2.05 |                   487.5 |                 8.72 |
+| marshmallow |                            4.63 |                   215.4 |                19.69 |
+
+#### load
+
+| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+|-------------|---------------------------------|-------------------------|----------------------|
+| serpyco_rs  |                            0.07 |                 13766.2 |                 1    |
+| serpyco     |                            0.08 |                 12263.8 |                 1.12 |
+| pydantic    |                            2.04 |                   490   |                27.97 |
+| marshmallow |                            4.59 |                   217.9 |                63.14 |

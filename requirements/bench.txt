@@ -1,0 +1,8 @@
+-r dev.txt
+
+pytest-benchmark[histogram]
+tabulate
+serpyco
+pydantic
+marshmallow
+marshmallow-dataclass
