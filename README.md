@@ -106,6 +106,7 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 Currently available:
 * Alias
 * FiledFormat (CamelCase / NoFormat)
+* NoneFormat (OmitNone / KeepNone)
 * Min / Max
 * MinLength / MaxLength
 
@@ -125,11 +126,11 @@ class A:
 
 ser = Serializer(A)
 
->>> print(ser.load({'bar': 1}))
-A(foo=1)
+print(ser.load({'bar': 1}))
+>> A(foo=1)
 
->>> print(ser.dump(A(foo=1)))
-{'bar': 1}
+print(ser.dump(A(foo=1)))
+>> {'bar': 1}
 ```
 
 ### FiledFormat
@@ -139,19 +140,16 @@ Used to have response bodies in camelCase while keeping your python code in snak
 from dataclasses import dataclass
 from typing import Annotated
 from serpyco_rs import Serializer
-from serpyco_rs.metadata import Alias, CamelCase, NoFormat
-
+from serpyco_rs.metadata import CamelCase, NoFormat
 
 @dataclass
 class B:
     buz_filed: str
 
-
 @dataclass
 class A:
     foo_filed: int
     bar_filed: Annotated[B, NoFormat]
-
 
 ser = Serializer(Annotated[A, CamelCase])  # or ser = Serializer(A, camelcase_fields=True)
 
@@ -162,6 +160,23 @@ print(ser.load({'fooFiled': 1, 'barFiled': {'buz_filed': '123'}}))
 >> A(foo_filed=1, bar_filed=B(buz_filed='123'))
 ```
 
+### NoneFormat
+Via `OmitNone` we can drop None values for non required fields in the serialized dicts
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+@dataclass
+class A:
+    required_val: bool | None
+    optional_val: bool | None = None
+
+serializer = Serializer(A, omit_none=True) # or Serializer(Annotated[A, OmitNone])
+
+print(serializer.dump(A(required_val=None, optional_val=None)))
+>>> {'required_val': None}
+```
 
 ### Min / Max
 
