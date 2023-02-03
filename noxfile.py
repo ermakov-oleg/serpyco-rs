@@ -1,5 +1,4 @@
 import os
-import platform
 
 import nox
 
@@ -14,9 +13,6 @@ def build(session):
         session.install("--find-links", "wheels/", "serpyco-rs")
         return
 
-    if platform.machine() == "arm64" and platform.system() == "Darwin":
-        # https://github.com/Stranger6667/jsonschema-rs/issues/409
-        session.install("jsonschema_rs", "--no-binary", ":all:")
     session.run_always("maturin", "develop", "-r")
 
 
@@ -33,8 +29,9 @@ def lint(session):
     session.install("-r", "requirements/lint.txt")
 
     session.cd("python/serpyco_rs")
-    session.run("black", *(["--check", "--diff", "."] if _is_ci() else ["."]))
-    session.run("isort", *(["--check", "--diff", "."] if _is_ci() else ["."]))
+    paths = [".", "../../tests"]
+    session.run("black", *(["--check", "--diff", *paths] if _is_ci() else paths))
+    session.run("isort", *(["--check", "--diff", *paths] if _is_ci() else paths))
     session.run("ruff", ".")
 
 

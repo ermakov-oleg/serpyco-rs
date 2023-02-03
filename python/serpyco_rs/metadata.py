@@ -46,3 +46,12 @@ class FiledFormat:
 
 CamelCase: FiledFormat = FiledFormat(Format.camel_case)
 NoFormat: FiledFormat = FiledFormat(Format.no_format)
+
+
+@dataclass(frozen=True)
+class NoneFormat:
+    omit: bool
+
+
+KeepNone: NoneFormat = NoneFormat(False)
+OmitNone: NoneFormat = NoneFormat(True)
