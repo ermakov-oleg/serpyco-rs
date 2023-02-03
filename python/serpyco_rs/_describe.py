@@ -11,7 +11,20 @@ from attributes_doc import get_attributes_doc
 from typing_extensions import assert_never
 
 from ._utils import to_camelcase
-from .metadata import Alias, FiledFormat, Format, Max, MaxLength, Min, MinLength, NoFormat, Places
+from .metadata import (
+    Alias,
+    FiledFormat,
+    Format,
+    KeepNone,
+    Max,
+    MaxLength,
+    Min,
+    MinLength,
+    NoFormat,
+    NoneFormat,
+    OmitNone,
+    Places,
+)
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType
@@ -112,12 +125,17 @@ class EntityField:
     default_factory: Union[Callable[[], Any], NotSet] = NOT_SET
     is_property: bool = False
 
+    @property
+    def required(self) -> bool:
+        return not (self.is_property or self.default != NOT_SET or self.default_factory != NOT_SET)
+
 
 @dataclasses.dataclass
 class EntityType(Type):
     cls: type[Any]
     name: str
     fields: Sequence[EntityField]
+    omit_none: bool = False
     generics: Mapping[TypeVar, Any] = dataclasses.field(default_factory=dict)
     doc: Optional[str] = None
 
@@ -155,15 +173,16 @@ class RecursionHolder(Type):
     cls: Any
     name: str
     field_format: FiledFormat
-    state: dict[tuple[type, FiledFormat], Optional[Type]]
+    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]
+    none_format: NoneFormat = KeepNone
 
     def get_type(self) -> Type:
-        if type_ := self.state[(self.cls, self.field_format)]:
+        if type_ := self.state[(self.cls, self.field_format, self.none_format)]:
             return type_
         raise RuntimeError("Recursive type not resolved")
 
 
-def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optional[Type]]] = None) -> Type:
+def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]] = None) -> Type:
     state = state or {}
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
@@ -185,10 +204,17 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optiona
 
     generics = dict(zip(parameters, args))
     filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
-    annotation_wrapper = _wrap_annotated([filed_format])
+    none_format = _find_metadata(metadata, NoneFormat, KeepNone)
+    annotation_wrapper = _wrap_annotated([filed_format, none_format])
 
-    if (t, filed_format) in state:
-        return RecursionHolder(cls=t, name=_generate_name(t, filed_format), field_format=filed_format, state=state)
+    if (t, filed_format, none_format) in state:
+        return RecursionHolder(
+            cls=t,
+            name=_generate_name(t, filed_format, none_format),
+            field_format=filed_format,
+            none_format=none_format,
+            state=state,
+        )
 
     if t is Any:
         return AnyType()
@@ -259,15 +285,15 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat], Optiona
             return EnumType(cls=t)
 
         if dataclasses.is_dataclass(t):
-            state[(t, filed_format)] = None
-            entity_type = _describe_dataclass(t, generics, filed_format, state)
-            state[(t, filed_format)] = entity_type
+            state[(t, filed_format, none_format)] = None
+            entity_type = _describe_dataclass(t, generics, filed_format, none_format, state)
+            state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
         if attr and attr.has(t):
-            state[(t, filed_format)] = None
-            entity_type = _describe_attrs(t, generics, filed_format, state)
-            state[(t, filed_format)] = entity_type
+            state[(t, filed_format, none_format)] = None
+            entity_type = _describe_attrs(t, generics, filed_format, none_format, state)
+            state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
     if t in {Union}:
@@ -286,7 +312,8 @@ def _describe_dataclass(
     t: type[Any],
     generics: Mapping[TypeVar, Any],
     cls_filed_format: FiledFormat,
-    state: dict[tuple[type, FiledFormat], Optional[Type]],
+    cls_none_format: NoneFormat,
+    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]],
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
@@ -296,13 +323,11 @@ def _describe_dataclass(
 
     fields = []
     for field in dataclasses.fields(t):
-
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        if cls_filed_format:
-            type_ = Annotated[type_, cls_filed_format]
+        type_ = Annotated[type_, cls_filed_format, cls_none_format]
 
-        metadata = _get_annotated_metadata(type_)
         field_type = describe_type(type_, state)
+        metadata = _get_annotated_metadata(type_)
         alias = _find_metadata(metadata, Alias)
 
         fields.append(
@@ -319,14 +344,22 @@ def _describe_dataclass(
             )
         )
 
-    return EntityType(cls=t, name=_generate_name(t, cls_filed_format), fields=fields, generics=generics, doc=t.__doc__)
+    return EntityType(
+        cls=t,
+        name=_generate_name(t, cls_filed_format, cls_none_format),
+        fields=fields,
+        omit_none=cls_none_format is OmitNone,
+        generics=generics,
+        doc=t.__doc__,
+    )
 
 
 def _describe_attrs(
     t: type[Any],
     generics: Mapping[TypeVar, Any],
     cls_filed_format: FiledFormat,
-    state: dict[tuple[type, FiledFormat], Optional[Type]],
+    cls_none_format: NoneFormat,
+    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]],
 ) -> EntityType:
     assert attr is not None
     docs = get_attributes_doc(t)
@@ -345,17 +378,16 @@ def _describe_attrs(
             default_factory = field.default.factory
 
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        if cls_filed_format:
-            type_ = Annotated[type_, cls_filed_format]
+        type_ = Annotated[type_, cls_filed_format, cls_none_format]
 
         metadata = _get_annotated_metadata(type_)
         field_type = describe_type(type_, state)
-        field_format = _find_metadata(metadata, FiledFormat)
+        alias = _find_metadata(metadata, Alias)
 
         fields.append(
             EntityField(
                 name=field.name,
-                dict_key=_apply_format(field_format, field.name),
+                dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
                 doc=docs.get(field.name),
                 type=field_type,
                 default=default,
@@ -363,7 +395,13 @@ def _describe_attrs(
                 is_property=False,
             )
         )
-    return EntityType(cls=t, name=_generate_name(t, cls_filed_format), fields=fields, generics=generics)
+    return EntityType(
+        cls=t,
+        name=_generate_name(t, cls_filed_format, cls_none_format),
+        fields=fields,
+        omit_none=cls_none_format is OmitNone,
+        generics=generics,
+    )
 
 
 def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
@@ -414,5 +452,6 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
     assert_never(f.format)
 
 
-def _generate_name(cls: Any, field_format: FiledFormat) -> str:
-    return f"{cls.__module__}.{cls.__name__}[{field_format.format.value}]"
+def _generate_name(cls: Any, field_format: FiledFormat, none_format: NoneFormat) -> str:
+    nones = "omit_nones" if none_format.omit else "keep_nones"
+    return f"{cls.__module__}.{cls.__name__}[{field_format.format.value},{nones}]"

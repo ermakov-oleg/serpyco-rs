@@ -137,6 +137,7 @@ impl Encoder for ArrayEncoder {
 #[derive(Debug, Clone)]
 pub struct EntityEncoder {
     pub(crate) cls: Py<PyAny>,
+    pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
 }
 
@@ -145,6 +146,7 @@ pub struct Field {
     pub(crate) name: Py<PyString>,
     pub(crate) dict_key: Py<PyString>,
     pub(crate) encoder: Box<TEncoder>,
+    pub(crate) required: bool,
     pub(crate) default: Option<Py<PyAny>>,
     pub(crate) default_factory: Option<Py<PyAny>>,
 }
@@ -158,11 +160,14 @@ impl Encoder for EntityEncoder {
             let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr())); // val RC +1
             let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
 
-            ffi!(PyDict_SetItem(
-                dict_ptr,
-                field.dict_key.as_ptr(),
-                dump_result
-            )); // key and val RC +1
+            if field.required || !self.omit_none || dump_result != unsafe { NONE_PY_TYPE } {
+                ffi!(PyDict_SetItem(
+                    dict_ptr,
+                    field.dict_key.as_ptr(),
+                    dump_result
+                )); // key and val RC +1
+            }
+
             ffi!(Py_DECREF(field_val));
             ffi!(Py_DECREF(dump_result));
         }

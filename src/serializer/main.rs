@@ -102,12 +102,14 @@ pub fn get_encoder(
         Type::Entity(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
             let class_fields = type_info.getattr(py, "fields")?;
+            let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
             let mut fields = vec![];
 
             for field in class_fields.as_ref(py).iter()? {
                 let field = field?;
                 let f_name: &PyString = field.getattr("name")?.downcast()?;
                 let dict_key: &PyString = field.getattr("dict_key")?.downcast()?;
+                let required = field.getattr("required")?.is_true()?;
                 let f_type = get_object_type(field.getattr("type")?)?;
                 let f_default = field.getattr("default")?;
                 let f_default_factory = field.getattr("default_factory")?;
@@ -116,6 +118,7 @@ pub fn get_encoder(
                     name: f_name.into(),
                     dict_key: dict_key.into(),
                     encoder: get_encoder(py, f_type, encoder_state)?,
+                    required,
                     default: match is_not_set(f_default)? {
                         true => None,
                         false => Some(f_default.into()),
@@ -130,6 +133,7 @@ pub fn get_encoder(
 
             let encoder = EntityEncoder {
                 fields,
+                omit_none,
                 cls: py_type,
             };
             let python_object_id = type_info.as_ptr() as *const _ as usize;
