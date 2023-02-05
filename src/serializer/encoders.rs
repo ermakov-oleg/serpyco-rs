@@ -67,6 +67,7 @@ impl Encoder for DecimalEncoder {
 pub struct DictionaryEncoder {
     pub key_encoder: Box<TEncoder>,
     pub value_encoder: Box<TEncoder>,
+    pub omit_none: bool,
 }
 
 impl Encoder for DictionaryEncoder {
@@ -75,11 +76,17 @@ impl Encoder for DictionaryEncoder {
         let dict_ptr = ffi!(PyDict_New());
 
         for i in iter_over_dict_items(value)? {
+            // items RC +1
             let item = i?;
-            let key = self.key_encoder.dump(py_tuple_get_item(item, 0)?)?;
-            let value = self.value_encoder.dump(py_tuple_get_item(item, 1)?)?;
+            let key = self.key_encoder.dump(py_tuple_get_item(item, 0)?)?; // new obj or RC +1
+            let value = self.value_encoder.dump(py_tuple_get_item(item, 1)?)?; // new obj or RC +1
 
-            ffi!(PyDict_SetItem(dict_ptr, key, value));
+            if !self.omit_none || value != unsafe { NONE_PY_TYPE } {
+                ffi!(PyDict_SetItem(dict_ptr, key, value)); // key and val or RC +1
+                ffi!(Py_DECREF(key));
+                ffi!(Py_DECREF(value));
+            }
+            ffi!(Py_DECREF(item));
         }
 
         Ok(dict_ptr)
@@ -90,10 +97,14 @@ impl Encoder for DictionaryEncoder {
         let dict_ptr = ffi!(PyDict_New());
 
         for i in iter_over_dict_items(value)? {
+            // items RC +1
             let item = i?;
-            let key = self.key_encoder.load(py_tuple_get_item(item, 0)?)?;
-            let value = self.value_encoder.load(py_tuple_get_item(item, 1)?)?;
-            ffi!(PyDict_SetItem(dict_ptr, key, value));
+            let key = self.key_encoder.load(py_tuple_get_item(item, 0)?)?; // new obj or RC +1
+            let value = self.value_encoder.load(py_tuple_get_item(item, 1)?)?; // new obj or RC +1
+            ffi!(PyDict_SetItem(dict_ptr, key, value)); // key and val or RC +1
+            ffi!(Py_DECREF(key));
+            ffi!(Py_DECREF(value));
+            ffi!(Py_DECREF(item));
         }
 
         Ok(dict_ptr)
