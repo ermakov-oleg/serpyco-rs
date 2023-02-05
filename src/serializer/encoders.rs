@@ -83,9 +83,9 @@ impl Encoder for DictionaryEncoder {
 
             if !self.omit_none || value != unsafe { NONE_PY_TYPE } {
                 ffi!(PyDict_SetItem(dict_ptr, key, value)); // key and val or RC +1
-                ffi!(Py_DECREF(key));
-                ffi!(Py_DECREF(value));
             }
+            ffi!(Py_DECREF(key));
+            ffi!(Py_DECREF(value));
             ffi!(Py_DECREF(item));
         }
 
