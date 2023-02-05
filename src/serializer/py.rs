@@ -111,6 +111,7 @@ pub fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
 
 #[inline]
 pub fn py_tuple_get_item(obj: *mut ffi::PyObject, index: usize) -> PyResult<*mut ffi::PyObject> {
+    // Doesn't touch RC
     from_ptr_or_err(ffi!(PyTuple_GetItem(obj, index as Py_ssize_t)))
 }
 

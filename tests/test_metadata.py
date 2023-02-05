@@ -57,3 +57,8 @@ def test_propagete__omit_none(omit_none, foo, expected):
     res = serializer.dump(foo)
 
     assert res == expected
+
+
+def test_omit_none_on_dict():
+    serializer = Serializer(dict[str, Optional[bool]], omit_none=True)
+    assert serializer.dump({"foo": True, "bar": None}) == {"foo": True}

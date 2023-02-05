@@ -156,6 +156,7 @@ class DictionaryType(Type):
     key_type: Type
     value_type: Type
     is_mapping: bool
+    omit_none: bool = False
 
 
 @dataclasses.dataclass
@@ -274,6 +275,7 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneForm
                 key_type=(describe_type(annotation_wrapper(args[0]), state) if args else AnyType()),
                 value_type=(describe_type(annotation_wrapper(args[1]), state) if args else AnyType()),
                 is_mapping=t is Mapping,
+                omit_none=none_format.omit,
             )
 
         if t is tuple:

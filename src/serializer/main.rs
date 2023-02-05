@@ -75,6 +75,7 @@ pub fn get_encoder(
         Type::Dictionary(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;
             let value_type = get_object_type(type_info.getattr(py, "value_type")?.as_ref(py))?;
+            let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
 
             let key_encoder = get_encoder(py, key_type, encoder_state)?;
             let value_encoder = get_encoder(py, value_type, encoder_state)?;
@@ -82,6 +83,7 @@ pub fn get_encoder(
             Box::new(DictionaryEncoder {
                 key_encoder,
                 value_encoder,
+                omit_none,
             })
         }
         Type::Array(type_info) => {
