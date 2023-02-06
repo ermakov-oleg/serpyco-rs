@@ -1,7 +1,6 @@
 -r dev.txt
 
 pytest-benchmark[histogram]
-pytest-codspeed
 tabulate
 serpyco
 pydantic

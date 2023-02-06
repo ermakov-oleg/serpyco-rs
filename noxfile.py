@@ -67,6 +67,7 @@ def bench(session):
 def bench_codespeed(session):
     build(session)
     session.install("-r", "requirements/bench.txt")
+    session.install('pytest-codspeed')
     session.run("pytest", "--codspeed", "bench")
 
 
