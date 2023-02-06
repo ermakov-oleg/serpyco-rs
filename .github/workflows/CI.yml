@@ -102,6 +102,13 @@ jobs:
         run: nox -s bench
         env:
           CI: true
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v1
+        with:
+            token: ${{ secrets.CODSPEED_TOKEN }}
+            run: nox -s bench
+        env:
+            CI: true
 
   fmt:
     name: rustfmt
