@@ -63,5 +63,13 @@ def bench(session):
     )
 
 
+@nox.session
+def bench_codespeed(session):
+    build(session)
+    session.install("-r", "requirements/bench.txt")
+    session.install('pytest-codspeed')
+    session.run("pytest", "--codspeed", "bench")
+
+
 def _is_ci() -> bool:
     return bool(os.environ.get("CI", None))

@@ -8,6 +8,7 @@ on:
       - main
       - master
   pull_request:
+  workflow_dispatch:
 
 jobs:
   linux:
@@ -102,6 +103,14 @@ jobs:
         run: nox -s bench
         env:
           CI: true
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v1
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10'
+        with:
+            token: ${{ secrets.CODSPEED_TOKEN }}
+            run: nox -s bench_codespeed
+        env:
+            CI: true
 
   fmt:
     name: rustfmt

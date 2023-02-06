@@ -1,13 +1,22 @@
-import pytest
+import pkgutil
 
+import pytest
 from .libs import marshmallow, pydantic, serpyco, serpyco_rs, mashumaro
 
+IS_PYTEST_CODSPEED_INSTALLED = pkgutil.find_loader("pytest_codspeed") is not None
+
 serializers = {
-    "serpyco": serpyco,
     "serpyco_rs": serpyco_rs,
-    "pydantic": pydantic,
-    "marshmallow": marshmallow,
-    "mashumaro": mashumaro,
+    **(
+        {}
+        if IS_PYTEST_CODSPEED_INSTALLED
+        else {
+            "serpyco": serpyco,
+            "pydantic": pydantic,
+            "marshmallow": marshmallow,
+            "mashumaro": mashumaro,
+        }
+    ),
 }
 
 
@@ -17,8 +26,11 @@ def test_dump(benchmark, lib):
     serializer.dump(serializer.test_object)  # warmup
 
     benchmark.group = "dump"
-    benchmark.extra_info["lib"] = lib
-    benchmark.extra_info["correct"] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+    if not IS_PYTEST_CODSPEED_INSTALLED:
+        benchmark.extra_info["lib"] = lib
+        benchmark.extra_info["correct"] = (
+            serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+        )
     benchmark(serializer.dump, serializer.test_object)
 
 
@@ -29,8 +41,11 @@ def test_load(benchmark, lib):
     serializer.load(test_dict, validate=False)  # warmup
 
     benchmark.group = "load"
-    benchmark.extra_info["lib"] = lib
-    benchmark.extra_info["correct"] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+    if not IS_PYTEST_CODSPEED_INSTALLED:
+        benchmark.extra_info["lib"] = lib
+        benchmark.extra_info["correct"] = (
+            serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+        )
     benchmark(serializer.load, test_dict, validate=False)
 
 
@@ -41,7 +56,10 @@ def test_load_validate(benchmark, lib):
     serializer.load(test_dict, validate=True)  # warmup
 
     benchmark.group = "load with validate"
-    benchmark.extra_info["lib"] = lib
-    benchmark.extra_info["correct"] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+    if not IS_PYTEST_CODSPEED_INSTALLED:
+        benchmark.extra_info["lib"] = lib
+        benchmark.extra_info["correct"] = (
+            serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+        )
 
     benchmark(serializer.load, test_dict, validate=True)
