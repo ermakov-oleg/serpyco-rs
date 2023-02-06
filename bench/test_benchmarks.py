@@ -22,7 +22,6 @@ serializers = {
 
 @pytest.mark.parametrize("lib", serializers.keys())
 def test_dump(benchmark, lib):
-    print(dir(benchmark))
     serializer = serializers[lib]
     serializer.dump(serializer.test_object)  # warmup
 
