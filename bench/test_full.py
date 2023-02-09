@@ -5,7 +5,7 @@ from .utils import repeat
 def test_dump(benchmark):
     serializer.dump(serializer.test_object)  # warmup
     benchmark.group = "dump"
-    benchmark(repeat(lambda: serializer.dump(serializer.test_object)))
+    benchmark(repeat(lambda: serializer.dump(serializer.test_object), count=100))
 
 
 def test_load(benchmark):
@@ -13,7 +13,7 @@ def test_load(benchmark):
     serializer.load(test_dict, validate=False)  # warmup
 
     benchmark.group = "load"
-    benchmark(repeat(lambda: serializer.load(test_dict, validate=False)))
+    benchmark(repeat(lambda: serializer.load(test_dict, validate=False), count=100))
 
 
 def test_load_validate(benchmark):
@@ -21,4 +21,4 @@ def test_load_validate(benchmark):
     serializer.load(test_dict, validate=True)  # warmup
 
     benchmark.group = "load with validate"
-    benchmark(repeat(lambda: serializer.load(test_dict, validate=True)))
+    benchmark(repeat(lambda: serializer.load(test_dict, validate=True), count=100))
