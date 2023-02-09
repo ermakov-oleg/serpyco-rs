@@ -308,7 +308,6 @@ impl Encoder for TupleEncoder {
             let val = self.encoders[i as usize].load(item)?; // new obj or RC +1
             ffi!(PyTuple_SetItem(tuple, i, val)); // RC not changed
             ffi!(Py_DECREF(item));
-
         }
         Ok(tuple)
     }
