@@ -1,7 +1,8 @@
 import pkgutil
 
 import pytest
-from .libs import marshmallow, pydantic, serpyco, serpyco_rs, mashumaro
+
+from .libs import marshmallow, mashumaro, pydantic, serpyco, serpyco_rs
 
 IS_PYTEST_CODSPEED_INSTALLED = pkgutil.find_loader("pytest_codspeed") is not None
 

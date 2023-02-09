@@ -29,7 +29,7 @@ def lint(session):
     session.install("-r", "requirements/lint.txt")
 
     session.cd("python/serpyco_rs")
-    paths = [".", "../../tests"]
+    paths = [".", "../../tests", "../../bench"]
     session.run("black", *(["--check", "--diff", *paths] if _is_ci() else paths))
     session.run("isort", *(["--check", "--diff", *paths] if _is_ci() else paths))
     session.run("ruff", ".")
@@ -59,7 +59,7 @@ def bench(session):
         "--benchmark-disable-gc",
         "--benchmark-autosave",
         "--benchmark-save-data",
-        "bench",
+        "bench/compare",
     )
 
 
@@ -68,7 +68,7 @@ def bench_codespeed(session):
     build(session)
     session.install("-r", "requirements/bench.txt")
     session.install('pytest-codspeed')
-    session.run("pytest", "--codspeed", "bench")
+    session.run("pytest", "bench", "--ignore=compare", "--codspeed")
 
 
 def _is_ci() -> bool:
