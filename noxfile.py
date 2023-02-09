@@ -54,12 +54,12 @@ def bench(session):
     session.run(
         "pytest",
         "--verbose",
-        "--benchmark-min-time=1",
-        "--benchmark-max-time=5",
+        "--benchmark-min-time=0.5",
+        "--benchmark-max-time=2.5",
         "--benchmark-disable-gc",
         "--benchmark-autosave",
         "--benchmark-save-data",
-        "--ignore=bench/test_full.py"
+        "--ignore=bench/test_full.py",
         "bench",
     )
 
@@ -69,7 +69,7 @@ def bench_codespeed(session):
     build(session)
     session.install("-r", "requirements/bench.txt")
     session.install('pytest-codspeed')
-    session.run("pytest", "bench", "--ignore=compare", "--codspeed")
+    session.run("pytest", "bench", "--ignore=bench/compare", "--codspeed")
 
 
 def _is_ci() -> bool:
