@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from typing import Optional, Any
+from typing import Any, Optional
+
+from mashumaro import DataClassDictMixin
 
 from .base import make_test_object
-from mashumaro import DataClassDictMixin
 
 
 @dataclass

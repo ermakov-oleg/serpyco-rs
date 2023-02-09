@@ -302,13 +302,14 @@ impl Encoder for TupleEncoder {
             ));
         }
 
-        let list = ffi!(PyTuple_New(len));
+        let tuple = ffi!(PyTuple_New(len));
         for i in 0..len {
-            let item = ffi!(PyList_GetItem(value, i)); // RC not changed
+            let item = ffi!(PySequence_GetItem(value, i)); // RC +1
             let val = self.encoders[i as usize].load(item)?; // new obj or RC +1
-            ffi!(PyTuple_SetItem(list, i, val)); // RC not changed
+            ffi!(PyTuple_SetItem(tuple, i, val)); // RC not changed
+            ffi!(Py_DECREF(item));
         }
-        Ok(list)
+        Ok(tuple)
     }
 }
 
