@@ -59,6 +59,7 @@ def bench(session):
         "--benchmark-disable-gc",
         "--benchmark-autosave",
         "--benchmark-save-data",
+        "--benchmark-compare",
         "--ignore=bench/test_full.py",
         "bench",
     )
