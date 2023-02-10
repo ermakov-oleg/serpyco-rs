@@ -1,5 +1,5 @@
 use crate::serializer::encoders::{
-    DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder,
+    DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder, E
 };
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
@@ -16,12 +16,12 @@ use super::encoders::{
     NoopEncoder, OptionalEncoder, TupleEncoder, UUIDEncoder,
 };
 
-type EncoderStateValue = Arc<AtomicRefCell<Option<EntityEncoder>>>;
+type EncoderStateValue = Arc<AtomicRefCell<Option<E>>>;
 
 #[pyclass]
 #[derive(Debug)]
 pub struct Serializer {
-    pub encoder: Box<TEncoder>,
+    pub encoder: E,
 }
 
 #[pymethods]
@@ -61,26 +61,26 @@ pub fn get_encoder(
     py: Python<'_>,
     obj_type: Type,
     encoder_state: &mut HashMap<usize, EncoderStateValue>,
-) -> PyResult<Box<TEncoder>> {
-    let encoder: Box<TEncoder> = match obj_type {
+) -> PyResult<E> {
+    let encoder = match obj_type {
         Type::String | Type::Integer | Type::Bytes | Type::Float | Type::Boolean | Type::Any => {
-            Box::new(NoopEncoder)
+            E::NoopEncoder(NoopEncoder)
         }
-        Type::Decimal => Box::new(DecimalEncoder),
+        Type::Decimal => E::DecimalEncoder(DecimalEncoder),
         Type::Optional(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
-            let encoder = get_encoder(py, inner, encoder_state)?;
-            Box::new(OptionalEncoder { encoder })
+            let encoder = Box::new(get_encoder(py, inner, encoder_state)?);
+            E::OptionalEncoder(OptionalEncoder { encoder })
         }
         Type::Dictionary(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;
             let value_type = get_object_type(type_info.getattr(py, "value_type")?.as_ref(py))?;
             let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
 
-            let key_encoder = get_encoder(py, key_type, encoder_state)?;
-            let value_encoder = get_encoder(py, value_type, encoder_state)?;
+            let key_encoder = Box::new(get_encoder(py, key_type, encoder_state)?);
+            let value_encoder = Box::new(get_encoder(py, value_type, encoder_state)?);
 
-            Box::new(DictionaryEncoder {
+            E::DictionaryEncoder(DictionaryEncoder {
                 key_encoder,
                 value_encoder,
                 omit_none,
@@ -88,18 +88,18 @@ pub fn get_encoder(
         }
         Type::Array(type_info) => {
             let item_type = get_object_type(type_info.getattr(py, "item_type")?.as_ref(py))?;
-            let encoder = get_encoder(py, item_type, encoder_state)?;
+            let encoder = Box::new(get_encoder(py, item_type, encoder_state)?);
 
-            Box::new(ArrayEncoder { encoder })
+            E::ArrayEncoder(ArrayEncoder { encoder })
         }
         Type::Tuple(type_info) => {
             let mut encoders = vec![];
             for item_type in type_info.getattr(py, "item_types")?.as_ref(py).iter()? {
                 let item_type = item_type?;
-                let encoder = get_encoder(py, get_object_type(item_type)?, encoder_state)?;
+                let encoder = Box::new(get_encoder(py, get_object_type(item_type)?, encoder_state)?);
                 encoders.push(encoder);
             }
-            Box::new(TupleEncoder { encoders })
+            E::TupleEncoder(TupleEncoder { encoders })
         }
         Type::Entity(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
@@ -119,7 +119,7 @@ pub fn get_encoder(
                 let fld = Field {
                     name: f_name.into(),
                     dict_key: dict_key.into(),
-                    encoder: get_encoder(py, f_type, encoder_state)?,
+                    encoder: Box::new(get_encoder(py, f_type, encoder_state)?),
                     required,
                     default: match is_not_set(f_default)? {
                         true => None,
@@ -133,32 +133,32 @@ pub fn get_encoder(
                 fields.push(fld);
             }
 
-            let encoder = EntityEncoder {
+            let encoder = E::EntityEncoder(EntityEncoder {
                 fields,
                 omit_none,
                 cls: py_type,
-            };
+            });
             let python_object_id = type_info.as_ptr() as *const _ as usize;
             let val = encoder_state.entry(python_object_id).or_default();
-            AtomicRefCell::<Option<EntityEncoder>>::borrow_mut(val).replace(encoder.clone());
-            Box::new(encoder)
+            AtomicRefCell::<Option<E>>::borrow_mut(val).replace(encoder.clone());
+            encoder
         }
         Type::RecursionHolder(type_info) => {
             let inner_type = type_info.call_method0(py, "get_type")?;
             let python_object_id = inner_type.as_ptr() as *const _ as usize;
             let encoder = encoder_state.entry(python_object_id).or_default();
-            Box::new(LazyEncoder {
+            E::LazyEncoder(LazyEncoder {
                 inner: encoder.clone(),
             })
         }
-        Type::Uuid => Box::new(UUIDEncoder),
+        Type::Uuid => E::UUIDEncoder(UUIDEncoder),
         Type::Enum(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
-            Box::new(EnumEncoder { enum_type: py_type })
+            E::EnumEncoder(EnumEncoder { enum_type: py_type })
         }
-        Type::DateTime => Box::new(DateTimeEncoder),
-        Type::Time => Box::new(TimeEncoder),
-        Type::Date => Box::new(DateEncoder),
+        Type::DateTime => E::DateTimeEncoder(DateTimeEncoder),
+        Type::Time => E::TimeEncoder(TimeEncoder),
+        Type::Date => E::DateEncoder(DateEncoder),
     };
 
     Ok(encoder)

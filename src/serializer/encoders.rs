@@ -22,6 +22,62 @@ pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
+
+#[derive(Debug, Clone)]
+pub enum E {
+    NoopEncoder(NoopEncoder),
+    DecimalEncoder(DecimalEncoder),
+    DictionaryEncoder(DictionaryEncoder),
+    ArrayEncoder(ArrayEncoder),
+    EntityEncoder(EntityEncoder),
+    UUIDEncoder(UUIDEncoder),
+    EnumEncoder(EnumEncoder),
+    OptionalEncoder(OptionalEncoder),
+    TupleEncoder(TupleEncoder),
+    TimeEncoder(TimeEncoder),
+    DateTimeEncoder(DateTimeEncoder),
+    DateEncoder(DateEncoder),
+    LazyEncoder(LazyEncoder),
+}
+
+impl E {
+    pub(crate) fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>{
+        match self {
+            E::NoopEncoder(e) => e.dump(value),
+            E::DecimalEncoder(e) => e.dump(value),
+            E::DictionaryEncoder(e) => e.dump(value),
+            E::ArrayEncoder(e) => e.dump(value),
+            E::EntityEncoder(e) => e.dump(value),
+            E::UUIDEncoder(e) => e.dump(value),
+            E::EnumEncoder(e) => e.dump(value),
+            E::OptionalEncoder(e) => e.dump(value),
+            E::TupleEncoder(e) => e.dump(value),
+            E::TimeEncoder(e) => e.dump(value),
+            E::DateTimeEncoder(e) => e.dump(value),
+            E::DateEncoder(e) => e.dump(value),
+            E::LazyEncoder(e) => e.dump(value),
+        }
+    }
+    pub(crate) fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        match self {
+            E::NoopEncoder(e) => e.load(value),
+            E::DecimalEncoder(e) => e.load(value),
+            E::DictionaryEncoder(e) => e.load(value),
+            E::ArrayEncoder(e) => e.load(value),
+            E::EntityEncoder(e) => e.load(value),
+            E::UUIDEncoder(e) => e.load(value),
+            E::EnumEncoder(e) => e.load(value),
+            E::OptionalEncoder(e) => e.load(value),
+            E::TupleEncoder(e) => e.load(value),
+            E::TimeEncoder(e) => e.load(value),
+            E::DateTimeEncoder(e) => e.load(value),
+            E::DateEncoder(e) => e.load(value),
+            E::LazyEncoder(e) => e.load(value),
+        }
+    }
+}
+
+
 pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
@@ -65,8 +121,8 @@ impl Encoder for DecimalEncoder {
 
 #[derive(Debug, Clone)]
 pub struct DictionaryEncoder {
-    pub key_encoder: Box<TEncoder>,
-    pub value_encoder: Box<TEncoder>,
+    pub key_encoder: Box<E>,
+    pub value_encoder: Box<E>,
     pub omit_none: bool,
 }
 
@@ -113,7 +169,7 @@ impl Encoder for DictionaryEncoder {
 
 #[derive(Debug, Clone)]
 pub struct ArrayEncoder {
-    pub encoder: Box<TEncoder>,
+    pub encoder: Box<E>,
 }
 
 impl Encoder for ArrayEncoder {
@@ -156,7 +212,7 @@ pub struct EntityEncoder {
 pub struct Field {
     pub(crate) name: Py<PyString>,
     pub(crate) dict_key: Py<PyString>,
-    pub(crate) encoder: Box<TEncoder>,
+    pub(crate) encoder: Box<E>,
     pub(crate) required: bool,
     pub(crate) default: Option<Py<PyAny>>,
     pub(crate) default_factory: Option<Py<PyAny>>,
@@ -244,7 +300,7 @@ impl Encoder for EnumEncoder {
 
 #[derive(Debug, Clone)]
 pub struct OptionalEncoder {
-    pub(crate) encoder: Box<TEncoder>,
+    pub(crate) encoder: Box<E>,
 }
 
 impl Encoder for OptionalEncoder {
@@ -271,7 +327,7 @@ impl Encoder for OptionalEncoder {
 
 #[derive(Debug, Clone)]
 pub struct TupleEncoder {
-    pub(crate) encoders: Vec<Box<TEncoder>>,
+    pub(crate) encoders: Vec<Box<E>>,
 }
 
 impl Encoder for TupleEncoder {
@@ -360,7 +416,7 @@ impl Encoder for DateEncoder {
 
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
-    pub(crate) inner: Arc<AtomicRefCell<Option<EntityEncoder>>>,
+    pub(crate) inner: Arc<AtomicRefCell<Option<E>>>,
 }
 
 impl Encoder for LazyEncoder {
