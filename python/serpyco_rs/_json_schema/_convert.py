@@ -87,7 +87,6 @@ def _(_: describe.TimeType, doc: Optional[str] = None) -> Schema:
         r"?(([+-][0-9][0-9]:?[0-9][0-9])|Z)?$"  # timezone
     )
     return StringType(
-        format="regex",
         pattern=iso8601_pattern,
         description=doc,
     )
@@ -101,7 +100,6 @@ def _(_: describe.DateTimeType, doc: Optional[str] = None) -> Schema:
         r"?(([+-][0-9][0-9]:[0-9][0-9])|Z)?$"  # timezone
     )
     return StringType(
-        format="regex",
         pattern=iso8601_pattern,
         description=doc,
     )
@@ -111,7 +109,6 @@ def _(_: describe.DateTimeType, doc: Optional[str] = None) -> Schema:
 def _(_: describe.DateType, doc: Optional[str] = None) -> Schema:
     iso8601_pattern = r"^[0-9]{4}-[0-9][0-9]-[0-9][0-9]$"  # YYYY-MM-DD
     return StringType(
-        format="regex",
         pattern=iso8601_pattern,
         description=doc,
     )
