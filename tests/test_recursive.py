@@ -44,7 +44,7 @@ def test_describe__recursive_type__parsed():
                                     cls=Node,
                                     name=ANY,
                                     field_format=NoFormat,
-                                    state=ANY,
+                                    meta=ANY,
                                 ),
                             ),
                         ),
@@ -69,3 +69,17 @@ def test_serializer():
 
     assert serializer.dump(linked_list) == {"head": {"next": {"next": None, "value": "2"}, "value": "1"}}
     assert serializer.load({"head": {"next": {"next": None, "value": "2"}, "value": "1"}}) == linked_list
+
+
+@dataclass
+class Foo:
+    value: str
+    next: Optional[list["Foo"]] = None
+
+
+def test_self_recursive_objects_forward_ref():
+    serializer = Serializer(Foo)
+    val = Foo(value="a", next=[Foo(value="b")])
+    raw = {"value": "a", "next": [{"next": None, "value": "b"}]}
+    assert serializer.dump(val) == raw
+    assert serializer.load(raw) == val
