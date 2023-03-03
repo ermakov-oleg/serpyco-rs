@@ -4,7 +4,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Annotated, Any, Optional, TypeVar, Union, cast, get_origin, get_type_hints, overload
+from typing import Annotated, Any, ForwardRef, Optional, TypeVar, Union, cast, get_origin, get_type_hints, overload
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
@@ -202,6 +202,8 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneForm
         # Если передан generic-класс без type-параметров, значит по PEP-484 заменяем все параметры на Any
         parameters = t.__parameters__
         args = (Any,) * len(parameters)
+
+    t = _evaluate_forwardref(t)
 
     generics = dict(zip(parameters, args))
     filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
@@ -457,3 +459,15 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
 def _generate_name(cls: Any, field_format: FiledFormat, none_format: NoneFormat) -> str:
     nones = "omit_nones" if none_format.omit else "keep_nones"
     return f"{cls.__module__}.{cls.__name__}[{field_format.format.value},{nones}]"
+
+
+def _evaluate_forwardref(t: type[_T]) -> type[_T]:
+    if not isinstance(t, ForwardRef):
+        return t
+
+    if t.__module__ in sys.modules:
+        globalns = sys.modules[t.__module__].__dict__.copy()
+    else:
+        globalns = {}
+
+    return t._evaluate(globalns, {}, set())
