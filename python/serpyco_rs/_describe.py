@@ -174,17 +174,22 @@ class RecursionHolder(Type):
     cls: Any
     name: str
     field_format: FiledFormat
-    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]
+    meta: "_Meta"
     none_format: NoneFormat = KeepNone
 
     def get_type(self) -> Type:
-        if type_ := self.state[(self.cls, self.field_format, self.none_format)]:
+        if type_ := self.meta.state[(self.cls, self.field_format, self.none_format)]:
             return type_
         raise RuntimeError("Recursive type not resolved")
 
 
-def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]] = None) -> Type:
-    state = state or {}
+@dataclasses.dataclass
+class _Meta:
+    globals: dict[str, Any]
+    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]
+
+
+def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
@@ -203,20 +208,23 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneForm
         parameters = t.__parameters__
         args = (Any,) * len(parameters)
 
-    t = _evaluate_forwardref(t)
+    if not meta:
+        meta = _Meta(globals=_get_globals(t), state={})
+
+    t = _evaluate_forwardref(t, meta)
 
     generics = dict(zip(parameters, args))
     filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
     annotation_wrapper = _wrap_annotated([filed_format, none_format])
 
-    if (t, filed_format, none_format) in state:
+    if (t, filed_format, none_format) in meta.state:
         return RecursionHolder(
             cls=t,
             name=_generate_name(t, filed_format, none_format),
             field_format=filed_format,
             none_format=none_format,
-            state=state,
+            meta=meta,
         )
 
     if t is Any:
@@ -268,14 +276,14 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneForm
 
         if t in {Sequence, list}:
             return ArrayType(
-                item_type=(describe_type(annotation_wrapper(args[0]), state) if args else AnyType()),
+                item_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType()),
                 is_sequence=t is Sequence,
             )
 
         if t in {Mapping, dict}:
             return DictionaryType(
-                key_type=(describe_type(annotation_wrapper(args[0]), state) if args else AnyType()),
-                value_type=(describe_type(annotation_wrapper(args[1]), state) if args else AnyType()),
+                key_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType()),
+                value_type=(describe_type(annotation_wrapper(args[1]), meta) if args else AnyType()),
                 is_mapping=t is Mapping,
                 omit_none=none_format.omit,
             )
@@ -283,28 +291,28 @@ def describe_type(t: Any, state: Optional[dict[tuple[type, FiledFormat, NoneForm
         if t is tuple:
             if not args or Ellipsis in args:
                 raise RuntimeError("Variable length tuples are not supported")
-            return TupleType(item_types=[describe_type(annotation_wrapper(arg), state) for arg in args])
+            return TupleType(item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args])
 
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t)
 
         if dataclasses.is_dataclass(t):
-            state[(t, filed_format, none_format)] = None
-            entity_type = _describe_dataclass(t, generics, filed_format, none_format, state)
-            state[(t, filed_format, none_format)] = entity_type
+            meta.state[(t, filed_format, none_format)] = None
+            entity_type = _describe_dataclass(t, generics, filed_format, none_format, meta)
+            meta.state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
         if attr and attr.has(t):
-            state[(t, filed_format, none_format)] = None
-            entity_type = _describe_attrs(t, generics, filed_format, none_format, state)
-            state[(t, filed_format, none_format)] = entity_type
+            meta.state[(t, filed_format, none_format)] = None
+            entity_type = _describe_attrs(t, generics, filed_format, none_format, meta)
+            meta.state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
     if t in {Union}:
         if len(args) != 2 or _NoneType not in args:
             raise RuntimeError(f"Only Unions of one type with None are supported: {t}, {args}")
         inner = args[1] if args[0] is _NoneType else args[0]
-        return OptionalType(describe_type(annotation_wrapper(inner), state))
+        return OptionalType(describe_type(annotation_wrapper(inner), meta))
 
     if isinstance(t, TypeVar):
         raise RuntimeError(f"Unfilled TypeVar: {t}")
@@ -317,7 +325,7 @@ def _describe_dataclass(
     generics: Mapping[TypeVar, Any],
     cls_filed_format: FiledFormat,
     cls_none_format: NoneFormat,
-    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]],
+    meta: _Meta,
 ) -> EntityType:
     docs = get_attributes_doc(t)
     try:
@@ -325,12 +333,14 @@ def _describe_dataclass(
     except Exception:  # pylint: disable=broad-except
         types = {}
 
+    meta = dataclasses.replace(meta, globals=_get_globals(t))
+
     fields = []
     for field in dataclasses.fields(t):
         type_ = _replace_generics(types.get(field.name, field.type), generics)
         type_ = Annotated[type_, cls_filed_format, cls_none_format]
 
-        field_type = describe_type(type_, state)
+        field_type = describe_type(type_, meta)
         metadata = _get_annotated_metadata(type_)
         alias = _find_metadata(metadata, Alias)
 
@@ -363,7 +373,7 @@ def _describe_attrs(
     generics: Mapping[TypeVar, Any],
     cls_filed_format: FiledFormat,
     cls_none_format: NoneFormat,
-    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]],
+    meta: _Meta,
 ) -> EntityType:
     assert attr is not None
     docs = get_attributes_doc(t)
@@ -371,6 +381,8 @@ def _describe_attrs(
         types = get_type_hints(t, include_extras=True)
     except Exception:  # pylint: disable=broad-except
         types = {}
+
+    meta = dataclasses.replace(meta, globals=_get_globals(t))
     fields = []
     for field in attr.fields(t):  # pyright: ignore
         default = NOT_SET
@@ -385,7 +397,7 @@ def _describe_attrs(
         type_ = Annotated[type_, cls_filed_format, cls_none_format]
 
         metadata = _get_annotated_metadata(type_)
-        field_type = describe_type(type_, state)
+        field_type = describe_type(type_, meta)
         alias = _find_metadata(metadata, Alias)
 
         fields.append(
@@ -461,13 +473,14 @@ def _generate_name(cls: Any, field_format: FiledFormat, none_format: NoneFormat)
     return f"{cls.__module__}.{cls.__name__}[{field_format.format.value},{nones}]"
 
 
-def _evaluate_forwardref(t: type[_T]) -> type[_T]:
+def _get_globals(t: Any) -> dict[str, Any]:
+    if t.__module__ in sys.modules:
+        return sys.modules[t.__module__].__dict__.copy()
+    return {}
+
+
+def _evaluate_forwardref(t: type[_T], meta: _Meta) -> type[_T]:
     if not isinstance(t, ForwardRef):
         return t
 
-    if t.__module__ in sys.modules:
-        globalns = sys.modules[t.__module__].__dict__.copy()
-    else:
-        globalns = {}
-
-    return t._evaluate(globalns, {}, set())
+    return t._evaluate(meta.globals, {}, set())

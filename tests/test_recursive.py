@@ -44,7 +44,7 @@ def test_describe__recursive_type__parsed():
                                     cls=Node,
                                     name=ANY,
                                     field_format=NoFormat,
-                                    state=ANY,
+                                    meta=ANY,
                                 ),
                             ),
                         ),
