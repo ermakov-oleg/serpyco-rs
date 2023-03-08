@@ -1,8 +1,20 @@
 from functools import singledispatch
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from .. import _describe as describe
-from ._entities import ArrayType, Boolean, IntegerType, Null, NumberType, ObjectType, RefType, Schema, StringType
+from ._entities import (
+    ArrayType,
+    Boolean,
+    Discriminator,
+    IntegerType,
+    Null,
+    NumberType,
+    ObjectType,
+    RefType,
+    Schema,
+    StringType,
+    UnionType,
+)
 
 
 def get_json_schema(t: describe.Type) -> dict[str, Any]:
@@ -177,3 +189,24 @@ def _(_: describe.AnyType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
     return RefType(description=doc, ref=f"#/definitions/{holder.name}")
+
+
+@to_json_schema.register
+def _(arg: describe.LiteralType, doc: Optional[str] = None) -> Schema:
+    return Schema(
+        enum=[item for item in arg.args],
+        description=doc,
+    )
+
+
+@to_json_schema.register
+def _(arg: describe.UnionType, doc: Optional[str] = None) -> Schema:
+    objects = {name: cast(ObjectType, to_json_schema(t)) for name, t in arg.item_types.items()}
+    return UnionType(
+        oneOf=list(objects.values()),
+        discriminator=Discriminator(
+            property_name=arg.discriminator,
+            mapping={name: f"#/definitions/{val.name}" for name, val in objects.items()},
+        ),
+        description=doc,
+    )

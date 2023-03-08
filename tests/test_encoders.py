@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -189,6 +190,12 @@ def test_date():
     serializer = Serializer(date)
     assert serializer.load("2022-10-14") == date(2022, 10, 14)
     assert serializer.dump(date(2022, 10, 13)) == "2022-10-13"
+
+
+def test_literal():
+    serializer = Serializer(Literal["foo", "bar"])
+    assert serializer.load("bar") == "bar"
+    assert serializer.dump("foo") == "foo"
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="New style unions available after 3.10")

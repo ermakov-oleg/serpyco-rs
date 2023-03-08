@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Generic, Optional, Sequence, TypeVar, Union
+from typing import Annotated, Any, Generic, Literal, Optional, Sequence, TypeVar, Union
 from unittest import mock
 from unittest.mock import ANY
 from uuid import UUID
@@ -25,14 +25,16 @@ from serpyco_rs._describe import (
     EnumType,
     FloatType,
     IntegerType,
+    LiteralType,
     OptionalType,
     StringType,
     TimeType,
     TupleType,
+    UnionType,
     UUIDType,
     describe_type,
 )
-from serpyco_rs.metadata import CamelCase, Max, MaxLength, Min, MinLength, NoFormat, Places
+from serpyco_rs.metadata import CamelCase, Discriminator, Max, MaxLength, Min, MinLength, NoFormat, Places
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -511,7 +513,7 @@ def test_describe__other_unions__error():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(Union[int, str])
 
-    assert exc_info.match("Only Unions of one type with None are supported")
+    assert exc_info.match("For support Unions need specify serpyco_rs.metadata.Discriminator")
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason="New style unions available after 3.10")
@@ -579,6 +581,79 @@ def test_describe__dataclass_field_format__parsed():
                 dict_key="someFiled",
                 type=StringType(),
             ),
+        ],
+        doc=mock.ANY,
+    )
+
+
+def test_describe__literal():
+    assert describe_type(Literal["foo", "bar"]) == LiteralType(args=("foo", "bar"))
+
+
+def test_describe__tagged_union():
+    @dataclass
+    class Foo:
+        val: int
+        type: Literal["foo"]
+
+    @dataclass
+    class Bar:
+        val: str
+        type: Literal["bar"]
+
+    @dataclass
+    class Base:
+        field: Annotated[Union[Foo, Bar], Discriminator("type")]
+
+    assert describe_type(Base) == EntityType(
+        cls=Base,
+        name=mock.ANY,
+        fields=[
+            EntityField(
+                name="field",
+                dict_key="field",
+                type=UnionType(
+                    item_types={
+                        "foo": EntityType(
+                            cls=Foo,
+                            name=mock.ANY,
+                            fields=[
+                                EntityField(
+                                    name="val",
+                                    dict_key="val",
+                                    type=IntegerType(min=None, max=None),
+                                ),
+                                EntityField(
+                                    name="type",
+                                    dict_key="type",
+                                    type=LiteralType(args=("foo",)),
+                                    is_discriminator_field=True,
+                                ),
+                            ],
+                            doc=mock.ANY,
+                        ),
+                        "bar": EntityType(
+                            cls=Bar,
+                            name=mock.ANY,
+                            fields=[
+                                EntityField(
+                                    name="val",
+                                    dict_key="val",
+                                    type=StringType(min_length=None, max_length=None),
+                                ),
+                                EntityField(
+                                    name="type",
+                                    dict_key="type",
+                                    type=LiteralType(args=("bar",)),
+                                    is_discriminator_field=True,
+                                ),
+                            ],
+                            doc=mock.ANY,
+                        ),
+                    },
+                    discriminator="type",
+                ),
+            )
         ],
         doc=mock.ANY,
     )

@@ -4,15 +4,28 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Annotated, Any, ForwardRef, Optional, TypeVar, Union, cast, get_origin, get_type_hints, overload
+from typing import (
+    Annotated,
+    Any,
+    ForwardRef,
+    Literal,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
-from typing_extensions import assert_never
+from typing_extensions import assert_never, get_args
 
 from ._utils import to_camelcase
 from .metadata import (
     Alias,
+    Discriminator,
     FiledFormat,
     Format,
     KeepNone,
@@ -27,9 +40,9 @@ from .metadata import (
 )
 
 if sys.version_info >= (3, 10):  # pragma: no cover
-    from types import UnionType
+    from types import UnionType as StdUnionType
 else:  # pragma: no cover
-    UnionType = None
+    StdUnionType = None
 
 try:
     import attr
@@ -116,6 +129,11 @@ class EnumType(Type):
 
 
 @dataclasses.dataclass
+class LiteralType(Type):
+    args: Sequence[str]
+
+
+@dataclasses.dataclass
 class EntityField:
     name: str
     dict_key: str
@@ -124,10 +142,14 @@ class EntityField:
     default: Any = NOT_SET
     default_factory: Union[Callable[[], Any], NotSet] = NOT_SET
     is_property: bool = False
+    is_discriminator_field: bool = False
 
     @property
     def required(self) -> bool:
-        return not (self.is_property or self.default != NOT_SET or self.default_factory != NOT_SET)
+        return (
+            not (self.is_property or self.default != NOT_SET or self.default_factory != NOT_SET)
+            or self.is_discriminator_field
+        )
 
 
 @dataclasses.dataclass
@@ -165,6 +187,12 @@ class TupleType(Type):
 
 
 @dataclasses.dataclass
+class UnionType(Type):
+    item_types: Mapping[str, Type]
+    discriminator: str
+
+
+@dataclasses.dataclass
 class AnyType(Type):
     pass
 
@@ -187,6 +215,7 @@ class RecursionHolder(Type):
 class _Meta:
     globals: dict[str, Any]
     state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]
+    discriminator_field: Optional[str] = None
 
 
 def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
@@ -199,8 +228,8 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         parameters = getattr(t.__origin__, "__parameters__", ())
         args = t.__args__
         t = t.__origin__
-    # UnionType has no __origin__
-    elif UnionType and isinstance(t, UnionType):  # type: ignore[truthy-function]
+    # StdUnionType has no __origin__
+    elif StdUnionType and isinstance(t, StdUnionType):  # type: ignore[truthy-function]
         args = t.__args__
         t = Union
     elif hasattr(t, "__parameters__"):
@@ -302,17 +331,39 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
             meta.state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
-        if attr and attr.has(t):
+        if _is_attrs(t):
             meta.state[(t, filed_format, none_format)] = None
             entity_type = _describe_attrs(t, generics, filed_format, none_format, meta)
             meta.state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
+    if _is_literal_type(t):
+        if args and all((isinstance(arg, str) for arg in args)):
+            return LiteralType(args=args)
+        raise RuntimeError("Supported only Literal[str, ...]")
+
     if t in {Union}:
-        if len(args) != 2 or _NoneType not in args:
-            raise RuntimeError(f"Only Unions of one type with None are supported: {t}, {args}")
-        inner = args[1] if args[0] is _NoneType else args[0]
-        return OptionalType(describe_type(annotation_wrapper(inner), meta))
+        if len(args) == 2 and _NoneType in args:
+            inner = args[1] if args[0] is _NoneType else args[0]
+            return OptionalType(describe_type(annotation_wrapper(inner), meta))
+
+        discriminator = _find_metadata(metadata, Discriminator)
+        if not discriminator:
+            raise RuntimeError("For support Unions need specify serpyco_rs.metadata.Discriminator")
+
+        if not all((dataclasses.is_dataclass(arg) or _is_attrs(arg) for arg in args)):
+            raise RuntimeError(
+                f'Unions supported only for dataclasses or attrs. Provided: {t}[{",".join(map(str, args))}]'
+            )
+
+        meta = dataclasses.replace(meta, discriminator_field=discriminator.name)
+        return UnionType(
+            item_types={
+                _get_discriminator_value(arg, discriminator.name): describe_type(annotation_wrapper(arg), meta)
+                for arg in args
+            },
+            discriminator=discriminator.name,
+        )
 
     if isinstance(t, TypeVar):
         raise RuntimeError(f"Unfilled TypeVar: {t}")
@@ -333,15 +384,16 @@ def _describe_dataclass(
     except Exception:  # pylint: disable=broad-except
         types = {}
 
-    meta = dataclasses.replace(meta, globals=_get_globals(t))
+    discriminator_field = meta.discriminator_field
+    meta = dataclasses.replace(meta, globals=_get_globals(t), discriminator_field=None)
 
     fields = []
     for field in dataclasses.fields(t):
         type_ = _replace_generics(types.get(field.name, field.type), generics)
         type_ = Annotated[type_, cls_filed_format, cls_none_format]
 
-        field_type = describe_type(type_, meta)
         metadata = _get_annotated_metadata(type_)
+        field_type = describe_type(type_, meta)
         alias = _find_metadata(metadata, Alias)
 
         fields.append(
@@ -355,6 +407,7 @@ def _describe_dataclass(
                     field.default_factory if field.default_factory is not dataclasses.MISSING else NOT_SET
                 ),
                 is_property=False,
+                is_discriminator_field=field.name == discriminator_field,
             )
         )
 
@@ -382,7 +435,9 @@ def _describe_attrs(
     except Exception:  # pylint: disable=broad-except
         types = {}
 
-    meta = dataclasses.replace(meta, globals=_get_globals(t))
+    discriminator_field = meta.discriminator_field
+    meta = dataclasses.replace(meta, globals=_get_globals(t), discriminator_field=None)
+
     fields = []
     for field in attr.fields(t):  # pyright: ignore
         default = NOT_SET
@@ -409,6 +464,7 @@ def _describe_attrs(
                 default=default,
                 default_factory=default_factory,
                 is_property=False,
+                is_discriminator_field=field.name == discriminator_field,
             )
         )
     return EntityType(
@@ -417,6 +473,7 @@ def _describe_attrs(
         fields=fields,
         omit_none=cls_none_format is OmitNone,
         generics=generics,
+        doc=t.__doc__,
     )
 
 
@@ -484,3 +541,34 @@ def _evaluate_forwardref(t: type[_T], meta: _Meta) -> type[_T]:
         return t
 
     return t._evaluate(meta.globals, {}, set())
+
+
+def _get_discriminator_value(t: Any, name: str) -> str:
+    fields = attr.fields(t) if attr and _is_attrs(t) else dataclasses.fields(t)
+    for field in fields:
+        if field.name == name:
+            if _is_str_literal(field.type):
+                args = get_args(field.type)
+                return cast(str, args[0])
+            else:
+                raise RuntimeError(
+                    f'Type {t} has invalid discriminator field "{name}" with type "{field.type!r}". '
+                    f"Discriminator supports only Literal[<str>]."
+                )
+    raise RuntimeError(f'Type {t} does not have discriminator field "{name}"')
+
+
+def _is_str_literal(t: Any) -> bool:
+    if _is_literal_type(t):
+        args = get_args(t)
+        if args and all((isinstance(arg, str) for arg in args)):
+            return True
+    return False
+
+
+def _is_literal_type(t: Any) -> bool:
+    return t is Literal or get_origin(t) is Literal
+
+
+def _is_attrs(t: Any) -> bool:
+    return attr is not None and attr.has(t)

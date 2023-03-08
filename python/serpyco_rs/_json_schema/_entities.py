@@ -147,3 +147,27 @@ class RefType(Schema):
             "$ref": self.ref,
             **data,
         }
+
+
+@dataclass
+class UnionType(Schema):
+    discriminator: Discriminator | None = None
+
+    def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
+        data = super().dump(definitions)
+        return {
+            "discriminator": self.discriminator.dump() if self.discriminator else None,
+            **data,
+        }
+
+
+@dataclass
+class Discriminator:
+    property_name: str
+    mapping: dict[str, str]
+
+    def dump(self) -> dict[str, Any]:
+        return {
+            "propertyName": self.property_name,
+            "mapping": self.mapping,
+        }

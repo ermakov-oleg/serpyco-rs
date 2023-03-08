@@ -3,13 +3,14 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional, Union
+from unittest import mock
 from uuid import UUID
 
 import pytest
 from serpyco_rs._describe import describe_type
 from serpyco_rs._json_schema import get_json_schema
-from serpyco_rs.metadata import Alias, CamelCase, Max, MaxLength, Min, MinLength, OmitNone
+from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, OmitNone
 
 
 def test_to_json_schema():
@@ -213,5 +214,66 @@ def test_to_json_schema__recursive_type():
                 "required": ["data"],
                 "type": "object",
             }
+        },
+    }
+
+
+def test_to_json_schema__literal():
+    schema = get_json_schema(describe_type(Literal["foo"]))
+    assert schema == {"$schema": "https://json-schema.org/draft/2020-12/schema", "definitions": {}, "enum": ["foo"]}
+
+
+def test_to_json_schema__tagged_union():
+    @dataclass
+    class Foo:
+        val: int
+        type: Literal["foo"]
+
+    @dataclass
+    class Bar:
+        val: str
+        type: Literal["bar"] = "bar"
+
+    @dataclass
+    class Base:
+        field: Annotated[Union[Foo, Bar], Discriminator("type")]
+
+    schema = get_json_schema(describe_type(Base))
+    assert schema == {
+        "$ref": "#/definitions/tests._json_schema.test_convert.Base[no_format,keep_nones]",
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "definitions": {
+            "tests._json_schema.test_convert.Bar[no_format,keep_nones]": {
+                "description": mock.ANY,
+                "properties": {"type": {"enum": ["bar"]}, "val": {"type": "string"}},
+                "required": ["val", "type"],
+                "type": "object",
+            },
+            "tests._json_schema.test_convert.Base[no_format,keep_nones]": {
+                "description": mock.ANY,
+                "properties": {
+                    "field": {
+                        "discriminator": {
+                            "mapping": {
+                                "bar": "#/definitions/tests._json_schema.test_convert.Bar[no_format,keep_nones]",
+                                "foo": "#/definitions/tests._json_schema.test_convert.Foo[no_format,keep_nones]",
+                            },
+                            "propertyName": "type",
+                        },
+                        "oneOf": [
+                            {"$ref": "#/definitions/tests._json_schema.test_convert.Foo[no_format,keep_nones]"},
+                            {"$ref": "#/definitions/tests._json_schema.test_convert.Bar[no_format,keep_nones]"},
+                        ],
+                    }
+                },
+                "required": ["field"],
+                "type": "object",
+            },
+            "tests._json_schema.test_convert.Foo[no_format,keep_nones]": {
+                "description": mock.ANY,
+                "properties": {"type": {"enum": ["foo"]}, "val": {"type": "integer"}},
+                "required": ["val", "type"],
+                "type": "object",
+            },
         },
     }

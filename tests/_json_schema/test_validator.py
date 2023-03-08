@@ -4,14 +4,14 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Literal, Optional, Union
 from unittest import mock
 
 import pytest
 from serpyco_rs._describe import describe_type
 from serpyco_rs._json_schema import JsonschemaRSValidator, get_json_schema
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
-from serpyco_rs.metadata import Max, MaxLength, Min, MinLength
+from serpyco_rs.metadata import Discriminator, Max, MaxLength, Min, MinLength
 
 
 class EnumTest(Enum):
@@ -22,6 +22,18 @@ class EnumTest(Enum):
 @dataclass
 class EntityTest:
     key: str
+
+
+@dataclass
+class Foo:
+    type: Literal["foo"]
+    val: int
+
+
+@dataclass
+class Bar:
+    type: Literal["bar"]
+    val: str
 
 
 @pytest.mark.parametrize(
@@ -62,6 +74,8 @@ class EntityTest:
         (list[int], [1, 2]),
         (dict[str, int], {"a": 1}),
         (tuple[str, int, bool], ["1", 2, True]),
+        (Annotated[Union[Foo, Bar], Discriminator("type")], {"type": "foo", "val": 1}),
+        (Annotated[Union[Foo, Bar], Discriminator("type")], {"type": "bar", "val": "1"}),
         (Any, ["1", 2, True]),
         (Any, {}),
     ),
@@ -160,6 +174,21 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
             _mk_e(m='["1",1,true,0] has more than 3 items', sp="maxItems"),
         ),
         # (tuple[str, bool], [1, '1'], ''),   # todo: validation don't work
+        (
+            Annotated[Union[Foo, Bar], Discriminator("type")],
+            {"type": "buz"},
+            _mk_e(m='{"type":"buz"} is not valid under any of the given schemas', sp="oneOf"),
+        ),
+        (
+            Annotated[Union[Foo, Bar], Discriminator("type")],
+            {"type": "foo", "val": "123"},
+            _mk_e(sp="oneOf"),
+        ),
+        (
+            Annotated[Union[Foo, Bar], Discriminator("type")],
+            {"type": "bar", "val": 1},
+            _mk_e(sp="oneOf"),
+        ),
     ),
 )
 def test_validate__validation_error(cls, value, err):
