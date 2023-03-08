@@ -60,7 +60,8 @@ There is support for generic types from the standard typing module:
 * Mapping
 * Sequence
 * Tuple (fixed size)
-
+* Literal[str, ...]
+* Tagged unions (restricted)
 
 ## Benchmark
 
@@ -172,10 +173,40 @@ class A:
     required_val: bool | None
     optional_val: bool | None = None
 
-serializer = Serializer(A, omit_none=True) # or Serializer(Annotated[A, OmitNone])
+ser = Serializer(A, omit_none=True) # or Serializer(Annotated[A, OmitNone])
 
-print(serializer.dump(A(required_val=None, optional_val=None)))
+print(ser.dump(A(required_val=None, optional_val=None)))
 >>> {'required_val': None}
+```
+
+### Tagged unions
+
+Supports tagged joins with discriminator field.
+
+All classes in the union must be dataclasses or attrs with discriminator field `Literal[str]`.
+
+**The discriminator field is always mandatory.**
+
+```python
+from typing import Annotated, Literal
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Discriminator
+
+@dataclass
+class Foo:
+    type: Literal['foo']
+    value: int
+
+@dataclass(kw_only=True)
+class Bar:
+    type: Literal['bar'] = 'bar'
+    value: str
+
+ser = Serializer(list[Annotated[Foo | Bar, Discriminator('type')]])
+
+print(ser.load([{'type': 'foo', 'value': 1}, {'type': 'bar', 'value': 'buz'}]))
+>>> [Foo(type='foo', value=1), Bar(type='bar', value='buz')]
 ```
 
 ### Min / Max
