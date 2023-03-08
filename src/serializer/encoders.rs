@@ -10,6 +10,7 @@ use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::types::PyString;
 use pyo3::{AsPyPointer, Py, PyAny, PyResult};
 use pyo3_ffi::PyObject;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -310,6 +311,42 @@ impl Encoder for TupleEncoder {
             ffi!(Py_DECREF(item));
         }
         Ok(tuple)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UnionEncoder {
+    pub(crate) encoders: HashMap<String, Box<TEncoder>>,
+    pub(crate) discriminator: Py<PyString>,
+}
+
+impl Encoder for UnionEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let discriminator = ffi!(PyObject_GetAttr(value, self.discriminator.as_ptr())); // val RC +1
+        let key = py_str_to_str(discriminator)?;
+        let encoder = self
+            .encoders
+            .get(key)
+            .ok_or(ValidationError::new_err(format!(
+                "No encoder for '{key}' discriminator"
+            )))?;
+        ffi!(Py_DECREF(discriminator));
+        encoder.dump(value)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let discriminator = py_object_get_item(value, self.discriminator.as_ptr())?; // val RC +1
+        let key = py_str_to_str(discriminator)?;
+        let encoder = self
+            .encoders
+            .get(key)
+            .ok_or(ValidationError::new_err(format!(
+                "No encoder for '{key}' discriminator"
+            )))?;
+        ffi!(Py_DECREF(discriminator));
+        encoder.load(value)
     }
 }
 

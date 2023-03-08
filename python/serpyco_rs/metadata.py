@@ -53,5 +53,10 @@ class NoneFormat:
     omit: bool
 
 
+@dataclass(frozen=True)
+class Discriminator:
+    name: str
+
+
 KeepNone: NoneFormat = NoneFormat(False)
 OmitNone: NoneFormat = NoneFormat(True)

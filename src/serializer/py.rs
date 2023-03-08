@@ -120,6 +120,7 @@ pub fn py_object_get_item(
     obj: *mut ffi::PyObject,
     key: *mut ffi::PyObject,
 ) -> PyResult<*mut ffi::PyObject> {
+    // Obj RC +1
     from_ptr_or_err(ffi!(PyObject_GetItem(obj, key)))
 }
 

@@ -1,9 +1,9 @@
 use crate::serializer::encoders::{
-    DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder,
+    DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder, UnionEncoder,
 };
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
-use pyo3::types::PyString;
+use pyo3::types::{PyDict, PyString};
 use pyo3::{AsPyPointer, PyAny, PyResult};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -63,9 +63,13 @@ pub fn get_encoder(
     encoder_state: &mut HashMap<usize, EncoderStateValue>,
 ) -> PyResult<Box<TEncoder>> {
     let encoder: Box<TEncoder> = match obj_type {
-        Type::String | Type::Integer | Type::Bytes | Type::Float | Type::Boolean | Type::Any => {
-            Box::new(NoopEncoder)
-        }
+        Type::String
+        | Type::Integer
+        | Type::Bytes
+        | Type::Float
+        | Type::Boolean
+        | Type::Any
+        | Type::LiteralType(_) => Box::new(NoopEncoder),
         Type::Decimal => Box::new(DecimalEncoder),
         Type::Optional(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
@@ -100,6 +104,26 @@ pub fn get_encoder(
                 encoders.push(encoder);
             }
             Box::new(TupleEncoder { encoders })
+        }
+        Type::UnionType(type_info) => {
+            let discriminator_raw = type_info.getattr(py, "discriminator")?;
+            let discriminator: &PyString = discriminator_raw.as_ref(py).downcast()?;
+
+            let item_types_raw = type_info.getattr(py, "item_types")?;
+            let item_types: &PyDict = item_types_raw.as_ref(py).downcast()?;
+
+            let mut encoders = HashMap::new();
+
+            for (key, value) in item_types.iter() {
+                let key: &PyString = key.downcast()?;
+                let encoder = get_encoder(py, get_object_type(value)?, encoder_state)?;
+                encoders.insert(key.to_string_lossy().into(), encoder);
+            }
+
+            Box::new(UnionEncoder {
+                encoders,
+                discriminator: discriminator.into(),
+            })
         }
         Type::Entity(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
