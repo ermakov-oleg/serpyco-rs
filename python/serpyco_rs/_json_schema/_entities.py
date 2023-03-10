@@ -94,6 +94,10 @@ class ObjectType(Schema):
     additionalProperties: bool | Schema | None = None
     required: list[str] | None = None
 
+    @property
+    def ref(self) -> str:
+        return f"#/definitions/{self.name}"
+
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
@@ -111,7 +115,7 @@ class ObjectType(Schema):
             return data
         definitions[self.name] = data
         return {
-            "$ref": f"#/definitions/{self.name}",
+            "$ref": self.ref,
         }
 
 
