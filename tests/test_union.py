@@ -1,5 +1,6 @@
+import sys
 from dataclasses import dataclass
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 
 import pytest
 from serpyco_rs import Serializer
@@ -86,3 +87,55 @@ def test_tagged_union__unsupported_types():
     assert exc_info.value.args[0] == (
         "Unions supported only for dataclasses or attrs. Provided: typing.Union[<class 'int'>,<class 'str'>]"
     )
+
+
+@dataclass
+class A:
+    type: Literal["A"]
+    params: int
+    children: Optional[list["ComponentsT"]] = None
+
+
+@dataclass
+class B:
+    type: Literal["B"]
+    params: str
+    children: Optional[list["ComponentsT"]] = None
+
+
+ComponentsT = Annotated[Union[A, B], Discriminator("type")]
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="requires python3.11 or higher")
+def test_tagged_union__with_forward_refs():
+    serializer = Serializer(ComponentsT, omit_none=True)
+    data: ComponentsT = A(
+        type="A",
+        params=123,
+        children=[
+            A(
+                type="A",
+                params=1234,
+            ),
+            B(
+                type="B",
+                params="foo",
+                children=[
+                    B(
+                        type="B",
+                        params="bar",
+                    )
+                ],
+            ),
+        ],
+    )
+    raw_data = {
+        "type": "A",
+        "params": 123,
+        "children": [
+            {"params": 1234, "type": "A"},
+            {"children": [{"params": "bar", "type": "B"}], "params": "foo", "type": "B"},
+        ],
+    }
+    assert serializer.dump(data) == raw_data
+    assert serializer.load(raw_data) == data

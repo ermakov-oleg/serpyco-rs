@@ -1,5 +1,11 @@
+import sys
 from functools import singledispatch
-from typing import Any, Optional, cast
+from typing import Any, Optional, Union, cast
+
+if sys.version_info >= (3, 10):
+    from typing import TypeGuard
+else:
+    from typing_extensions import TypeGuard
 
 from .. import _describe as describe
 from ._entities import (
@@ -201,12 +207,23 @@ def _(arg: describe.LiteralType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(arg: describe.UnionType, doc: Optional[str] = None) -> Schema:
-    objects = {name: cast(ObjectType, to_json_schema(t)) for name, t in arg.item_types.items()}
+    objects = {
+        name: schema
+        for name, t in arg.item_types.items()
+        if (schema := to_json_schema(t)) and _check_unions_schema_types(schema)
+    }
+
     return UnionType(
         oneOf=list(objects.values()),
         discriminator=Discriminator(
             property_name=arg.discriminator,
-            mapping={name: f"#/definitions/{val.name}" for name, val in objects.items()},
+            mapping={name: cast(str, val.ref) for name, val in objects.items()},
         ),
         description=doc,
     )
+
+
+def _check_unions_schema_types(schema: Schema) -> TypeGuard[Union[ObjectType, RefType]]:
+    if isinstance(schema, (ObjectType, RefType)):
+        return True
+    raise RuntimeError(f"Unions schema items must be ObjectType or RefType. Current: {schema}")
