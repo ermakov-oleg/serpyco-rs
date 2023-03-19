@@ -95,7 +95,7 @@ if sys.version_info >= (3, 10):
             (int | None, 2),
         ),
     )
-    def test_validate(cls, value):
+    def test_validate_new_union(cls, value):
         v = JsonschemaRSValidator(get_json_schema(describe_type(cls)))
         v.validate(value)
 
