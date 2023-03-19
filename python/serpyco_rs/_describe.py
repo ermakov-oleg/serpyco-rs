@@ -8,6 +8,7 @@ from typing import (
     Annotated,
     Any,
     ForwardRef,
+    Generic,
     Literal,
     Optional,
     TypeVar,
@@ -272,7 +273,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         if simple := simple_type_mapping.get(t):
             return simple()
 
-        number_type_mapping: Mapping[type, type[IntegerType] | type[FloatType]] = {
+        number_type_mapping: Mapping[type, Union[type[IntegerType], type[FloatType]]] = {
             int: IntegerType,
             float: FloatType,
         }
@@ -325,15 +326,9 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t)
 
-        if dataclasses.is_dataclass(t):
+        if dataclasses.is_dataclass(t) or _is_attrs(t):
             meta.state[(t, filed_format, none_format)] = None
-            entity_type = _describe_dataclass(t, generics, filed_format, none_format, meta)
-            meta.state[(t, filed_format, none_format)] = entity_type
-            return entity_type
-
-        if _is_attrs(t):
-            meta.state[(t, filed_format, none_format)] = None
-            entity_type = _describe_attrs(t, generics, filed_format, none_format, meta)
+            entity_type = _describe_entity(t, generics, filed_format, none_format, meta)
             meta.state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
@@ -371,8 +366,16 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
     raise RuntimeError(f"Unknown type {t!r}")
 
 
-def _describe_dataclass(
-    t: type[Any],
+@dataclasses.dataclass
+class _Field(Generic[_T]):
+    name: str
+    type: type[_T]
+    default: Union[_T, NotSet] = NOT_SET
+    default_factory: Union[Callable[[], _T], NotSet] = NOT_SET
+
+
+def _describe_entity(
+    t: Any,
     generics: Mapping[TypeVar, Any],
     cls_filed_format: FiledFormat,
     cls_none_format: NoneFormat,
@@ -388,7 +391,7 @@ def _describe_dataclass(
     meta = dataclasses.replace(meta, globals=_get_globals(t), discriminator_field=None)
 
     fields = []
-    for field in dataclasses.fields(t):
+    for field in _get_entity_fields(t):
         type_ = _replace_generics(types.get(field.name, field.type), generics)
         type_ = Annotated[type_, cls_filed_format, cls_none_format]
 
@@ -402,79 +405,56 @@ def _describe_dataclass(
                 dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
                 doc=docs.get(field.name),
                 type=field_type,
-                default=(field.default if field.default is not dataclasses.MISSING else NOT_SET),
-                default_factory=(
-                    field.default_factory if field.default_factory is not dataclasses.MISSING else NOT_SET
+                default=field.default,
+                default_factory=field.default_factory,
+                is_property=False,
+                is_discriminator_field=field.name == discriminator_field,
+            )
+        )
+
+    return EntityType(
+        cls=t,
+        name=_generate_name(t, cls_filed_format, cls_none_format),
+        fields=fields,
+        omit_none=cls_none_format is OmitNone,
+        generics=generics,
+        doc=t.__doc__,
+    )
+
+
+def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
+    if dataclasses.is_dataclass(t):
+        return [
+            _Field(
+                name=f.name,
+                type=f.type,
+                default=(f.default if f.default is not dataclasses.MISSING else NOT_SET),
+                default_factory=(f.default_factory if f.default_factory is not dataclasses.MISSING else NOT_SET),
+            )
+            for f in dataclasses.fields(t)
+        ]
+    if _is_attrs(t):
+        assert attr
+        return [
+            _Field(
+                name=f.name,
+                type=f.type,
+                default=(
+                    f.default
+                    if (
+                        f.default is not attr.NOTHING
+                        and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
+                    )
+                    else NOT_SET
                 ),
-                is_property=False,
-                is_discriminator_field=field.name == discriminator_field,
+                default_factory=(
+                    f.default.factory if isinstance(f.default, attr.Factory) else NOT_SET  # type: ignore[arg-type]
+                ),
             )
-        )
+            for f in attr.fields(t)
+        ]
 
-    return EntityType(
-        cls=t,
-        name=_generate_name(t, cls_filed_format, cls_none_format),
-        fields=fields,
-        omit_none=cls_none_format is OmitNone,
-        generics=generics,
-        doc=t.__doc__,
-    )
-
-
-def _describe_attrs(
-    t: type[Any],
-    generics: Mapping[TypeVar, Any],
-    cls_filed_format: FiledFormat,
-    cls_none_format: NoneFormat,
-    meta: _Meta,
-) -> EntityType:
-    assert attr is not None
-    docs = get_attributes_doc(t)
-    try:
-        types = get_type_hints(t, include_extras=True)
-    except Exception:  # pylint: disable=broad-except
-        types = {}
-
-    discriminator_field = meta.discriminator_field
-    meta = dataclasses.replace(meta, globals=_get_globals(t), discriminator_field=None)
-
-    fields = []
-    for field in attr.fields(t):  # pyright: ignore
-        default = NOT_SET
-        if field.default is not attr.NOTHING and not isinstance(field.default, attr.Factory):  # type: ignore[arg-type]
-            default = field.default
-
-        default_factory = NOT_SET
-        if isinstance(field.default, attr.Factory):  # type: ignore[arg-type]
-            default_factory = field.default.factory
-
-        type_ = _replace_generics(types.get(field.name, field.type), generics)
-        type_ = Annotated[type_, cls_filed_format, cls_none_format]
-
-        metadata = _get_annotated_metadata(type_)
-        field_type = describe_type(type_, meta)
-        alias = _find_metadata(metadata, Alias)
-
-        fields.append(
-            EntityField(
-                name=field.name,
-                dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
-                doc=docs.get(field.name),
-                type=field_type,
-                default=default,
-                default_factory=default_factory,
-                is_property=False,
-                is_discriminator_field=field.name == discriminator_field,
-            )
-        )
-    return EntityType(
-        cls=t,
-        name=_generate_name(t, cls_filed_format, cls_none_format),
-        fields=fields,
-        omit_none=cls_none_format is OmitNone,
-        generics=generics,
-        doc=t.__doc__,
-    )
+    raise RuntimeError(f"Unsupported type '{t}'")
 
 
 def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
