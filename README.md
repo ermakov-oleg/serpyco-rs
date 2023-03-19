@@ -108,6 +108,7 @@ Currently available:
 * Alias
 * FiledFormat (CamelCase / NoFormat)
 * NoneFormat (OmitNone / KeepNone)
+* Discriminator
 * Min / Max
 * MinLength / MaxLength
 
