@@ -61,7 +61,7 @@ def bench(session):
         "--benchmark-save-data",
         "--benchmark-compare",
         "--ignore=bench/test_full.py",
-        "bench",
+        *(session.posargs if session.posargs else ["bench"]),
     )
 
 
