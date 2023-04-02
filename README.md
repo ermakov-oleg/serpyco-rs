@@ -239,3 +239,40 @@ ser = Serializer(Annotated[str, MinLength(5)])
 ser.load("1234")
 >> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='', schema_path='minLength')]
 ```
+
+## Getting JSON Schema
+
+`serpyco-rs` can generate JSON Schema for your dataclasses (Draft 2020-12).
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+@dataclass
+class A:
+    """Description of A"""
+    foo: int
+    bar: str
+
+ser = Serializer(A)
+
+print(ser.get_json_schema())
+>> {
+    '$schema': 'https://json-schema.org/draft/2020-12/schema', 
+    '$ref': '#/components/schemas/A[no_format,keep_nones]', 
+    'components': {
+        'schemas': {
+            'A[no_format,keep_nones]': {
+                'properties': {
+                    'foo': {'type': 'integer'}, 
+                    'bar': {'type': 'string'}
+                }, 
+                'required': ['foo', 'bar'], 
+                'type': 'object', 
+                'description': 'Description of A'
+            }
+        }
+    }
+}
+
+```

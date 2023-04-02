@@ -32,3 +32,6 @@ class Serializer(Generic[_T]):
         if validate:
             self._validator.validate(data)
         return self._encoder.load(data)
+
+    def get_json_schema(self) -> dict[str, Any]:
+        return self._schema
