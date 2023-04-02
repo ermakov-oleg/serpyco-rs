@@ -130,6 +130,7 @@ pub fn init(py: Python<'_>) {
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
         UNION_TYPE = get_attr_ptr!(describe, "UnionType");
         LITERAL_TYPE = get_attr_ptr!(describe, "LiteralType");
+        ANY_TYPE = get_attr_ptr!(describe, "AnyType");
         NOT_SET = get_attr_ptr!(describe, "NOT_SET");
 
         let uuid = PyModule::import(py, "uuid").unwrap();
