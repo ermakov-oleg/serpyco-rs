@@ -30,7 +30,9 @@ def get_json_schema(t: describe.Type) -> dict[str, Any]:
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         **schema_def,
-        "definitions": definitions,
+        "components": {
+            "schemas": definitions,
+        },
     }
 
 
@@ -194,7 +196,7 @@ def _(_: describe.AnyType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
-    return RefType(description=doc, ref=f"#/definitions/{holder.name}")
+    return RefType(description=doc, ref=f"#/components/schemas/{holder.name}")
 
 
 @to_json_schema.register
