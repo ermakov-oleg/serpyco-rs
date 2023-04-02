@@ -1,7 +1,8 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
-from typing import Union
+from typing import Generic, Optional, TypeVar, Union
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,11 @@ class Places:
 
 
 @dataclass(frozen=True)
+class Discriminator:
+    name: str
+
+
+@dataclass(frozen=True)
 class Alias:
     value: str
 
@@ -53,10 +59,23 @@ class NoneFormat:
     omit: bool
 
 
-@dataclass(frozen=True)
-class Discriminator:
-    name: str
-
-
 KeepNone: NoneFormat = NoneFormat(False)
 OmitNone: NoneFormat = NoneFormat(True)
+
+
+_I = TypeVar("_I")
+_O = TypeVar("_O")
+
+
+@dataclass(frozen=True)
+class CustomEncoder(Generic[_I, _O]):
+    serialize: Optional[Callable[[_I], _O]] = None
+    deserialize: Optional[Callable[[_O], _I]] = None
+
+
+def serialize_with(func: Callable[[_I], _O]) -> CustomEncoder[_I, _O]:
+    return CustomEncoder[_I, _O](serialize=func)
+
+
+def deserialize_with(func: Callable[[_O], _I]) -> CustomEncoder[_I, _O]:
+    return CustomEncoder[_I, _O](deserialize=func)

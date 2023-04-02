@@ -2,7 +2,7 @@ import os
 
 import nox
 
-nox.options.sessions = ["test", "lint", "type_check"]
+nox.options.sessions = ["test", "lint", "type_check", "rust_lint"]
 nox.options.reuse_existing_virtualenvs = True
 
 
@@ -33,6 +33,12 @@ def lint(session):
     session.run("black", *(["--check", "--diff", *paths] if _is_ci() else paths))
     session.run("isort", *(["--check", "--diff", *paths] if _is_ci() else paths))
     session.run("ruff", ".")
+
+
+@nox.session(python=False)
+def rust_lint(session):
+    session.run("cargo", "fmt", "--all", *(["--", "--check"] if _is_ci() else []))
+    session.run("cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings")
 
 
 @nox.session

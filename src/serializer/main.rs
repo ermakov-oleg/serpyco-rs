@@ -1,5 +1,5 @@
 use crate::serializer::encoders::{
-    DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder, UnionEncoder,
+    CustomEncoder, DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder, UnionEncoder,
 };
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
@@ -63,18 +63,22 @@ pub fn get_encoder(
     encoder_state: &mut HashMap<usize, EncoderStateValue>,
 ) -> PyResult<Box<TEncoder>> {
     let encoder: Box<TEncoder> = match obj_type {
-        Type::String
-        | Type::Integer
-        | Type::Bytes
-        | Type::Float
-        | Type::Boolean
-        | Type::Any
-        | Type::LiteralType(_) => Box::new(NoopEncoder),
-        Type::Decimal => Box::new(DecimalEncoder),
+        Type::String(type_info)
+        | Type::Integer(type_info)
+        | Type::Bytes(type_info)
+        | Type::Float(type_info)
+        | Type::Boolean(type_info)
+        | Type::Any(type_info)
+        | Type::LiteralType(type_info) => {
+            wrap_with_custom_encoder(py, type_info, Box::new(NoopEncoder))?
+        }
+        Type::Decimal(type_info) => {
+            wrap_with_custom_encoder(py, type_info, Box::new(DecimalEncoder))?
+        }
         Type::Optional(type_info) => {
             let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
             let encoder = get_encoder(py, inner, encoder_state)?;
-            Box::new(OptionalEncoder { encoder })
+            wrap_with_custom_encoder(py, type_info, Box::new(OptionalEncoder { encoder }))?
         }
         Type::Dictionary(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;
@@ -84,17 +88,21 @@ pub fn get_encoder(
             let key_encoder = get_encoder(py, key_type, encoder_state)?;
             let value_encoder = get_encoder(py, value_type, encoder_state)?;
 
-            Box::new(DictionaryEncoder {
-                key_encoder,
-                value_encoder,
-                omit_none,
-            })
+            wrap_with_custom_encoder(
+                py,
+                type_info,
+                Box::new(DictionaryEncoder {
+                    key_encoder,
+                    value_encoder,
+                    omit_none,
+                }),
+            )?
         }
         Type::Array(type_info) => {
             let item_type = get_object_type(type_info.getattr(py, "item_type")?.as_ref(py))?;
             let encoder = get_encoder(py, item_type, encoder_state)?;
 
-            Box::new(ArrayEncoder { encoder })
+            wrap_with_custom_encoder(py, type_info, Box::new(ArrayEncoder { encoder }))?
         }
         Type::Tuple(type_info) => {
             let mut encoders = vec![];
@@ -103,7 +111,7 @@ pub fn get_encoder(
                 let encoder = get_encoder(py, get_object_type(item_type)?, encoder_state)?;
                 encoders.push(encoder);
             }
-            Box::new(TupleEncoder { encoders })
+            wrap_with_custom_encoder(py, type_info, Box::new(TupleEncoder { encoders }))?
         }
         Type::UnionType(type_info) => {
             let discriminator_raw = type_info.getattr(py, "discriminator")?;
@@ -120,10 +128,14 @@ pub fn get_encoder(
                 encoders.insert(key.to_string_lossy().into(), encoder);
             }
 
-            Box::new(UnionEncoder {
-                encoders,
-                discriminator: discriminator.into(),
-            })
+            wrap_with_custom_encoder(
+                py,
+                type_info,
+                Box::new(UnionEncoder {
+                    encoders,
+                    discriminator: discriminator.into(),
+                }),
+            )?
         }
         Type::Entity(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
@@ -165,25 +177,61 @@ pub fn get_encoder(
             let python_object_id = type_info.as_ptr() as *const _ as usize;
             let val = encoder_state.entry(python_object_id).or_default();
             AtomicRefCell::<Option<EntityEncoder>>::borrow_mut(val).replace(encoder.clone());
-            Box::new(encoder)
+            wrap_with_custom_encoder(py, type_info, Box::new(encoder))?
         }
         Type::RecursionHolder(type_info) => {
             let inner_type = type_info.call_method0(py, "get_type")?;
             let python_object_id = inner_type.as_ptr() as *const _ as usize;
             let encoder = encoder_state.entry(python_object_id).or_default();
-            Box::new(LazyEncoder {
-                inner: encoder.clone(),
-            })
+            wrap_with_custom_encoder(
+                py,
+                type_info,
+                Box::new(LazyEncoder {
+                    inner: encoder.clone(),
+                }),
+            )?
         }
-        Type::Uuid => Box::new(UUIDEncoder),
+        Type::Uuid(type_info) => wrap_with_custom_encoder(py, type_info, Box::new(UUIDEncoder))?,
         Type::Enum(type_info) => {
             let py_type = type_info.getattr(py, "cls")?;
-            Box::new(EnumEncoder { enum_type: py_type })
+            wrap_with_custom_encoder(py, type_info, Box::new(EnumEncoder { enum_type: py_type }))?
         }
-        Type::DateTime => Box::new(DateTimeEncoder),
-        Type::Time => Box::new(TimeEncoder),
-        Type::Date => Box::new(DateEncoder),
+        Type::DateTime(type_info) => {
+            wrap_with_custom_encoder(py, type_info, Box::new(DateTimeEncoder))?
+        }
+        Type::Time(type_info) => wrap_with_custom_encoder(py, type_info, Box::new(TimeEncoder))?,
+        Type::Date(type_info) => wrap_with_custom_encoder(py, type_info, Box::new(DateEncoder))?,
     };
 
     Ok(encoder)
+}
+
+fn wrap_with_custom_encoder(
+    py: Python<'_>,
+    type_info: Py<PyAny>,
+    original_encoder: Box<TEncoder>,
+) -> PyResult<Box<TEncoder>> {
+    let custom_encoder = type_info.getattr(py, "custom_encoder")?;
+    if custom_encoder.is_none(py) {
+        return Ok(original_encoder);
+    }
+    let dump = to_optional(py, custom_encoder.getattr(py, "serialize")?);
+    let load = to_optional(py, custom_encoder.getattr(py, "deserialize")?);
+
+    if dump.is_none() && load.is_none() {
+        return Ok(original_encoder);
+    }
+
+    Ok(Box::new(CustomEncoder {
+        inner: original_encoder,
+        dump,
+        load,
+    }))
+}
+
+fn to_optional(py: Python<'_>, value: PyObject) -> Option<PyObject> {
+    match value.is_none(py) {
+        true => None,
+        false => Some(value),
+    }
 }
