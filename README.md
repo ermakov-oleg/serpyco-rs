@@ -45,6 +45,7 @@ $ pip install serpyco-rs
 - Validation of input/output data
 - Very fast
 - Support recursive schemas
+- Generate JSON Schema Specification (Draft 2020-12) 
 
 ## Supported field types
 There is support for generic types from the standard typing module:

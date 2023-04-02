@@ -96,7 +96,7 @@ class ObjectType(Schema):
 
     @property
     def ref(self) -> str:
-        return f"#/definitions/{self.name}"
+        return f"#/components/schemas/{self.name}"
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
