@@ -45,7 +45,8 @@ $ pip install serpyco-rs
 - Validation of input/output data
 - Very fast
 - Support recursive schemas
-- Generate JSON Schema Specification (Draft 2020-12) 
+- Generate JSON Schema Specification (Draft 2020-12)
+- Support custom encoders/decoders for fields
 
 ## Supported field types
 There is support for generic types from the standard typing module:
@@ -274,5 +275,26 @@ print(ser.get_json_schema())
         }
     }
 }
-
 ```
+
+## Custom encoders for fields
+
+You can provide CustomEncoder with `serialize` and `deserialize` functions, or `serialize_with` and `deserialize_with` annotations.
+
+```python
+from typing import Annotated
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import CustomEncoder
+
+@dataclass
+class Foo:
+    val: Annotated[str, CustomEncoder[str, str](serialize=str.upper, deserialize=str.lower)]
+
+ser = Serializer(Foo)
+val = ser.dump(Foo(val='bar'))
+>> {'val': 'BAR'}
+assert ser.load(val) == Foo(val='bar') 
+```
+
+**Note:** `CustomEncoder` has no effect to validation and JSON Schema generation.

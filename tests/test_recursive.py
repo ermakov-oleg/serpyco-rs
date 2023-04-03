@@ -33,7 +33,7 @@ def test_describe__recursive_type__parsed():
                         EntityField(
                             name="value",
                             dict_key="value",
-                            type=StringType(),
+                            type=StringType(custom_encoder=None),
                         ),
                         EntityField(
                             name="next",
@@ -45,15 +45,19 @@ def test_describe__recursive_type__parsed():
                                     name=ANY,
                                     field_format=NoFormat,
                                     meta=ANY,
+                                    custom_encoder=None,
                                 ),
+                                custom_encoder=None,
                             ),
                         ),
                     ],
                     doc=ANY,
+                    custom_encoder=None,
                 ),
             )
         ],
         doc=ANY,
+        custom_encoder=None,
     )
 
 

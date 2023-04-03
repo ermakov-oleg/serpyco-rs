@@ -421,3 +421,28 @@ impl Encoder for LazyEncoder {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct CustomEncoder {
+    pub(crate) inner: Box<TEncoder>,
+    pub(crate) dump: Option<Py<PyAny>>,
+    pub(crate) load: Option<Py<PyAny>>,
+}
+
+impl Encoder for CustomEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        match self.dump {
+            Some(ref dump) => py_object_call1_make_tuple_or_err(dump.as_ptr(), value),
+            None => self.inner.dump(value),
+        }
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        match self.load {
+            Some(ref load) => py_object_call1_make_tuple_or_err(load.as_ptr(), value),
+            None => self.inner.load(value),
+        }
+    }
+}

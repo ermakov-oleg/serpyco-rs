@@ -26,6 +26,7 @@ from typing_extensions import assert_never, get_args
 from ._utils import to_camelcase
 from .metadata import (
     Alias,
+    CustomEncoder,
     Discriminator,
     FiledFormat,
     Format,
@@ -66,7 +67,7 @@ NOT_SET = NotSet()
 
 @dataclasses.dataclass
 class Type:
-    pass
+    custom_encoder: Optional[CustomEncoder[Any, Any]]
 
 
 @dataclasses.dataclass
@@ -246,6 +247,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
     generics = dict(zip(parameters, args))
     filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
+    custom_encoder = _find_metadata(metadata, CustomEncoder)
     annotation_wrapper = _wrap_annotated([filed_format, none_format])
 
     if (t, filed_format, none_format) in meta.state:
@@ -255,10 +257,11 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
             field_format=filed_format,
             none_format=none_format,
             meta=meta,
+            custom_encoder=None,
         )
 
     if t is Any:
-        return AnyType()
+        return AnyType(custom_encoder=custom_encoder)
 
     if isinstance(t, type):
         simple_type_mapping: Mapping[type, type[Type]] = {
@@ -271,7 +274,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         }
 
         if simple := simple_type_mapping.get(t):
-            return simple()
+            return simple(custom_encoder=custom_encoder)
 
         number_type_mapping: Mapping[type, Union[type[IntegerType], type[FloatType]]] = {
             int: IntegerType,
@@ -284,6 +287,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
             return number_type(
                 min=cast(Any, min_meta.value) if min_meta else None,
                 max=cast(Any, max_meta.value) if max_meta else None,
+                custom_encoder=custom_encoder,
             )
 
         if t is Decimal:
@@ -294,6 +298,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
                 min=cast(Decimal, min_meta.value) if min_meta else None,
                 max=cast(Decimal, max_meta.value) if max_meta else None,
                 places=places_meta.value if places_meta else None,
+                custom_encoder=custom_encoder,
             )
 
         if t is str:
@@ -302,45 +307,58 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
             return StringType(
                 min_length=min_length_meta.value if min_length_meta else None,
                 max_length=max_length_meta.value if max_length_meta else None,
+                custom_encoder=custom_encoder,
             )
 
         if t in {Sequence, list}:
             return ArrayType(
-                item_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType()),
+                item_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType(custom_encoder=None)),
                 is_sequence=t is Sequence,
+                custom_encoder=custom_encoder,
             )
 
         if t in {Mapping, dict}:
             return DictionaryType(
-                key_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType()),
-                value_type=(describe_type(annotation_wrapper(args[1]), meta) if args else AnyType()),
+                key_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType(custom_encoder=None)),
+                value_type=(describe_type(annotation_wrapper(args[1]), meta) if args else AnyType(custom_encoder=None)),
                 is_mapping=t is Mapping,
                 omit_none=none_format.omit,
+                custom_encoder=custom_encoder,
             )
 
         if t is tuple:
             if not args or Ellipsis in args:
                 raise RuntimeError("Variable length tuples are not supported")
-            return TupleType(item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args])
+            return TupleType(
+                item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args],
+                custom_encoder=custom_encoder,
+            )
 
         if issubclass(t, (Enum, IntEnum)):
-            return EnumType(cls=t)
+            return EnumType(cls=t, custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t):
             meta.state[(t, filed_format, none_format)] = None
-            entity_type = _describe_entity(t, generics, filed_format, none_format, meta)
+            entity_type = _describe_entity(
+                t=t,
+                generics=generics,
+                cls_filed_format=filed_format,
+                cls_none_format=none_format,
+                custom_encoder=custom_encoder,
+                meta=meta,
+            )
             meta.state[(t, filed_format, none_format)] = entity_type
             return entity_type
 
     if _is_literal_type(t):
         if args and all((isinstance(arg, str) for arg in args)):
-            return LiteralType(args=args)
+            return LiteralType(args=args, custom_encoder=custom_encoder)
         raise RuntimeError("Supported only Literal[str, ...]")
 
     if t in {Union}:
         if len(args) == 2 and _NoneType in args:
             inner = args[1] if args[0] is _NoneType else args[0]
-            return OptionalType(describe_type(annotation_wrapper(inner), meta))
+            return OptionalType(inner=describe_type(annotation_wrapper(inner), meta), custom_encoder=None)
 
         discriminator = _find_metadata(metadata, Discriminator)
         if not discriminator:
@@ -358,6 +376,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
                 for arg in args
             },
             discriminator=discriminator.name,
+            custom_encoder=custom_encoder,
         )
 
     if isinstance(t, TypeVar):
@@ -379,6 +398,7 @@ def _describe_entity(
     generics: Mapping[TypeVar, Any],
     cls_filed_format: FiledFormat,
     cls_none_format: NoneFormat,
+    custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: _Meta,
 ) -> EntityType:
     docs = get_attributes_doc(t)
@@ -419,6 +439,7 @@ def _describe_entity(
         omit_none=cls_none_format is OmitNone,
         generics=generics,
         doc=t.__doc__,
+        custom_encoder=custom_encoder,
     )
 
 

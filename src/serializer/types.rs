@@ -40,16 +40,16 @@ static INIT: Once = Once::new();
 
 #[derive(Clone, Debug)]
 pub enum Type {
-    Integer,
-    String,
-    Bytes,
-    Float,
-    Decimal,
-    Boolean,
-    Uuid,
-    Time,
-    DateTime,
-    Date,
+    Integer(Py<PyAny>),
+    String(Py<PyAny>),
+    Bytes(Py<PyAny>),
+    Float(Py<PyAny>),
+    Decimal(Py<PyAny>),
+    Boolean(Py<PyAny>),
+    Uuid(Py<PyAny>),
+    Time(Py<PyAny>),
+    DateTime(Py<PyAny>),
+    Date(Py<PyAny>),
     Enum(Py<PyAny>),
     Entity(Py<PyAny>),
     Optional(Py<PyAny>),
@@ -59,30 +59,30 @@ pub enum Type {
     UnionType(Py<PyAny>),
     LiteralType(Py<PyAny>),
     RecursionHolder(Py<PyAny>),
-    Any,
+    Any(Py<PyAny>),
 }
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     if check_type!(type_info, INTEGER_TYPE) {
-        Ok(Type::Integer)
+        Ok(Type::Integer(type_info.into()))
     } else if check_type!(type_info, STRING_TYPE) {
-        Ok(Type::String)
+        Ok(Type::String(type_info.into()))
     } else if check_type!(type_info, BYTES_TYPE) {
-        Ok(Type::Bytes)
+        Ok(Type::Bytes(type_info.into()))
     } else if check_type!(type_info, FLOAT_TYPE) {
-        Ok(Type::Float)
+        Ok(Type::Float(type_info.into()))
     } else if check_type!(type_info, DECIMAL_TYPE) {
-        Ok(Type::Decimal)
+        Ok(Type::Decimal(type_info.into()))
     } else if check_type!(type_info, BOOLEAN_TYPE) {
-        Ok(Type::Boolean)
+        Ok(Type::Boolean(type_info.into()))
     } else if check_type!(type_info, UUID_TYPE) {
-        Ok(Type::Uuid)
+        Ok(Type::Uuid(type_info.into()))
     } else if check_type!(type_info, TIME_TYPE) {
-        Ok(Type::Time)
+        Ok(Type::Time(type_info.into()))
     } else if check_type!(type_info, DATETIME_TYPE) {
-        Ok(Type::DateTime)
+        Ok(Type::DateTime(type_info.into()))
     } else if check_type!(type_info, DATE_TYPE) {
-        Ok(Type::Date)
+        Ok(Type::Date(type_info.into()))
     } else if check_type!(type_info, ENUM_TYPE) {
         Ok(Type::Enum(type_info.into()))
     } else if check_type!(type_info, ENTITY_TYPE) {
@@ -96,7 +96,7 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     } else if check_type!(type_info, TUPLE_TYPE) {
         Ok(Type::Tuple(type_info.into()))
     } else if check_type!(type_info, ANY_TYPE) {
-        Ok(Type::Any)
+        Ok(Type::Any(type_info.into()))
     } else if check_type!(type_info, RECURSION_HOLDER_TYPE) {
         Ok(Type::RecursionHolder(type_info.into()))
     } else if check_type!(type_info, UNION_TYPE) {
