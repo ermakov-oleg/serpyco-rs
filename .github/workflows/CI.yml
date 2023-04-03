@@ -20,6 +20,7 @@ jobs:
           manylinux: auto
           command: build
           args: --release --sdist -o dist --find-interpreter
+          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -37,6 +38,7 @@ jobs:
         with:
           command: build
           args: --release -o dist --find-interpreter
+          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -57,6 +59,7 @@ jobs:
         with:
           command: build
           args: --release -o dist --universal2 --find-interpreter
+          sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
