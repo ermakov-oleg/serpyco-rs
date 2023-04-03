@@ -61,7 +61,7 @@ def bench(session):
         "pytest",
         "--verbose",
         "--benchmark-min-time=0.25",
-        "--benchmark-max-time=1.5",
+        "--benchmark-max-time=1",
         "--benchmark-disable-gc",
         "--benchmark-autosave",
         "--benchmark-save-data",
