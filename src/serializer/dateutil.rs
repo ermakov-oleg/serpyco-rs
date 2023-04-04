@@ -18,7 +18,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
         .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M"))
         .map(|v| (v, None))
         .or_else(|_| {
-            let mut datetime_raw = Utc::now().date().naive_utc().to_string();
+            let mut datetime_raw = Utc::now().date_naive().to_string();
             datetime_raw.push('T');
             datetime_raw.push_str(value);
             let datetime = DateTime::parse_from_rfc3339(&datetime_raw)?;
