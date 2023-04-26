@@ -375,7 +375,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
                 _get_discriminator_value(arg, discriminator.name): describe_type(annotation_wrapper(arg), meta)
                 for arg in args
             },
-            discriminator=discriminator.name,
+            discriminator=_apply_format(filed_format, discriminator.name),
             custom_encoder=custom_encoder,
         )
 
