@@ -218,7 +218,7 @@ def _(arg: describe.UnionType, doc: Optional[str] = None) -> Schema:
     return UnionType(
         oneOf=list(objects.values()),
         discriminator=Discriminator(
-            property_name=arg.discriminator,
+            property_name=arg.load_discriminator,
             mapping={name: cast(str, val.ref) for name, val in objects.items()},
         ),
         description=doc,

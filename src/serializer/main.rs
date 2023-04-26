@@ -114,8 +114,11 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, type_info, Box::new(TupleEncoder { encoders }))?
         }
         Type::UnionType(type_info) => {
-            let discriminator_raw = type_info.getattr(py, "discriminator")?;
-            let discriminator: &PyString = discriminator_raw.as_ref(py).downcast()?;
+            let dump_discriminator_raw = type_info.getattr(py, "dump_discriminator")?;
+            let dump_discriminator: &PyString = dump_discriminator_raw.as_ref(py).downcast()?;
+
+            let load_discriminator_raw = type_info.getattr(py, "load_discriminator")?;
+            let load_discriminator: &PyString = load_discriminator_raw.as_ref(py).downcast()?;
 
             let item_types_raw = type_info.getattr(py, "item_types")?;
             let item_types: &PyDict = item_types_raw.as_ref(py).downcast()?;
@@ -133,7 +136,8 @@ pub fn get_encoder(
                 type_info,
                 Box::new(UnionEncoder {
                     encoders,
-                    discriminator: discriminator.into(),
+                    dump_discriminator: dump_discriminator.into(),
+                    load_discriminator: load_discriminator.into(),
                 }),
             )?
         }

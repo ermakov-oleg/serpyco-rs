@@ -624,16 +624,16 @@ def test_describe__tagged_union():
     @dataclass
     class Foo:
         val: int
-        type: Literal["foo"]
+        filed_type: Literal["foo"]
 
     @dataclass
     class Bar:
         val: str
-        type: Literal["bar"]
+        filed_type: Literal["bar"]
 
     @dataclass
     class Base:
-        field: Annotated[Union[Foo, Bar], Discriminator("type")]
+        field: Annotated[Union[Foo, Bar], Discriminator("filed_type"), CamelCase]
 
     assert describe_type(Base) == EntityType(
         cls=Base,
@@ -654,8 +654,8 @@ def test_describe__tagged_union():
                                     type=IntegerType(min=None, max=None, custom_encoder=None),
                                 ),
                                 EntityField(
-                                    name="type",
-                                    dict_key="type",
+                                    name="filed_type",
+                                    dict_key="filedType",
                                     type=LiteralType(args=("foo",), custom_encoder=None),
                                     is_discriminator_field=True,
                                 ),
@@ -673,8 +673,8 @@ def test_describe__tagged_union():
                                     type=StringType(min_length=None, max_length=None, custom_encoder=None),
                                 ),
                                 EntityField(
-                                    name="type",
-                                    dict_key="type",
+                                    name="filed_type",
+                                    dict_key="filedType",
                                     type=LiteralType(args=("bar",), custom_encoder=None),
                                     is_discriminator_field=True,
                                 ),
@@ -683,7 +683,8 @@ def test_describe__tagged_union():
                             custom_encoder=None,
                         ),
                     },
-                    discriminator="type",
+                    load_discriminator="filedType",
+                    dump_discriminator="filed_type",
                     custom_encoder=None,
                 ),
             )

@@ -152,17 +152,31 @@ def test_tagged_union__camel_case_filed_format():
         discriminator_with_multiple_words: Literal["B"]
         b: str
 
-    a = {
-        "discriminatorWithMultipleWords": "A",
-        "a": 128,
-    }
+    raw_obj = [
+        {
+            "discriminatorWithMultipleWords": "A",
+            "a": 128,
+        },
+        {
+            "discriminatorWithMultipleWords": "B",
+            "b": "foo",
+        },
+    ]
+    obj = [
+        A(
+            discriminator_with_multiple_words="A",
+            a=128,
+        ),
+        B(
+            discriminator_with_multiple_words="B",
+            b="foo",
+        ),
+    ]
 
     serializer = Serializer(
-        Annotated[Union[A, B], Discriminator("discriminator_with_multiple_words")],
+        list[Annotated[Union[A, B], Discriminator("discriminator_with_multiple_words")]],
         camelcase_fields=True,
     )
 
-    assert serializer.load(a) == A(
-        discriminator_with_multiple_words="A",
-        a=128,
-    )
+    assert serializer.dump(obj) == raw_obj
+    assert serializer.load(raw_obj) == obj
