@@ -191,7 +191,8 @@ class TupleType(Type):
 @dataclasses.dataclass
 class UnionType(Type):
     item_types: Mapping[str, Type]
-    discriminator: str
+    dump_discriminator: str
+    load_discriminator: str
 
 
 @dataclasses.dataclass
@@ -375,7 +376,8 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
                 _get_discriminator_value(arg, discriminator.name): describe_type(annotation_wrapper(arg), meta)
                 for arg in args
             },
-            discriminator=_apply_format(filed_format, discriminator.name),
+            dump_discriminator=discriminator.name,
+            load_discriminator=_apply_format(filed_format, discriminator.name),
             custom_encoder=custom_encoder,
         )
 

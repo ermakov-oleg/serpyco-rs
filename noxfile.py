@@ -20,7 +20,7 @@ def build(session):
 def test(session):
     build(session)
     session.install("-r", "requirements/dev.txt")
-    session.run("pytest", "-vss", "tests/")
+    session.run("pytest", "-vss", "tests/", *session.posargs)
 
 
 @nox.session

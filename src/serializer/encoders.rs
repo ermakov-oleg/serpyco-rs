@@ -317,13 +317,14 @@ impl Encoder for TupleEncoder {
 #[derive(Debug, Clone)]
 pub struct UnionEncoder {
     pub(crate) encoders: HashMap<String, Box<TEncoder>>,
-    pub(crate) discriminator: Py<PyString>,
+    pub(crate) dump_discriminator: Py<PyString>,
+    pub(crate) load_discriminator: Py<PyString>,
 }
 
 impl Encoder for UnionEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let discriminator = ffi!(PyObject_GetAttr(value, self.discriminator.as_ptr())); // val RC +1
+        let discriminator = py_object_get_attr(value, self.dump_discriminator.as_ptr())?; // val RC +1
         let key = py_str_to_str(discriminator)?;
         let encoder = self
             .encoders
@@ -337,7 +338,7 @@ impl Encoder for UnionEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let discriminator = py_object_get_item(value, self.discriminator.as_ptr())?; // val RC +1
+        let discriminator = py_object_get_item(value, self.load_discriminator.as_ptr())?; // val RC +1
         let key = py_str_to_str(discriminator)?;
         let encoder = self
             .encoders
