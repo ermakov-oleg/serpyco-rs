@@ -139,3 +139,30 @@ def test_tagged_union__with_forward_refs():
     }
     assert serializer.dump(data) == raw_data
     assert serializer.load(raw_data) == data
+
+
+def test_tagged_union__camel_case_filed_format():
+    @dataclass
+    class A:
+        discriminator_with_multiple_words: Literal["A"]
+        a: int
+
+    @dataclass
+    class B:
+        discriminator_with_multiple_words: Literal["B"]
+        b: str
+
+    a = {
+        "discriminatorWithMultipleWords": "A",
+        "a": 128,
+    }
+
+    serializer = Serializer(
+        Annotated[Union[A, B], Discriminator("discriminator_with_multiple_words")],
+        camelcase_fields=True,
+    )
+
+    assert serializer.load(a) == A(
+        discriminator_with_multiple_words="A",
+        a=128,
+    )
