@@ -179,7 +179,7 @@ def test_describe__dataclass__supported():
                             dict_key="a",
                         )
                     ],
-                    generics={},
+                    generics=(),
                     doc="SomeOtherEntity(a: int)",
                     custom_encoder=None,
                 ),
@@ -253,7 +253,7 @@ def test_describe__dataclass__supported():
                 dict_key="p",
             ),
         ],
-        generics={},
+        generics=(),
         doc="Doc",
         custom_encoder=None,
     )
@@ -320,7 +320,7 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
     assert result.fields[0].type == ArrayType(
         item_type=AnyType(custom_encoder=None), is_sequence=False, custom_encoder=None
     )
-    assert result.generics == {T: Any}
+    assert result.generics == ((T, Any),)
 
 
 def test_describe_dataclass__generic_with_type_params__expected_right_type():
@@ -340,7 +340,7 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
     assert result.fields[1].type == EntityType(
         cls=SomeOtherEntity,
         name=ANY,
-        generics={T: int},
+        generics=((T, int),),
         fields=[EntityField(name="x", type=IntegerType(custom_encoder=None), dict_key="x")],
         doc="SomeOtherEntity(x: ~T)",
         custom_encoder=None,

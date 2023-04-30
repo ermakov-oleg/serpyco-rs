@@ -160,7 +160,7 @@ class EntityType(Type):
     name: str
     fields: Sequence[EntityField]
     omit_none: bool = False
-    generics: Mapping[TypeVar, Any] = dataclasses.field(default_factory=dict)
+    generics: Sequence[tuple[TypeVar, Any]] = tuple()
     doc: Optional[str] = None
 
 
@@ -200,25 +200,40 @@ class AnyType(Type):
     pass
 
 
-@dataclasses.dataclass
-class RecursionHolder(Type):
-    cls: Any
-    name: str
+@dataclasses.dataclass(frozen=True, unsafe_hash=True)
+class _MetaStateKey:
+    cls: type
     field_format: FiledFormat
-    meta: "_Meta"
-    none_format: NoneFormat = KeepNone
-
-    def get_type(self) -> Type:
-        if type_ := self.meta.state[(self.cls, self.field_format, self.none_format)]:
-            return type_
-        raise RuntimeError("Recursive type not resolved")
+    none_format: NoneFormat
+    generics: Sequence[tuple[TypeVar, Any]]
 
 
 @dataclasses.dataclass
 class _Meta:
     globals: dict[str, Any]
-    state: dict[tuple[type, FiledFormat, NoneFormat], Optional[Type]]
+    state: dict[_MetaStateKey, Optional[Type]]
     discriminator_field: Optional[str] = None
+
+    def add_to_state(self, key: _MetaStateKey, value: Optional[Type]) -> None:
+        self.state[key] = value
+
+    def get_from_state(self, key: _MetaStateKey) -> Optional[Type]:
+        return self.state.get(key)
+
+    def has_in_state(self, key: _MetaStateKey) -> bool:
+        return key in self.state
+
+
+@dataclasses.dataclass
+class RecursionHolder(Type):
+    name: str
+    state_key: _MetaStateKey
+    meta: _Meta
+
+    def get_type(self) -> Type:
+        if type_ := self.meta.get_from_state(self.state_key):
+            return type_
+        raise RuntimeError("Recursive type not resolved")
 
 
 def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
@@ -245,19 +260,24 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
 
     t = _evaluate_forwardref(t, meta)
 
-    generics = dict(zip(parameters, args))
+    generics = tuple((k, v) for k, v in sorted(zip(parameters, args), key=lambda x: repr(x[0])))
     filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
     custom_encoder = _find_metadata(metadata, CustomEncoder)
     annotation_wrapper = _wrap_annotated([filed_format, none_format])
 
-    if (t, filed_format, none_format) in meta.state:
+    meta_key = _MetaStateKey(
+        cls=t,
+        field_format=filed_format,
+        none_format=none_format,
+        generics=generics,
+    )
+
+    if meta.has_in_state(meta_key):
         return RecursionHolder(
-            cls=t,
-            name=_generate_name(t, filed_format, none_format),
-            field_format=filed_format,
-            none_format=none_format,
+            name=_generate_name(t, filed_format, none_format, generics),
             meta=meta,
+            state_key=meta_key,
             custom_encoder=None,
         )
 
@@ -339,7 +359,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
             return EnumType(cls=t, custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t):
-            meta.state[(t, filed_format, none_format)] = None
+            meta.add_to_state(meta_key, None)
             entity_type = _describe_entity(
                 t=t,
                 generics=generics,
@@ -348,7 +368,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
                 custom_encoder=custom_encoder,
                 meta=meta,
             )
-            meta.state[(t, filed_format, none_format)] = entity_type
+            meta.add_to_state(meta_key, entity_type)
             return entity_type
 
     if _is_literal_type(t):
@@ -397,7 +417,7 @@ class _Field(Generic[_T]):
 
 def _describe_entity(
     t: Any,
-    generics: Mapping[TypeVar, Any],
+    generics: Sequence[tuple[TypeVar, Any]],
     cls_filed_format: FiledFormat,
     cls_none_format: NoneFormat,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
@@ -436,7 +456,7 @@ def _describe_entity(
 
     return EntityType(
         cls=t,
-        name=_generate_name(t, cls_filed_format, cls_none_format),
+        name=_generate_name(t, cls_filed_format, cls_none_format, generics),
         fields=fields,
         omit_none=cls_none_format is OmitNone,
         generics=generics,
@@ -480,12 +500,13 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
     raise RuntimeError(f"Unsupported type '{t}'")
 
 
-def _replace_generics(t: Any, generics: Mapping[TypeVar, Any]) -> Any:
+def _replace_generics(t: Any, generics: Sequence[tuple[TypeVar, Any]]) -> Any:
     try:
+        generics_map = dict(generics)
         if parameters := getattr(t, "__parameters__", None):
-            t = t[tuple(generics[parameter] for parameter in parameters)]
+            t = t[tuple(generics_map[parameter] for parameter in parameters)]
         if isinstance(t, TypeVar):
-            t = generics[t]
+            t = generics_map[t]
     except KeyError as exc:
         raise RuntimeError(f"Unfilled TypeVar: {exc.args[0]}") from exc
     return t
@@ -528,9 +549,15 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
     assert_never(f.format)
 
 
-def _generate_name(cls: Any, field_format: FiledFormat, none_format: NoneFormat) -> str:
+def _generate_name(
+    cls: Any, field_format: FiledFormat, none_format: NoneFormat, generics: Sequence[tuple[TypeVar, Any]]
+) -> str:
+    name = cls.__name__
+    if generics:
+        cls = _replace_generics(cls, generics)
+        name = repr(cls)
     nones = "omit_nones" if none_format.omit else "keep_nones"
-    return f"{cls.__module__}.{cls.__name__}[{field_format.format.value},{nones}]"
+    return f"{cls.__module__}.{name}[{field_format.format.value},{nones}]"
 
 
 def _get_globals(t: Any) -> dict[str, Any]:
