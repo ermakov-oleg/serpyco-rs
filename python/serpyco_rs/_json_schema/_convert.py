@@ -102,10 +102,7 @@ def _(_: describe.UUIDType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(_: describe.TimeType, doc: Optional[str] = None) -> Schema:
-    iso8601_pattern = (
-        r"^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\.[0-9]+)?)?"  # HH:mm:ss.ssss
-        r"?(([+-][0-9][0-9]:?[0-9][0-9])|Z)?$"  # timezone
-    )
+    iso8601_pattern = r"^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\.[0-9]+)?)?$"  # HH:mm:ss.ssss
     return StringType(
         pattern=iso8601_pattern,
         description=doc,
