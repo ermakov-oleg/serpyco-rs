@@ -4,7 +4,6 @@ from unittest.mock import ANY
 
 from serpyco_rs import Serializer
 from serpyco_rs._describe import EntityField, EntityType, OptionalType, RecursionHolder, StringType, describe_type
-from serpyco_rs.metadata import NoFormat
 
 
 @dataclass
@@ -41,10 +40,9 @@ def test_describe__recursive_type__parsed():
                             default=None,
                             type=OptionalType(
                                 inner=RecursionHolder(
-                                    cls=Node,
                                     name=ANY,
-                                    field_format=NoFormat,
                                     meta=ANY,
+                                    state_key=ANY,
                                     custom_encoder=None,
                                 ),
                                 custom_encoder=None,
