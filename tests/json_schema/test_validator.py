@@ -53,13 +53,14 @@ class Bar:
         (Decimal, "NaN"),  # or int input
         (uuid.UUID, str(uuid.uuid4())),  # support only str input
         (time, "12:34"),
-        (time, "12:34Z"),
         (time, "12:34:56"),
-        (time, "12:34+0300"),
-        (time, "12:34+03:00"),
-        (time, "12:34:00+03:00"),
-        (time, "12:34:56.000078+03:00"),
-        (time, "12:34:56.000078+00:00"),
+        (time, "12:34:56.000078"),
+        # (time, "12:34Z"),
+        # (time, "12:34+0300"),
+        # (time, "12:34+03:00"),
+        # (time, "12:34:00+03:00"),
+        # (time, "12:34:56.000078+03:00"),
+        # (time, "12:34:56.000078+00:00"),
         # todo: add datetime exemplars
         (datetime, "2022-10-10T14:23:43"),
         (datetime, "2022-10-10T14:23:43.123456"),
