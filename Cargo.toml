@@ -20,7 +20,7 @@ cfg-if = "*"
 speedate = "0.7.0"
 
 dyn-clone = "1.0"
-atomic_refcell = "0.1.9"
+atomic_refcell = "0.1.10"
 
 [build-dependencies]
 pyo3-build-config = { version = "0.18.3", features = ["resolve-config"] }
