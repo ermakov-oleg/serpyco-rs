@@ -42,7 +42,7 @@ $ pip install serpyco-rs
 ## Features
 
 - Serialization and deserialization of dataclasses
-- Validation of input/output data
+- Validation of input data
 - Very fast
 - Support recursive schemas
 - Generate JSON Schema Specification (Draft 2020-12)
