@@ -234,7 +234,7 @@ pub struct EnumEncoder {
 impl Encoder for EnumEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        obj_to_str(py_object_get_attr(value, unsafe { VALUE_STR })?)
+        py_object_get_attr(value, unsafe { VALUE_STR })
     }
 
     #[inline]
