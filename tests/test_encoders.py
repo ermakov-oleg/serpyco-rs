@@ -3,12 +3,11 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Literal
 from zoneinfo import ZoneInfo
 
 import pytest
-from dateutil.tz import tzoffset
 from serpyco_rs import Serializer, ValidationError
 
 
@@ -209,3 +208,26 @@ def test_optional():
     assert serializer.dump(T(foo=1)) == {"foo": 1}
     assert serializer.load({}) == T()
     assert serializer.load({"foo": 12}) == T(foo=12)
+
+
+def test_int_enum():
+    class Foo(IntEnum):
+        foo = 1
+        bar = 2
+
+    serializer = Serializer(Foo)
+    assert serializer.dump(Foo.foo) == 1
+    assert serializer.load(1) == Foo.foo
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="StrEnum available after 3.11")
+def test_str_enum():
+    from enum import StrEnum
+
+    class Foo(StrEnum):
+        foo = "foo"
+        bar = "bar"
+
+    serializer = Serializer(Foo)
+    assert serializer.dump(Foo.foo) == "foo"
+    assert serializer.load("bar") == Foo.bar
