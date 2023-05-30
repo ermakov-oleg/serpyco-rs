@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, TypedDict, Union
 from unittest import mock
 
 import pytest
@@ -12,6 +12,7 @@ from serpyco_rs._describe import describe_type
 from serpyco_rs._json_schema import JsonschemaRSValidator, get_json_schema
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
 from serpyco_rs.metadata import Discriminator, Max, MaxLength, Min, MinLength
+from typing_extensions import NotRequired, Required
 
 
 class EnumTest(Enum):
@@ -34,6 +35,16 @@ class Foo:
 class Bar:
     type: Literal["bar"]
     val: str
+
+
+class TypedDictTotalTrue(TypedDict):
+    foo: int
+    bar: NotRequired[str]
+
+
+class TypedDictTotalFalse(TypedDict, total=False):
+    foo: int
+    bar: Required[str]
 
 
 @pytest.mark.parametrize(
@@ -79,6 +90,10 @@ class Bar:
         (Annotated[Union[Foo, Bar], Discriminator("type")], {"type": "bar", "val": "1"}),
         (Any, ["1", 2, True]),
         (Any, {}),
+        (TypedDictTotalTrue, {"foo": 1}),
+        (TypedDictTotalTrue, {"foo": 1, "bar": "1"}),
+        (TypedDictTotalFalse, {"bar": "1"}),
+        (TypedDictTotalFalse, {"foo": 1, "bar": "1"}),
     ),
 )
 def test_validate(cls, value):
@@ -190,6 +205,8 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
             {"type": "bar", "val": 1},
             _mk_e(sp="oneOf"),
         ),
+        (TypedDictTotalTrue, {}, _mk_e(m='"foo" is a required property')),
+        (TypedDictTotalFalse, {}, _mk_e(m='"bar" is a required property')),
     ),
 )
 def test_validate__validation_error(cls, value, err):

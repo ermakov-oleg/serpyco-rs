@@ -212,6 +212,73 @@ impl Encoder for EntityEncoder {
 }
 
 #[derive(Debug, Clone)]
+pub struct TypedDictEncoder {
+    pub(crate) omit_none: bool,
+    pub(crate) fields: Vec<Field>,
+}
+
+impl Encoder for TypedDictEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
+
+        for field in &self.fields {
+            let field_val = match py_object_get_item(value, field.name.as_ptr()) {
+                Ok(val) => val,
+                Err(e) => {
+                    if field.required {
+                        return Err(ValidationError::new_err(format!(
+                            "data dictionary is missing required parameter {} (err: {})",
+                            &field.name, e
+                        )));
+                    } else {
+                        continue;
+                    }
+                }
+            }; // val RC +1
+
+            let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
+
+            if field.required || !self.omit_none || dump_result != unsafe { NONE_PY_TYPE } {
+                ffi!(PyDict_SetItem(
+                    dict_ptr,
+                    field.dict_key.as_ptr(),
+                    dump_result
+                )); // key and val RC +1
+            }
+
+            ffi!(Py_DECREF(field_val));
+            ffi!(Py_DECREF(dump_result));
+        }
+
+        Ok(dict_ptr)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let dict_ptr = ffi!(PyDict_New());
+        for field in &self.fields {
+            let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
+                Ok(val) => field.encoder.load(val)?, // new obj or RC +1
+                Err(e) => {
+                    if field.required {
+                        return Err(ValidationError::new_err(format!(
+                            "data dictionary is missing required parameter {} (err: {})",
+                            &field.dict_key, e
+                        )));
+                    } else {
+                        continue;
+                    }
+                }
+            };
+            ffi!(PyDict_SetItem(dict_ptr, field.name.as_ptr(), val)); // key and val RC +1
+            ffi!(Py_DECREF(val));
+        }
+        Ok(dict_ptr)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct UUIDEncoder;
 
 impl Encoder for UUIDEncoder {
@@ -396,16 +463,25 @@ impl Encoder for DateEncoder {
     }
 }
 
+#[derive(Debug)]
+pub enum Encoders {
+    Entity(EntityEncoder),
+    TypedDict(TypedDictEncoder),
+}
+
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
-    pub(crate) inner: Arc<AtomicRefCell<Option<EntityEncoder>>>,
+    pub(crate) inner: Arc<AtomicRefCell<Option<Encoders>>>,
 }
 
 impl Encoder for LazyEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         match self.inner.borrow().as_ref() {
-            Some(encoder) => encoder.dump(value),
+            Some(encoder) => match encoder {
+                Encoders::Entity(encoder) => encoder.dump(value),
+                Encoders::TypedDict(encoder) => encoder.dump(value),
+            },
             None => Err(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
             )),
@@ -415,7 +491,10 @@ impl Encoder for LazyEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         match self.inner.borrow().as_ref() {
-            Some(encoder) => encoder.load(value),
+            Some(encoder) => match encoder {
+                Encoders::Entity(encoder) => encoder.load(value),
+                Encoders::TypedDict(encoder) => encoder.load(value),
+            },
             None => Err(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
             )),

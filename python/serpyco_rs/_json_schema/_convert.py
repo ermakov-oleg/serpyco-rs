@@ -154,7 +154,7 @@ def _(arg: describe.OptionalType, doc: Optional[str] = None) -> Schema:
 
 
 @to_json_schema.register
-def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
+def _(arg: Union[describe.EntityType, describe.TypedDictType], doc: Optional[str] = None) -> Schema:
     return ObjectType(
         properties={prop.dict_key: to_json_schema(prop.type, prop.doc) for prop in arg.fields if not prop.is_property},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,

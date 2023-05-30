@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Generic, Literal, Optional, Sequence, TypeVar, Union
+from typing import Annotated, Any, Generic, Literal, Optional, Sequence, TypedDict, TypeVar, Union
 from unittest import mock
 from unittest.mock import ANY
 from uuid import UUID
@@ -30,11 +30,13 @@ from serpyco_rs._describe import (
     StringType,
     TimeType,
     TupleType,
+    TypedDictType,
     UnionType,
     UUIDType,
     describe_type,
 )
-from serpyco_rs.metadata import CamelCase, Discriminator, Max, MaxLength, Min, MinLength, NoFormat, Places
+from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, NoFormat, Places
+from typing_extensions import NotRequired, Required
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -690,5 +692,60 @@ def test_describe__tagged_union():
             )
         ],
         doc=mock.ANY,
+        custom_encoder=None,
+    )
+
+
+def test_describe__typed_dict():
+    class Entity(TypedDict, Generic[T]):
+        foo_filed: int
+        bar_field: Annotated[NotRequired[str], Alias("barField")]
+        generic_field: T
+
+    assert describe_type(Entity[bool]) == TypedDictType(
+        name=mock.ANY,
+        fields=[
+            EntityField(
+                name="foo_filed",
+                dict_key="foo_filed",
+                type=IntegerType(custom_encoder=None),
+            ),
+            EntityField(
+                name="bar_field",
+                dict_key="barField",
+                type=StringType(custom_encoder=None),
+                default=None,
+            ),
+            EntityField(
+                name="generic_field",
+                dict_key="generic_field",
+                type=BooleanType(custom_encoder=None),
+            ),
+        ],
+        generics=((T, bool),),
+        custom_encoder=None,
+    )
+
+
+def test_describe__typed_dict__total_false():
+    class Entity(TypedDict, total=False):
+        foo: int
+        bar: Required[str]
+
+    assert describe_type(Entity[bool]) == TypedDictType(
+        name=mock.ANY,
+        fields=[
+            EntityField(
+                name="foo",
+                dict_key="foo",
+                type=IntegerType(custom_encoder=None),
+                default=None,
+            ),
+            EntityField(
+                name="bar",
+                dict_key="bar",
+                type=StringType(custom_encoder=None),
+            ),
+        ],
         custom_encoder=None,
     )

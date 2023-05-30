@@ -59,6 +59,7 @@ There is support for generic types from the standard typing module:
 * Enum
 * List
 * Dict
+* TypedDict
 * Mapping
 * Sequence
 * Tuple (fixed size)

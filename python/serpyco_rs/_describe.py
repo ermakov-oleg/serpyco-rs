@@ -21,7 +21,7 @@ from typing import (
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
-from typing_extensions import assert_never, get_args
+from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
 from ._utils import to_camelcase
 from .metadata import (
@@ -165,6 +165,15 @@ class EntityType(Type):
 
 
 @dataclasses.dataclass
+class TypedDictType(Type):
+    name: str
+    fields: Sequence[EntityField]
+    omit_none: bool = False
+    generics: Sequence[tuple[TypeVar, Any]] = tuple()
+    doc: Optional[str] = None
+
+
+@dataclasses.dataclass
 class OptionalType(Type):
     inner: Type
 
@@ -242,6 +251,8 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
     metadata = _get_annotated_metadata(t)
     if get_origin(t) == Annotated:  # unwrap annotated
         t = t.__origin__
+    if get_origin(t) in {Required, NotRequired}:  # unwrap TypedDict special forms
+        t = t.__args__[0]
     if hasattr(t, "__origin__"):
         parameters = getattr(t.__origin__, "__parameters__", ())
         args = t.__args__
@@ -358,7 +369,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t, custom_encoder=custom_encoder)
 
-        if dataclasses.is_dataclass(t) or _is_attrs(t):
+        if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
             meta.add_to_state(meta_key, None)
             entity_type = _describe_entity(
                 t=t,
@@ -422,7 +433,7 @@ def _describe_entity(
     cls_none_format: NoneFormat,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: _Meta,
-) -> EntityType:
+) -> Union[EntityType, TypedDictType]:
     docs = get_attributes_doc(t)
     try:
         types = get_type_hints(t, include_extras=True)
@@ -454,6 +465,16 @@ def _describe_entity(
             )
         )
 
+    if is_typeddict(t):
+        return TypedDictType(
+            name=_generate_name(t, cls_filed_format, cls_none_format, generics),
+            fields=fields,
+            omit_none=cls_none_format is OmitNone,
+            generics=generics,
+            doc=t.__doc__,
+            custom_encoder=custom_encoder,
+        )
+
     return EntityType(
         cls=t,
         name=_generate_name(t, cls_filed_format, cls_none_format, generics),
@@ -475,6 +496,16 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                 default_factory=(f.default_factory if f.default_factory is not dataclasses.MISSING else NOT_SET),
             )
             for f in dataclasses.fields(t)
+        ]
+    if is_typeddict(t):
+        return [
+            _Field(
+                name=field_name,
+                type=field_type,
+                default=NOT_SET if _is_required_in_typeddict(t, field_name) else None,
+                default_factory=NOT_SET,
+            )
+            for field_name, field_type in t.__annotations__.items()
         ]
     if _is_attrs(t):
         assert attr
@@ -602,3 +633,11 @@ def _is_literal_type(t: Any) -> bool:
 
 def _is_attrs(t: Any) -> bool:
     return attr is not None and attr.has(t)
+
+
+def _is_required_in_typeddict(t: Any, key: str) -> bool:
+    if is_typeddict(t):
+        if t.__total__:
+            return key not in t.__optional_keys__
+        return key in t.__required_keys__
+    raise RuntimeError(f'Expected TypedDict, got "{t!r}"')

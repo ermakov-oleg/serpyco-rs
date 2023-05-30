@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional, TypedDict, Union
 from unittest import mock
 from uuid import UUID
 
@@ -28,6 +28,11 @@ def test_to_json_schema():
 
         optional_filed: Optional[InnerData] = None
 
+    class AnotherInnerData(TypedDict):
+        """AnotherInnerData"""
+
+        bar: str
+
     @dataclass
     class Data:
         """Docs"""
@@ -49,6 +54,7 @@ def test_to_json_schema():
         n: Any
         o: Annotated[InnerData, CamelCase]
         p: Annotated[OtherInnerData, OmitNone]
+        q: AnotherInnerData
         some_filed: Annotated[str, Alias("fooFiled")]
 
     serializer = Serializer(Data)
@@ -105,6 +111,9 @@ def test_to_json_schema():
                         "o": {
                             "$ref": "#/components/schemas/tests.json_schema.test_convert.InnerData[camel_case,keep_nones]"
                         },
+                        "q": {
+                            "$ref": "#/components/schemas/tests.json_schema.test_convert.AnotherInnerData[no_format,keep_nones]"
+                        },
                         "fooFiled": {"type": "string"},
                     },
                     "required": [
@@ -124,6 +133,7 @@ def test_to_json_schema():
                         "n",
                         "o",
                         "p",
+                        "q",
                         "fooFiled",
                     ],
                     "type": "object",
@@ -158,6 +168,12 @@ def test_to_json_schema():
                             ]
                         }
                     },
+                    "type": "object",
+                },
+                "tests.json_schema.test_convert.AnotherInnerData[no_format,keep_nones]": {
+                    "description": "AnotherInnerData",
+                    "properties": {"bar": {"type": "string"}},
+                    "required": ["bar"],
                     "type": "object",
                 },
             },
