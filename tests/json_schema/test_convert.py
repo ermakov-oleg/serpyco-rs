@@ -73,7 +73,7 @@ def test_to_json_schema():
                         "e": {"maxLength": 5, "minLength": 1, "type": "string"},
                         "f": {"format": "uuid", "type": "string"},
                         "g": {
-                            "pattern": r"^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\.[0-9]+)?)?$",
+                            "pattern": "^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\\.[0-9]+)?)??(([+-][0-9][0-9]:?[0-9][0-9])|Z)?$",
                             "type": "string",
                         },
                         "h": {

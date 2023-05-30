@@ -18,7 +18,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
             c_int::from(time.minute),
             c_int::from(time.second),
             time.microsecond as i32,
-            NONE_PY_TYPE,
+            py_timezone(time.tz_offset)?,
             api.TimeType,
         );
         from_ptr_or_err(ptr)
@@ -51,7 +51,7 @@ pub fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
             c_int::from(datetime.time.minute),
             c_int::from(datetime.time.second),
             datetime.time.microsecond as i32,
-            py_timezone(datetime.offset)?,
+            py_timezone(datetime.time.tz_offset)?,
             api.DateTimeType,
         )
     };
