@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Literal
+from typing import Generic, Literal, TypeVar
 from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
 from serpyco_rs import Serializer, ValidationError
+from typing_extensions import TypedDict
 
 
 @pytest.mark.parametrize(
@@ -232,3 +233,15 @@ def test_str_enum():
     serializer = Serializer(Foo)
     assert serializer.dump(Foo.foo) == "foo"
     assert serializer.load("bar") == Foo.bar
+
+
+def test_typed_dict():
+    _T = TypeVar("_T")
+
+    class T(TypedDict, Generic[_T]):
+        foo_filed: int
+        generic_field: _T
+
+    serializer = Serializer(T[bool], camelcase_fields=True)
+    assert serializer.dump({"foo_filed": 1, "generic_field": True}) == {"fooFiled": 1, "genericField": True}
+    assert serializer.load({"fooFiled": 1, "genericField": True}) == {"foo_filed": 1, "generic_field": True}

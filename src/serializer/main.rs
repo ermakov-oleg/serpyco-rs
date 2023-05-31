@@ -1,5 +1,6 @@
 use crate::serializer::encoders::{
-    CustomEncoder, DateEncoder, DateTimeEncoder, LazyEncoder, TEncoder, TimeEncoder, UnionEncoder,
+    CustomEncoder, DateEncoder, DateTimeEncoder, Encoders, LazyEncoder, TEncoder, TimeEncoder,
+    TypedDictEncoder, UnionEncoder,
 };
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
@@ -16,7 +17,7 @@ use super::encoders::{
     NoopEncoder, OptionalEncoder, TupleEncoder, UUIDEncoder,
 };
 
-type EncoderStateValue = Arc<AtomicRefCell<Option<EntityEncoder>>>;
+type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
 
 #[pyclass]
 #[derive(Debug)]
@@ -145,33 +146,7 @@ pub fn get_encoder(
             let py_type = type_info.getattr(py, "cls")?;
             let class_fields = type_info.getattr(py, "fields")?;
             let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
-            let mut fields = vec![];
-
-            for field in class_fields.as_ref(py).iter()? {
-                let field = field?;
-                let f_name: &PyString = field.getattr("name")?.downcast()?;
-                let dict_key: &PyString = field.getattr("dict_key")?.downcast()?;
-                let required = field.getattr("required")?.is_true()?;
-                let f_type = get_object_type(field.getattr("type")?)?;
-                let f_default = field.getattr("default")?;
-                let f_default_factory = field.getattr("default_factory")?;
-
-                let fld = Field {
-                    name: f_name.into(),
-                    dict_key: dict_key.into(),
-                    encoder: get_encoder(py, f_type, encoder_state)?,
-                    required,
-                    default: match is_not_set(f_default)? {
-                        true => None,
-                        false => Some(f_default.into()),
-                    },
-                    default_factory: match is_not_set(f_default_factory)? {
-                        true => None,
-                        false => Some(f_default_factory.into()),
-                    },
-                };
-                fields.push(fld);
-            }
+            let fields = iterate_on_fields(py, class_fields, encoder_state)?;
 
             let encoder = EntityEncoder {
                 fields,
@@ -180,7 +155,20 @@ pub fn get_encoder(
             };
             let python_object_id = type_info.as_ptr() as *const _ as usize;
             let val = encoder_state.entry(python_object_id).or_default();
-            AtomicRefCell::<Option<EntityEncoder>>::borrow_mut(val).replace(encoder.clone());
+            AtomicRefCell::<Option<Encoders>>::borrow_mut(val)
+                .replace(Encoders::Entity(encoder.clone()));
+            wrap_with_custom_encoder(py, type_info, Box::new(encoder))?
+        }
+        Type::TypedDict(type_info) => {
+            let class_fields = type_info.getattr(py, "fields")?;
+            let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
+            let fields = iterate_on_fields(py, class_fields, encoder_state)?;
+
+            let encoder = TypedDictEncoder { fields, omit_none };
+            let python_object_id = type_info.as_ptr() as *const _ as usize;
+            let val = encoder_state.entry(python_object_id).or_default();
+            AtomicRefCell::<Option<Encoders>>::borrow_mut(val)
+                .replace(Encoders::TypedDict(encoder.clone()));
             wrap_with_custom_encoder(py, type_info, Box::new(encoder))?
         }
         Type::RecursionHolder(type_info) => {
@@ -238,4 +226,38 @@ fn to_optional(py: Python<'_>, value: PyObject) -> Option<PyObject> {
         true => None,
         false => Some(value),
     }
+}
+
+fn iterate_on_fields(
+    py: Python<'_>,
+    fields_attr: PyObject,
+    encoder_state: &mut HashMap<usize, EncoderStateValue>,
+) -> PyResult<Vec<Field>> {
+    let mut fields = vec![];
+    for field in fields_attr.as_ref(py).iter()? {
+        let field = field?;
+        let f_name: &PyString = field.getattr("name")?.downcast()?;
+        let dict_key: &PyString = field.getattr("dict_key")?.downcast()?;
+        let required = field.getattr("required")?.is_true()?;
+        let f_type = get_object_type(field.getattr("type")?)?;
+        let f_default = field.getattr("default")?;
+        let f_default_factory = field.getattr("default_factory")?;
+
+        let fld = Field {
+            name: f_name.into(),
+            dict_key: dict_key.into(),
+            encoder: get_encoder(py, f_type, encoder_state)?,
+            required,
+            default: match is_not_set(f_default)? {
+                true => None,
+                false => Some(f_default.into()),
+            },
+            default_factory: match is_not_set(f_default_factory)? {
+                true => None,
+                false => Some(f_default_factory.into()),
+            },
+        };
+        fields.push(fld);
+    }
+    Ok(fields)
 }

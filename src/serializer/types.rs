@@ -18,6 +18,7 @@ pub static mut DATETIME_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DATE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ENUM_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ENTITY_TYPE: *mut PyObject = 0 as *mut PyObject;
+pub static mut TYPED_DICT_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut OPTIONAL_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ARRAY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -52,6 +53,7 @@ pub enum Type {
     Date(Py<PyAny>),
     Enum(Py<PyAny>),
     Entity(Py<PyAny>),
+    TypedDict(Py<PyAny>),
     Optional(Py<PyAny>),
     Array(Py<PyAny>),
     Dictionary(Py<PyAny>),
@@ -87,6 +89,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::Enum(type_info.into()))
     } else if check_type!(type_info, ENTITY_TYPE) {
         Ok(Type::Entity(type_info.into()))
+    } else if check_type!(type_info, TYPED_DICT_TYPE) {
+        Ok(Type::TypedDict(type_info.into()))
     } else if check_type!(type_info, OPTIONAL_TYPE) {
         Ok(Type::Optional(type_info.into()))
     } else if check_type!(type_info, ARRAY_TYPE) {
@@ -123,6 +127,7 @@ pub fn init(py: Python<'_>) {
         DATE_TYPE = get_attr_ptr!(describe, "DateType");
         ENUM_TYPE = get_attr_ptr!(describe, "EnumType");
         ENTITY_TYPE = get_attr_ptr!(describe, "EntityType");
+        TYPED_DICT_TYPE = get_attr_ptr!(describe, "TypedDictType");
         OPTIONAL_TYPE = get_attr_ptr!(describe, "OptionalType");
         ARRAY_TYPE = get_attr_ptr!(describe, "ArrayType");
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
