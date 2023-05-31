@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Generic, Literal, Optional, Sequence, TypedDict, TypeVar, Union
+from typing import Annotated, Any, Generic, Literal, Optional, Sequence, TypeVar, Union
 from unittest import mock
 from unittest.mock import ANY
 from uuid import UUID
@@ -36,7 +36,7 @@ from serpyco_rs._describe import (
     describe_type,
 )
 from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, NoFormat, Places
-from typing_extensions import NotRequired, Required
+from typing_extensions import NotRequired, Required, TypedDict
 
 T = TypeVar("T")
 U = TypeVar("U")

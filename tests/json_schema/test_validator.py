@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional, TypedDict, Union
+from typing import Annotated, Any, Literal, Optional, Union
 from unittest import mock
 
 import pytest
@@ -12,7 +12,7 @@ from serpyco_rs._describe import describe_type
 from serpyco_rs._json_schema import JsonschemaRSValidator, get_json_schema
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
 from serpyco_rs.metadata import Discriminator, Max, MaxLength, Min, MinLength
-from typing_extensions import NotRequired, Required
+from typing_extensions import NotRequired, Required, TypedDict
 
 
 class EnumTest(Enum):

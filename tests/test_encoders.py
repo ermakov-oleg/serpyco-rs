@@ -4,12 +4,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Generic, Literal, TypedDict, TypeVar
+from typing import Generic, Literal, TypeVar
 from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
 from serpyco_rs import Serializer, ValidationError
+from typing_extensions import TypedDict
 
 
 @pytest.mark.parametrize(
