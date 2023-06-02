@@ -2,12 +2,13 @@ import sys
 from functools import singledispatch
 from typing import Any, Optional, Union, cast
 
+
 if sys.version_info >= (3, 10):
     from typing import TypeGuard
 else:
     from typing_extensions import TypeGuard
 
-from .. import _describe as describe
+from serpyco_rs import _describe as describe
 from ._entities import (
     ArrayType,
     Boolean,
@@ -28,10 +29,10 @@ def get_json_schema(t: describe.Type) -> dict[str, Any]:
     definitions: dict[str, Any] = {}
     schema_def = schema.dump(definitions)
     return {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
         **schema_def,
-        "components": {
-            "schemas": definitions,
+        'components': {
+            'schemas': definitions,
         },
     }
 
@@ -62,7 +63,7 @@ def _(arg: describe.IntegerType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(_: describe.BytesType, doc: Optional[str] = None) -> Schema:
     return StringType(
-        format="binary",
+        format='binary',
         description=doc,
     )
 
@@ -95,7 +96,7 @@ def _(_: describe.BooleanType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(_: describe.UUIDType, doc: Optional[str] = None) -> Schema:
     return StringType(
-        format="uuid",
+        format='uuid',
         description=doc,
     )
 
@@ -103,8 +104,8 @@ def _(_: describe.UUIDType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(_: describe.TimeType, doc: Optional[str] = None) -> Schema:
     iso8601_pattern = (
-        r"^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\.[0-9]+)?)?"  # HH:mm:ss.ssss
-        r"?(([+-][0-9][0-9]:?[0-9][0-9])|Z)?$"  # timezone
+        r'^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\.[0-9]+)?)?'  # HH:mm:ss.ssss
+        r'?(([+-][0-9][0-9]:?[0-9][0-9])|Z)?$'  # timezone
     )
     return StringType(
         pattern=iso8601_pattern,
@@ -115,9 +116,9 @@ def _(_: describe.TimeType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(_: describe.DateTimeType, doc: Optional[str] = None) -> Schema:
     iso8601_pattern = (
-        r"^[0-9]{4}-[0-9][0-9]-[0-9][0-9]T"  # YYYY-MM-DD
-        r"[0-9][0-9]:[0-9][0-9]:[0-9][0-9](\.[0-9]+)"  # HH:mm:ss.ssss
-        r"?(([+-][0-9][0-9]:[0-9][0-9])|Z)?$"  # timezone
+        r'^[0-9]{4}-[0-9][0-9]-[0-9][0-9]T'  # YYYY-MM-DD
+        r'[0-9][0-9]:[0-9][0-9]:[0-9][0-9](\.[0-9]+)'  # HH:mm:ss.ssss
+        r'?(([+-][0-9][0-9]:[0-9][0-9])|Z)?$'  # timezone
     )
     return StringType(
         pattern=iso8601_pattern,
@@ -127,7 +128,7 @@ def _(_: describe.DateTimeType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(_: describe.DateType, doc: Optional[str] = None) -> Schema:
-    iso8601_pattern = r"^[0-9]{4}-[0-9][0-9]-[0-9][0-9]$"  # YYYY-MM-DD
+    iso8601_pattern = r'^[0-9]{4}-[0-9][0-9]-[0-9][0-9]$'  # YYYY-MM-DD
     return StringType(
         pattern=iso8601_pattern,
         description=doc,
@@ -206,7 +207,7 @@ def _(_: describe.AnyType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
-    return RefType(description=doc, ref=f"#/components/schemas/{holder.name}")
+    return RefType(description=doc, ref=f'#/components/schemas/{holder.name}')
 
 
 @to_json_schema.register
@@ -238,4 +239,4 @@ def _(arg: describe.UnionType, doc: Optional[str] = None) -> Schema:
 def _check_unions_schema_types(schema: Schema) -> TypeGuard[Union[ObjectType, RefType]]:
     if isinstance(schema, (ObjectType, RefType)):
         return True
-    raise RuntimeError(f"Unions schema items must be ObjectType or RefType. Current: {schema}")
+    raise RuntimeError(f'Unions schema items must be ObjectType or RefType. Current: {schema}')

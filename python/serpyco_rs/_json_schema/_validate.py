@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from typing import Any
 
 import jsonschema_rs
+
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
 
 
@@ -28,6 +29,6 @@ class JsonschemaRSValidator(Validator):
     def _map_err(self, err: jsonschema_rs.ValidationError) -> ErrorItem:
         return ErrorItem(
             message=err.message,
-            instance_path="/".join(map(str, err.instance_path)),
-            schema_path="/".join(map(str, err.schema_path)),
+            instance_path='/'.join(map(str, err.instance_path)),
+            schema_path='/'.join(map(str, err.schema_path)),
         )

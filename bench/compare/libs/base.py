@@ -28,11 +28,11 @@ class Dataclass:
 
 def make_test_object(cls, nested_cls):
     return cls(
-        name="Foo",
+        name='Foo',
         value=42,
         f=12.34,
         b=True,
-        nest=[nested_cls(name="Bar_{}".format(index)) for index in range(0, 1000)],
+        nest=[nested_cls(name=f'Bar_{index}') for index in range(0, 1000)],
         many=[1, 2, 3],
     )
 

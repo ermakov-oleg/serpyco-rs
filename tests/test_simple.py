@@ -22,9 +22,9 @@ def test_dump_simple_fields_types():
         int_f=123,
         float_f=3.14,
         bool_f=True,
-        str_f="Test",
+        str_f='Test',
     )
-    expected = {"bool_f": True, "float_f": 3.14, "int_f": 123, "str_f": "Test"}
+    expected = {'bool_f': True, 'float_f': 3.14, 'int_f': 123, 'str_f': 'Test'}
     assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
 
@@ -48,10 +48,10 @@ def test_simple_nested_dataclasses():
 
     obj = A(
         int_f=123,
-        nested=B(value="test", nested=C(value=1)),
+        nested=B(value='test', nested=C(value=1)),
     )
 
-    expected = {"int_f": 123, "nested": {"nested": {"value": 1}, "value": "test"}}
+    expected = {'int_f': 123, 'nested': {'nested': {'value': 1}, 'value': 'test'}}
 
     assert serializer.dump(obj) == expected
     assert serializer.load(expected) == obj
@@ -61,7 +61,7 @@ def test_iterables():
     @dataclass
     class A:
         iterable_builtins_list: list[int]
-        iterable_typing_list: List[int]
+        iterable_typing_list: list[int]
         iterable_builtins_sequence: Sequence[int]
 
     serializer = Serializer(A)
@@ -73,9 +73,9 @@ def test_iterables():
     )
 
     expected = {
-        "iterable_builtins_list": [1, 2, 3],
-        "iterable_typing_list": [1, 2, 3],
-        "iterable_builtins_sequence": [1, 2, 3],
+        'iterable_builtins_list': [1, 2, 3],
+        'iterable_typing_list': [1, 2, 3],
+        'iterable_builtins_sequence': [1, 2, 3],
     }
 
     assert serializer.dump(obj) == expected
@@ -94,11 +94,11 @@ def test_mappings():
 
     serializer = Serializer(A)
 
-    obj = A(dict_field={"foo": 1}, mapping_field={"bar": B(value="123")})
+    obj = A(dict_field={'foo': 1}, mapping_field={'bar': B(value='123')})
 
     expected = {
-        "dict_field": {"foo": 1},
-        "mapping_field": {"bar": {"value": "123"}},
+        'dict_field': {'foo': 1},
+        'mapping_field': {'bar': {'value': '123'}},
     }
 
     assert serializer.load(expected) == obj
@@ -127,24 +127,24 @@ def test_required_and_nullable():
     optional_not_null = Serializer(OptionalNotNull)
     optional_nullable = Serializer(OptionalNullable)
 
-    assert req_not_null.load({"foo": 2}) == ReqNotNull(foo=2)
+    assert req_not_null.load({'foo': 2}) == ReqNotNull(foo=2)
     with pytest.raises(SchemaValidationError):
-        req_not_null.load({"foo": None})
+        req_not_null.load({'foo': None})
     with pytest.raises(SchemaValidationError):
         req_not_null.load({})
 
-    assert req_nullable.load({"foo": 2}) == ReqNullable(foo=2)
-    assert req_nullable.load({"foo": None}) == ReqNullable(foo=None)
+    assert req_nullable.load({'foo': 2}) == ReqNullable(foo=2)
+    assert req_nullable.load({'foo': None}) == ReqNullable(foo=None)
     with pytest.raises(SchemaValidationError):
         req_nullable.load({})
 
-    assert optional_not_null.load({"foo": 2}) == OptionalNotNull(foo=2)
+    assert optional_not_null.load({'foo': 2}) == OptionalNotNull(foo=2)
     with pytest.raises(SchemaValidationError):
-        assert optional_not_null.load({"foo": None})
+        assert optional_not_null.load({'foo': None})
     assert optional_not_null.load({}) == OptionalNotNull(foo=1)
 
-    assert optional_nullable.load({"foo": 2}) == OptionalNullable(foo=2)
-    assert optional_nullable.load({"foo": None}) == OptionalNullable(foo=None)
+    assert optional_nullable.load({'foo': 2}) == OptionalNullable(foo=2)
+    assert optional_nullable.load({'foo': None}) == OptionalNullable(foo=None)
     assert optional_nullable.load({}) == OptionalNullable(foo=1)
 
 
@@ -156,22 +156,22 @@ def test_required_and_nullable_list():
     entity_serializer = Serializer(Entity)
 
     assert entity_serializer.load({}) == Entity(foo=None)
-    assert entity_serializer.load({"foo": None}) == Entity(foo=None)
-    assert entity_serializer.load({"foo": []}) == Entity(foo=[])
-    assert entity_serializer.load({"foo": [1]}) == Entity(foo=[1])
-    assert entity_serializer.load({"foo": [1, None]}) == Entity(foo=[1, None])
+    assert entity_serializer.load({'foo': None}) == Entity(foo=None)
+    assert entity_serializer.load({'foo': []}) == Entity(foo=[])
+    assert entity_serializer.load({'foo': [1]}) == Entity(foo=[1])
+    assert entity_serializer.load({'foo': [1, None]}) == Entity(foo=[1, None])
 
 
 def test_defaults():
     @dataclass
     class Entity:
-        foo: str = "123"
+        foo: str = '123'
         bar: list[int] = field(default_factory=lambda: list([1, 2, 3]))
 
     entity_serializer = Serializer(Entity)
 
-    assert entity_serializer.load({"bar": [1]}) == Entity(foo="123", bar=[1])
-    assert entity_serializer.load({}) == Entity(foo="123", bar=[1, 2, 3])
+    assert entity_serializer.load({'bar': [1]}) == Entity(foo='123', bar=[1])
+    assert entity_serializer.load({}) == Entity(foo='123', bar=[1, 2, 3])
 
 
 if sys.version_info >= (3, 10):
@@ -188,12 +188,12 @@ if sys.version_info >= (3, 10):
 
         # assert
         foo = UnionClass(name=None, count=None)
-        dict_foo = {"name": None, "count": None}
+        dict_foo = {'name': None, 'count': None}
         assert serializer.dump(foo) == dict_foo
         assert foo == serializer.load(dict_foo)
 
-        bar = UnionClass(name="try", count=5)
-        dict_bar = {"name": "try", "count": 5}
+        bar = UnionClass(name='try', count=5)
+        dict_bar = {'name': 'try', 'count': 5}
         assert serializer.dump(bar) == dict_bar
         assert bar == serializer.load(dict_bar)
 
@@ -217,15 +217,15 @@ def test_serializer_with_camelcase():
     serializer = Serializer(A, camelcase_fields=True)
 
     obj = A(
-        dict_field={"foo": 1},
-        inner_value_one=B(some_value="123", another_value=C(11)),
-        inner_value_two=B(some_value="1", another_value=C(22)),
+        dict_field={'foo': 1},
+        inner_value_one=B(some_value='123', another_value=C(11)),
+        inner_value_two=B(some_value='1', another_value=C(22)),
     )
 
     expected = {
-        "dictField": {"foo": 1},
-        "innerValueOne": {"someValue": "123", "anotherValue": {"fooField": 11}},
-        "innerValueTwo": {"some_value": "1", "another_value": {"fooField": 22}},
+        'dictField': {'foo': 1},
+        'innerValueOne': {'someValue': '123', 'anotherValue': {'fooField': 11}},
+        'innerValueTwo': {'some_value': '1', 'another_value': {'fooField': 22}},
     }
 
     assert serializer.load(expected) == obj

@@ -9,7 +9,7 @@ from serpyco_rs._describe import EntityField, EntityType, OptionalType, Recursio
 @dataclass
 class Node:
     value: str
-    next: Optional["Node"] = None
+    next: Optional['Node'] = None
 
 
 @dataclass
@@ -23,20 +23,20 @@ def test_describe__recursive_type__parsed():
         name=ANY,
         fields=[
             EntityField(
-                name="head",
-                dict_key="head",
+                name='head',
+                dict_key='head',
                 type=EntityType(
                     cls=Node,
                     name=ANY,
                     fields=[
                         EntityField(
-                            name="value",
-                            dict_key="value",
+                            name='value',
+                            dict_key='value',
                             type=StringType(custom_encoder=None),
                         ),
                         EntityField(
-                            name="next",
-                            dict_key="next",
+                            name='next',
+                            dict_key='next',
                             default=None,
                             type=OptionalType(
                                 inner=RecursionHolder(
@@ -64,24 +64,24 @@ def test_serializer():
 
     linked_list = Root(
         head=Node(
-            value="1",
-            next=Node(value="2"),
+            value='1',
+            next=Node(value='2'),
         ),
     )
 
-    assert serializer.dump(linked_list) == {"head": {"next": {"next": None, "value": "2"}, "value": "1"}}
-    assert serializer.load({"head": {"next": {"next": None, "value": "2"}, "value": "1"}}) == linked_list
+    assert serializer.dump(linked_list) == {'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}
+    assert serializer.load({'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}) == linked_list
 
 
 @dataclass
 class Foo:
     value: str
-    next: Optional[list["Foo"]] = None
+    next: Optional[list['Foo']] = None
 
 
 def test_self_recursive_objects_forward_ref():
     serializer = Serializer(Foo)
-    val = Foo(value="a", next=[Foo(value="b")])
-    raw = {"value": "a", "next": [{"next": None, "value": "b"}]}
+    val = Foo(value='a', next=[Foo(value='b')])
+    raw = {'value': 'a', 'next': [{'next': None, 'value': 'b'}]}
     assert serializer.dump(val) == raw
     assert serializer.load(raw) == val

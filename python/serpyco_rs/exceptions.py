@@ -2,7 +2,8 @@ from dataclasses import dataclass
 
 from ._impl import ValidationError
 
-__all__ = ["ValidationError", "SchemaValidationError", "ErrorItem"]
+
+__all__ = ['ValidationError', 'SchemaValidationError', 'ErrorItem']
 
 
 @dataclass

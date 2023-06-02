@@ -41,8 +41,8 @@ class Alias:
 
 
 class Format(Enum):
-    no_format = "no_format"
-    camel_case = "camel_case"
+    no_format = 'no_format'
+    camel_case = 'camel_case'
 
 
 @dataclass(frozen=True)
@@ -63,8 +63,8 @@ KeepNone: NoneFormat = NoneFormat(False)
 OmitNone: NoneFormat = NoneFormat(True)
 
 
-_I = TypeVar("_I")
-_O = TypeVar("_O")
+_I = TypeVar('_I')
+_O = TypeVar('_O')
 
 
 @dataclass(frozen=True)

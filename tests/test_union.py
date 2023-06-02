@@ -10,12 +10,12 @@ from serpyco_rs.metadata import Discriminator
 @dataclass
 class Foo:
     val: int
-    type: Literal["foo"] = "foo"
+    type: Literal['foo'] = 'foo'
 
 
 @dataclass
 class Bar:
-    type: Literal["bar"]
+    type: Literal['bar']
     val: str
 
 
@@ -32,7 +32,7 @@ class Buzz:
 
 @dataclass
 class Base:
-    childs: list[Annotated[Union[Foo, Bar], Discriminator("type")]]
+    childs: list[Annotated[Union[Foo, Bar], Discriminator('type')]]
 
 
 def test_tagged_union():
@@ -40,10 +40,10 @@ def test_tagged_union():
     val = Base(
         childs=[
             Foo(val=1),
-            Bar(type="bar", val="12"),
+            Bar(type='bar', val='12'),
         ]
     )
-    raw = {"childs": [{"type": "foo", "val": 1}, {"type": "bar", "val": "12"}]}
+    raw = {'childs': [{'type': 'foo', 'val': 1}, {'type': 'bar', 'val': '12'}]}
     assert serializer.dump(val) == raw
     assert serializer.load(raw) == val
 
@@ -51,7 +51,7 @@ def test_tagged_union():
 def test_tagged_union__invalid_discriminator_type():
     @dataclass
     class Inner:
-        field: Annotated[Union[Foo, Bar, Buz], Discriminator("type")]
+        field: Annotated[Union[Foo, Bar, Buz], Discriminator('type')]
 
     with pytest.raises(RuntimeError) as exc_info:
         Serializer(Inner)
@@ -66,7 +66,7 @@ def test_tagged_union__invalid_discriminator_type():
 def test_tagged_union__union_arg_has_no_discriminator_field():
     @dataclass
     class Inner:
-        field: Annotated[Union[Foo, Bar, Buzz], Discriminator("type")]
+        field: Annotated[Union[Foo, Bar, Buzz], Discriminator('type')]
 
     with pytest.raises(RuntimeError) as exc_info:
         Serializer(Inner)
@@ -78,7 +78,7 @@ def test_tagged_union__union_arg_has_no_discriminator_field():
 def test_tagged_union__unsupported_types():
     @dataclass
     class Inner:
-        field: Annotated[Union[int, str], Discriminator("type")]
+        field: Annotated[Union[int, str], Discriminator('type')]
 
     with pytest.raises(RuntimeError) as exc_info:
         Serializer(Inner)
@@ -91,50 +91,50 @@ def test_tagged_union__unsupported_types():
 
 @dataclass
 class A:
-    type: Literal["A"]
+    type: Literal['A']
     params: int
-    children: Optional[list["ComponentsT"]] = None
+    children: Optional[list['ComponentsT']] = None
 
 
 @dataclass
 class B:
-    type: Literal["B"]
+    type: Literal['B']
     params: str
-    children: Optional[list["ComponentsT"]] = None
+    children: Optional[list['ComponentsT']] = None
 
 
-ComponentsT = Annotated[Union[A, B], Discriminator("type")]
+ComponentsT = Annotated[Union[A, B], Discriminator('type')]
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="requires python3.11 or higher")
+@pytest.mark.skipif(sys.version_info < (3, 11), reason='requires python3.11 or higher')
 def test_tagged_union__with_forward_refs():
     serializer = Serializer(ComponentsT, omit_none=True)
     data: ComponentsT = A(
-        type="A",
+        type='A',
         params=123,
         children=[
             A(
-                type="A",
+                type='A',
                 params=1234,
             ),
             B(
-                type="B",
-                params="foo",
+                type='B',
+                params='foo',
                 children=[
                     B(
-                        type="B",
-                        params="bar",
+                        type='B',
+                        params='bar',
                     )
                 ],
             ),
         ],
     )
     raw_data = {
-        "type": "A",
-        "params": 123,
-        "children": [
-            {"params": 1234, "type": "A"},
-            {"children": [{"params": "bar", "type": "B"}], "params": "foo", "type": "B"},
+        'type': 'A',
+        'params': 123,
+        'children': [
+            {'params': 1234, 'type': 'A'},
+            {'children': [{'params': 'bar', 'type': 'B'}], 'params': 'foo', 'type': 'B'},
         ],
     }
     assert serializer.dump(data) == raw_data
@@ -144,37 +144,37 @@ def test_tagged_union__with_forward_refs():
 def test_tagged_union__camel_case_filed_format():
     @dataclass
     class A:
-        discriminator_with_multiple_words: Literal["A"]
+        discriminator_with_multiple_words: Literal['A']
         a: int
 
     @dataclass
     class B:
-        discriminator_with_multiple_words: Literal["B"]
+        discriminator_with_multiple_words: Literal['B']
         b: str
 
     raw_obj = [
         {
-            "discriminatorWithMultipleWords": "A",
-            "a": 128,
+            'discriminatorWithMultipleWords': 'A',
+            'a': 128,
         },
         {
-            "discriminatorWithMultipleWords": "B",
-            "b": "foo",
+            'discriminatorWithMultipleWords': 'B',
+            'b': 'foo',
         },
     ]
     obj = [
         A(
-            discriminator_with_multiple_words="A",
+            discriminator_with_multiple_words='A',
             a=128,
         ),
         B(
-            discriminator_with_multiple_words="B",
-            b="foo",
+            discriminator_with_multiple_words='B',
+            b='foo',
         ),
     ]
 
     serializer = Serializer(
-        list[Annotated[Union[A, B], Discriminator("discriminator_with_multiple_words")]],
+        list[Annotated[Union[A, B], Discriminator('discriminator_with_multiple_words')]],
         camelcase_fields=True,
     )
 

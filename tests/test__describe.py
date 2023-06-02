@@ -1,10 +1,10 @@
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Generic, Literal, Optional, Sequence, TypeVar, Union
+from typing import Annotated, Any, Generic, Literal, Optional, TypeVar, Union
 from unittest import mock
 from unittest.mock import ANY
 from uuid import UUID
@@ -38,13 +38,14 @@ from serpyco_rs._describe import (
 from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, NoFormat, Places
 from typing_extensions import NotRequired, Required, TypedDict
 
-T = TypeVar("T")
-U = TypeVar("U")
+
+T = TypeVar('T')
+U = TypeVar('U')
 
 
 def test_describe__dataclass__supported():
     class SomeEnum(Enum):
-        a = "a"
+        a = 'a'
 
     @dataclass
     class SomeOtherEntity:
@@ -76,123 +77,123 @@ def test_describe__dataclass__supported():
         name=ANY,
         fields=[
             EntityField(
-                name="a",
+                name='a',
                 type=IntegerType(min=None, max=None, custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="a",
+                dict_key='a',
             ),
             EntityField(
-                name="b",
+                name='b',
                 type=FloatType(min=None, max=None, custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="b",
+                dict_key='b',
             ),
             EntityField(
-                name="c",
+                name='c',
                 type=DecimalType(places=None, min=None, max=None, custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="c",
+                dict_key='c',
             ),
             EntityField(
-                name="d",
+                name='d',
                 type=BooleanType(custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="d",
+                dict_key='d',
             ),
             EntityField(
-                name="e",
+                name='e',
                 type=StringType(min_length=None, max_length=None, custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="e",
+                dict_key='e',
             ),
             EntityField(
-                name="f",
+                name='f',
                 type=UUIDType(custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="f",
+                dict_key='f',
             ),
             EntityField(
-                name="g",
+                name='g',
                 type=TimeType(custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="g",
+                dict_key='g',
             ),
             EntityField(
-                name="h",
+                name='h',
                 type=DateType(custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="h",
+                dict_key='h',
             ),
             EntityField(
-                name="i",
+                name='i',
                 type=DateTimeType(custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="i",
+                dict_key='i',
             ),
             EntityField(
-                name="j",
+                name='j',
                 type=EnumType(cls=SomeEnum, custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="j",
+                dict_key='j',
             ),
             EntityField(
-                name="k",
+                name='k',
                 type=EntityType(
                     cls=SomeOtherEntity,
                     name=ANY,
                     fields=[
                         EntityField(
-                            name="a",
+                            name='a',
                             type=IntegerType(min=None, max=None, custom_encoder=None),
                             doc=None,
                             default=NOT_SET,
                             default_factory=NOT_SET,
                             is_property=False,
-                            dict_key="a",
+                            dict_key='a',
                         )
                     ],
                     generics=(),
-                    doc="SomeOtherEntity(a: int)",
+                    doc='SomeOtherEntity(a: int)',
                     custom_encoder=None,
                 ),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="k",
+                dict_key='k',
             ),
             EntityField(
-                name="l",
+                name='l',
                 type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
                     is_sequence=False,
@@ -202,10 +203,10 @@ def test_describe__dataclass__supported():
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="l",
+                dict_key='l',
             ),
             EntityField(
-                name="m",
+                name='m',
                 type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
                     is_sequence=True,
@@ -215,10 +216,10 @@ def test_describe__dataclass__supported():
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="m",
+                dict_key='m',
             ),
             EntityField(
-                name="n",
+                name='n',
                 type=DictionaryType(
                     key_type=StringType(min_length=None, max_length=None, custom_encoder=None),
                     value_type=IntegerType(min=None, max=None, custom_encoder=None),
@@ -229,10 +230,10 @@ def test_describe__dataclass__supported():
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="n",
+                dict_key='n',
             ),
             EntityField(
-                name="o",
+                name='o',
                 type=DictionaryType(
                     key_type=StringType(min_length=None, max_length=None, custom_encoder=None),
                     value_type=IntegerType(min=None, max=None, custom_encoder=None),
@@ -243,20 +244,20 @@ def test_describe__dataclass__supported():
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="o",
+                dict_key='o',
             ),
             EntityField(
-                name="p",
+                name='p',
                 type=AnyType(custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
                 is_property=False,
-                dict_key="p",
+                dict_key='p',
             ),
         ],
         generics=(),
-        doc="Doc",
+        doc='Doc',
         custom_encoder=None,
     )
 
@@ -290,7 +291,7 @@ def test_describe_dataclass__field_has_docstring__doc_filled():
         x: int
         """Foo"""
 
-    assert describe_type(SomeEntity).fields[0].doc == "Foo"
+    assert describe_type(SomeEntity).fields[0].doc == 'Foo'
 
 
 def test_describe_dataclass__has_default__default_filled():
@@ -343,8 +344,8 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
         cls=SomeOtherEntity,
         name=ANY,
         generics=((T, int),),
-        fields=[EntityField(name="x", type=IntegerType(custom_encoder=None), dict_key="x")],
-        doc="SomeOtherEntity(x: ~T)",
+        fields=[EntityField(name='x', type=IntegerType(custom_encoder=None), dict_key='x')],
+        doc='SomeOtherEntity(x: ~T)',
         custom_encoder=None,
     )
 
@@ -358,13 +359,13 @@ def test_describe_dataclass__used_unknown_type_var__fail():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(SomeEntity[int])
 
-    assert exc_info.match("Unfilled TypeVar: ~U")
+    assert exc_info.match('Unfilled TypeVar: ~U')
 
 
 def test_describe__dataclass_with_forward_ref_annotation__parsed():
     @dataclass
     class SomeEntity:
-        x: "int"
+        x: 'int'
 
     assert describe_type(SomeEntity).fields[0].type == IntegerType(custom_encoder=None)
 
@@ -372,7 +373,7 @@ def test_describe__dataclass_with_forward_ref_annotation__parsed():
 def test_describe__dataclass_with_invalid_forward_ref_annotation__parsed():
     @dataclass
     class SomeEntity:
-        x: "intt"
+        x: 'intt'
 
     with pytest.raises(NameError) as exc_info:
         describe_type(SomeEntity)
@@ -392,12 +393,12 @@ def test_describe__dataclass_and_annotated_with_min_max__parsed():
         name=ANY,
         fields=[
             EntityField(
-                name="x",
-                dict_key="x",
+                name='x',
+                dict_key='x',
                 type=IntegerType(min=10, max=20, custom_encoder=None),
             )
         ],
-        doc="SomeEntity(x: typing.Annotated[int, Min(value=10), Max(value=20)])",
+        doc='SomeEntity(x: typing.Annotated[int, Min(value=10), Max(value=20)])',
         custom_encoder=None,
     )
 
@@ -414,12 +415,12 @@ def test_describe__dataclass_and_annotated_with_min_max_length__parsed():
         name=ANY,
         fields=[
             EntityField(
-                name="x",
-                dict_key="x",
+                name='x',
+                dict_key='x',
                 type=StringType(min_length=10, max_length=20, custom_encoder=None),
             )
         ],
-        doc="SomeEntity(x: typing.Annotated[str, MinLength(value=10), MaxLength(value=20)])",
+        doc='SomeEntity(x: typing.Annotated[str, MinLength(value=10), MaxLength(value=20)])',
         custom_encoder=None,
     )
 
@@ -430,7 +431,7 @@ def test_describe__attrs_and_field_has_docstring__doc_filled():
         x: int
         """Foo"""
 
-    assert describe_type(SomeEntity).fields[0].doc == "Foo"
+    assert describe_type(SomeEntity).fields[0].doc == 'Foo'
 
 
 def test_describe__attrs_and_has_default__default_filled():
@@ -459,7 +460,7 @@ def test_describe__attrs_and_has_default_factory__default_factory_filled():
 def test_describe__attrs_with_forward_ref_annotation__parsed():
     @attr.s(auto_attribs=True)
     class SomeEntity:
-        x: "int"
+        x: 'int'
 
     assert describe_type(SomeEntity).fields[0].type == IntegerType(custom_encoder=None)
 
@@ -467,7 +468,7 @@ def test_describe__attrs_with_forward_ref_annotation__parsed():
 def test_describe__attrs_with_invalid_forward_ref_annotation__parsed():
     @attr.s(auto_attribs=True)
     class SomeEntity:
-        x: "intt"
+        x: 'intt'
 
     with pytest.raises(NameError) as exc_info:
         describe_type(SomeEntity)
@@ -486,8 +487,8 @@ def test_describe__attrs_and_annotated_with_min_max__parsed():
         cls=SomeEntity,
         fields=[
             EntityField(
-                name="x",
-                dict_key="x",
+                name='x',
+                dict_key='x',
                 type=IntegerType(min=10, max=20, custom_encoder=None),
             )
         ],
@@ -509,8 +510,8 @@ def test_describe__attrs_and_annotated_with_min_max_length__parsed():
         custom_encoder=None,
         fields=[
             EntityField(
-                name="x",
-                dict_key="x",
+                name='x',
+                dict_key='x',
                 type=StringType(min_length=10, max_length=20, custom_encoder=None),
             )
         ],
@@ -521,7 +522,7 @@ def test_describe__type_with_typevar__fail():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(list[T])
 
-    assert exc_info.match("Unfilled TypeVar: ~T")
+    assert exc_info.match('Unfilled TypeVar: ~T')
 
 
 def test_describe__unknown_type__fail():
@@ -539,10 +540,10 @@ def test_describe__other_unions__error():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(Union[int, str])
 
-    assert exc_info.match("For support Unions need specify serpyco_rs.metadata.Discriminator")
+    assert exc_info.match('For support Unions need specify serpyco_rs.metadata.Discriminator')
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason="New style unions available after 3.10")
+@pytest.mark.skipif(sys.version_info < (3, 10), reason='New style unions available after 3.10')
 def test_describe__new_style_union_type__wrapped():
     assert describe_type(int | None) == OptionalType(inner=IntegerType(custom_encoder=None), custom_encoder=None)
 
@@ -554,12 +555,12 @@ def test_describe__tuple__parsed():
     )
 
 
-@pytest.mark.parametrize("t", [tuple, tuple[int, ...]])
+@pytest.mark.parametrize('t', [tuple, tuple[int, ...]])
 def test_describe__invalid_tuple__error(t):
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(t)
 
-    assert exc_info.match("Variable length tuples are not supported")
+    assert exc_info.match('Variable length tuples are not supported')
 
 
 def test_describe__decimal_with_places__parsed():
@@ -583,8 +584,8 @@ def test_describe__dataclass_field_format__parsed():
         custom_encoder=None,
         fields=[
             EntityField(
-                name="inner_entity",
-                dict_key="innerEntity",
+                name='inner_entity',
+                dict_key='innerEntity',
                 type=ArrayType(
                     is_sequence=False,
                     custom_encoder=None,
@@ -593,13 +594,13 @@ def test_describe__dataclass_field_format__parsed():
                         cls=InnerEntity,
                         fields=[
                             EntityField(
-                                name="foo_field",
-                                dict_key="foo_field",
+                                name='foo_field',
+                                dict_key='foo_field',
                                 type=StringType(custom_encoder=None),
                             ),
                             EntityField(
-                                name="bar_field",
-                                dict_key="bar_field",
+                                name='bar_field',
+                                dict_key='bar_field',
                                 type=IntegerType(custom_encoder=None),
                             ),
                         ],
@@ -609,8 +610,8 @@ def test_describe__dataclass_field_format__parsed():
                 ),
             ),
             EntityField(
-                name="some_filed",
-                dict_key="someFiled",
+                name='some_filed',
+                dict_key='someFiled',
                 type=StringType(custom_encoder=None),
             ),
         ],
@@ -619,65 +620,65 @@ def test_describe__dataclass_field_format__parsed():
 
 
 def test_describe__literal():
-    assert describe_type(Literal["foo", "bar"]) == LiteralType(args=("foo", "bar"), custom_encoder=None)
+    assert describe_type(Literal['foo', 'bar']) == LiteralType(args=('foo', 'bar'), custom_encoder=None)
 
 
 def test_describe__tagged_union():
     @dataclass
     class Foo:
         val: int
-        filed_type: Literal["foo"]
+        filed_type: Literal['foo']
 
     @dataclass
     class Bar:
         val: str
-        filed_type: Literal["bar"]
+        filed_type: Literal['bar']
 
     @dataclass
     class Base:
-        field: Annotated[Union[Foo, Bar], Discriminator("filed_type"), CamelCase]
+        field: Annotated[Union[Foo, Bar], Discriminator('filed_type'), CamelCase]
 
     assert describe_type(Base) == EntityType(
         cls=Base,
         name=mock.ANY,
         fields=[
             EntityField(
-                name="field",
-                dict_key="field",
+                name='field',
+                dict_key='field',
                 type=UnionType(
                     item_types={
-                        "foo": EntityType(
+                        'foo': EntityType(
                             cls=Foo,
                             name=mock.ANY,
                             fields=[
                                 EntityField(
-                                    name="val",
-                                    dict_key="val",
+                                    name='val',
+                                    dict_key='val',
                                     type=IntegerType(min=None, max=None, custom_encoder=None),
                                 ),
                                 EntityField(
-                                    name="filed_type",
-                                    dict_key="filedType",
-                                    type=LiteralType(args=("foo",), custom_encoder=None),
+                                    name='filed_type',
+                                    dict_key='filedType',
+                                    type=LiteralType(args=('foo',), custom_encoder=None),
                                     is_discriminator_field=True,
                                 ),
                             ],
                             doc=mock.ANY,
                             custom_encoder=None,
                         ),
-                        "bar": EntityType(
+                        'bar': EntityType(
                             cls=Bar,
                             name=mock.ANY,
                             fields=[
                                 EntityField(
-                                    name="val",
-                                    dict_key="val",
+                                    name='val',
+                                    dict_key='val',
                                     type=StringType(min_length=None, max_length=None, custom_encoder=None),
                                 ),
                                 EntityField(
-                                    name="filed_type",
-                                    dict_key="filedType",
-                                    type=LiteralType(args=("bar",), custom_encoder=None),
+                                    name='filed_type',
+                                    dict_key='filedType',
+                                    type=LiteralType(args=('bar',), custom_encoder=None),
                                     is_discriminator_field=True,
                                 ),
                             ],
@@ -685,8 +686,8 @@ def test_describe__tagged_union():
                             custom_encoder=None,
                         ),
                     },
-                    load_discriminator="filedType",
-                    dump_discriminator="filed_type",
+                    load_discriminator='filedType',
+                    dump_discriminator='filed_type',
                     custom_encoder=None,
                 ),
             )
@@ -699,26 +700,26 @@ def test_describe__tagged_union():
 def test_describe__typed_dict():
     class Entity(TypedDict, Generic[T]):
         foo_filed: int
-        bar_field: Annotated[NotRequired[str], Alias("barField")]
+        bar_field: Annotated[NotRequired[str], Alias('barField')]
         generic_field: T
 
     assert describe_type(Entity[bool]) == TypedDictType(
         name=mock.ANY,
         fields=[
             EntityField(
-                name="foo_filed",
-                dict_key="foo_filed",
+                name='foo_filed',
+                dict_key='foo_filed',
                 type=IntegerType(custom_encoder=None),
             ),
             EntityField(
-                name="bar_field",
-                dict_key="barField",
+                name='bar_field',
+                dict_key='barField',
                 type=StringType(custom_encoder=None),
                 default=None,
             ),
             EntityField(
-                name="generic_field",
-                dict_key="generic_field",
+                name='generic_field',
+                dict_key='generic_field',
                 type=BooleanType(custom_encoder=None),
             ),
         ],
@@ -736,14 +737,14 @@ def test_describe__typed_dict__total_false():
         name=mock.ANY,
         fields=[
             EntityField(
-                name="foo",
-                dict_key="foo",
+                name='foo',
+                dict_key='foo',
                 type=IntegerType(custom_encoder=None),
                 default=None,
             ),
             EntityField(
-                name="bar",
-                dict_key="bar",
+                name='bar',
+                dict_key='bar',
                 type=StringType(custom_encoder=None),
             ),
         ],

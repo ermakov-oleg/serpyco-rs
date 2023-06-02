@@ -41,6 +41,7 @@ from .metadata import (
     Places,
 )
 
+
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType as StdUnionType
 else:  # pragma: no cover
@@ -54,12 +55,12 @@ except ImportError:  # pragma: no cover
 
 _NoneType = type(None)
 
-_T = TypeVar("_T")
+_T = TypeVar('_T')
 
 
 class NotSet:
     def __repr__(self) -> str:
-        return "NOT_SET"
+        return 'NOT_SET'
 
 
 NOT_SET = NotSet()
@@ -242,7 +243,7 @@ class RecursionHolder(Type):
     def get_type(self) -> Type:
         if type_ := self.meta.get_from_state(self.state_key):
             return type_
-        raise RuntimeError("Recursive type not resolved")
+        raise RuntimeError('Recursive type not resolved')
 
 
 def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
@@ -253,15 +254,15 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         t = t.__origin__
     if get_origin(t) in {Required, NotRequired}:  # unwrap TypedDict special forms
         t = t.__args__[0]
-    if hasattr(t, "__origin__"):
-        parameters = getattr(t.__origin__, "__parameters__", ())
+    if hasattr(t, '__origin__'):
+        parameters = getattr(t.__origin__, '__parameters__', ())
         args = t.__args__
         t = t.__origin__
     # StdUnionType has no __origin__
     elif StdUnionType and isinstance(t, StdUnionType):  # type: ignore[truthy-function]
         args = t.__args__
         t = Union
-    elif hasattr(t, "__parameters__"):
+    elif hasattr(t, '__parameters__'):
         # Если передан generic-класс без type-параметров, значит по PEP-484 заменяем все параметры на Any
         parameters = t.__parameters__
         args = (Any,) * len(parameters)
@@ -360,7 +361,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
 
         if t is tuple:
             if not args or Ellipsis in args:
-                raise RuntimeError("Variable length tuples are not supported")
+                raise RuntimeError('Variable length tuples are not supported')
             return TupleType(
                 item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args],
                 custom_encoder=custom_encoder,
@@ -383,9 +384,9 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
             return entity_type
 
     if _is_literal_type(t):
-        if args and all((isinstance(arg, str) for arg in args)):
+        if args and all(isinstance(arg, str) for arg in args):
             return LiteralType(args=args, custom_encoder=custom_encoder)
-        raise RuntimeError("Supported only Literal[str, ...]")
+        raise RuntimeError('Supported only Literal[str, ...]')
 
     if t in {Union}:
         if len(args) == 2 and _NoneType in args:
@@ -394,9 +395,9 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
 
         discriminator = _find_metadata(metadata, Discriminator)
         if not discriminator:
-            raise RuntimeError("For support Unions need specify serpyco_rs.metadata.Discriminator")
+            raise RuntimeError('For support Unions need specify serpyco_rs.metadata.Discriminator')
 
-        if not all((dataclasses.is_dataclass(arg) or _is_attrs(arg) for arg in args)):
+        if not all(dataclasses.is_dataclass(arg) or _is_attrs(arg) for arg in args):
             raise RuntimeError(
                 f'Unions supported only for dataclasses or attrs. Provided: {t}[{",".join(map(str, args))}]'
             )
@@ -413,9 +414,9 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         )
 
     if isinstance(t, TypeVar):
-        raise RuntimeError(f"Unfilled TypeVar: {t}")
+        raise RuntimeError(f'Unfilled TypeVar: {t}')
 
-    raise RuntimeError(f"Unknown type {t!r}")
+    raise RuntimeError(f'Unknown type {t!r}')
 
 
 @dataclasses.dataclass
@@ -534,12 +535,12 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
 def _replace_generics(t: Any, generics: Sequence[tuple[TypeVar, Any]]) -> Any:
     try:
         generics_map = dict(generics)
-        if parameters := getattr(t, "__parameters__", None):
+        if parameters := getattr(t, '__parameters__', None):
             t = t[tuple(generics_map[parameter] for parameter in parameters)]
         if isinstance(t, TypeVar):
             t = generics_map[t]
     except KeyError as exc:
-        raise RuntimeError(f"Unfilled TypeVar: {exc.args[0]}") from exc
+        raise RuntimeError(f'Unfilled TypeVar: {exc.args[0]}') from exc
     return t
 
 
@@ -568,7 +569,7 @@ def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
 
 def _get_annotated_metadata(t: Any) -> tuple[Any, ...]:
     if get_origin(t) == Annotated:
-        return getattr(t, "__metadata__", ())
+        return getattr(t, '__metadata__', ())
     return ()
 
 
@@ -587,8 +588,8 @@ def _generate_name(
     if generics:
         cls = _replace_generics(cls, generics)
         name = repr(cls)
-    nones = "omit_nones" if none_format.omit else "keep_nones"
-    return f"{cls.__module__}.{name}[{field_format.format.value},{nones}]"
+    nones = 'omit_nones' if none_format.omit else 'keep_nones'
+    return f'{cls.__module__}.{name}[{field_format.format.value},{nones}]'
 
 
 def _get_globals(t: Any) -> dict[str, Any]:
@@ -611,18 +612,18 @@ def _get_discriminator_value(t: Any, name: str) -> str:
             if _is_str_literal(field.type):
                 args = get_args(field.type)
                 return cast(str, args[0])
-            else:
-                raise RuntimeError(
-                    f'Type {t} has invalid discriminator field "{name}" with type "{field.type!r}". '
-                    f"Discriminator supports only Literal[<str>]."
-                )
+
+            raise RuntimeError(
+                f'Type {t} has invalid discriminator field "{name}" with type "{field.type!r}". '
+                f'Discriminator supports only Literal[<str>].'
+            )
     raise RuntimeError(f'Type {t} does not have discriminator field "{name}"')
 
 
 def _is_str_literal(t: Any) -> bool:
     if _is_literal_type(t):
         args = get_args(t)
-        if args and all((isinstance(arg, str) for arg in args)):
+        if args and all(isinstance(arg, str) for arg in args):
             return True
     return False
 

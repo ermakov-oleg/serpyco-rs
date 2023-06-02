@@ -4,6 +4,7 @@ import serpyco
 
 from .base import Dataclass, test_object
 
+
 _serializer = serpyco.Serializer(Dataclass)
 
 test_object = test_object

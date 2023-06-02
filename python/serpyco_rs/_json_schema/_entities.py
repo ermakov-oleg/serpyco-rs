@@ -19,32 +19,32 @@ class Schema:
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = {
-            "type": self.type,
-            "title": self.title,
-            "description": self.description,
-            "default": self.default,
-            "deprecated": self.deprecated,
-            "enum": self.enum,
-            "allOf": [item.dump(definitions) for item in self.allOf] if self.allOf else None,
-            "anyOf": [item.dump(definitions) for item in self.anyOf] if self.anyOf else None,
-            "oneOf": [item.dump(definitions) for item in self.oneOf] if self.oneOf else None,
+            'type': self.type,
+            'title': self.title,
+            'description': self.description,
+            'default': self.default,
+            'deprecated': self.deprecated,
+            'enum': self.enum,
+            'allOf': [item.dump(definitions) for item in self.allOf] if self.allOf else None,
+            'anyOf': [item.dump(definitions) for item in self.anyOf] if self.anyOf else None,
+            'oneOf': [item.dump(definitions) for item in self.oneOf] if self.oneOf else None,
         }
         return {k: v for k, v in data.items() if v is not None}
 
 
 @dataclass
 class Boolean(Schema):
-    type: str = "boolean"
+    type: str = 'boolean'
 
 
 @dataclass
 class Null(Schema):
-    type: str = "null"
+    type: str = 'null'
 
 
 @dataclass
 class StringType(Schema):
-    type: str = "string"
+    type: str = 'string'
     minLength: int | None = None
     maxLength: int | None = None
     pattern: str | None = None
@@ -54,10 +54,10 @@ class StringType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
-            "minLength": self.minLength,
-            "maxLength": self.maxLength,
-            "pattern": self.pattern,
-            "format": self.format,
+            'minLength': self.minLength,
+            'maxLength': self.maxLength,
+            'pattern': self.pattern,
+            'format': self.format,
             **data,
         }
         return {k: v for k, v in data.items() if v is not None}
@@ -65,7 +65,7 @@ class StringType(Schema):
 
 @dataclass
 class NumberType(Schema):
-    type: str = "number"
+    type: str = 'number'
     multipleOf: int | None = None
     minimum: float | None = None
     maximum: float | None = None
@@ -73,9 +73,9 @@ class NumberType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
-            "multipleOf": self.multipleOf,
-            "minimum": self.minimum,
-            "maximum": self.maximum,
+            'multipleOf': self.multipleOf,
+            'minimum': self.minimum,
+            'maximum': self.maximum,
             **data,
         }
         return {k: v for k, v in data.items() if v is not None}
@@ -83,31 +83,31 @@ class NumberType(Schema):
 
 @dataclass
 class IntegerType(NumberType):
-    type: str = "integer"
+    type: str = 'integer'
 
 
 @dataclass
 class ObjectType(Schema):
     name: str | None = None
-    type: str = "object"
+    type: str = 'object'
     properties: dict[str, Schema] | None = None
     additionalProperties: bool | Schema | None = None
     required: list[str] | None = None
 
     @property
     def ref(self) -> str:
-        return f"#/components/schemas/{self.name}"
+        return f'#/components/schemas/{self.name}'
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
-            "properties": {k: v.dump(definitions) for k, v in self.properties.items()} if self.properties else None,
-            "additionalProperties": (
+            'properties': {k: v.dump(definitions) for k, v in self.properties.items()} if self.properties else None,
+            'additionalProperties': (
                 self.additionalProperties.dump(definitions)
                 if isinstance(self.additionalProperties, Schema)
                 else self.additionalProperties
             ),
-            "required": self.required,
+            'required': self.required,
             **data,
         }
         data = {k: v for k, v in data.items() if v is not None}
@@ -115,13 +115,13 @@ class ObjectType(Schema):
             return data
         definitions[self.name] = data
         return {
-            "$ref": self.ref,
+            '$ref': self.ref,
         }
 
 
 @dataclass
 class ArrayType(Schema):
-    type: str = "array"
+    type: str = 'array'
     items: Schema | None = None
     prefixItems: list[Schema] | None = None
     minItems: int | None = None
@@ -131,11 +131,11 @@ class ArrayType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
-            "items": self.items.dump(definitions) if self.items else None,
-            "prefixItems": [i.dump(definitions) for i in self.prefixItems] if self.prefixItems else None,
-            "minItems": self.minItems,
-            "maxItems": self.maxItems,
-            "uniqueItems": self.uniqueItems,
+            'items': self.items.dump(definitions) if self.items else None,
+            'prefixItems': [i.dump(definitions) for i in self.prefixItems] if self.prefixItems else None,
+            'minItems': self.minItems,
+            'maxItems': self.maxItems,
+            'uniqueItems': self.uniqueItems,
             **data,
         }
         return {k: v for k, v in data.items() if v is not None}
@@ -148,7 +148,7 @@ class RefType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         return {
-            "$ref": self.ref,
+            '$ref': self.ref,
             **data,
         }
 
@@ -160,7 +160,7 @@ class UnionType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         return {
-            "discriminator": self.discriminator.dump() if self.discriminator else None,
+            'discriminator': self.discriminator.dump() if self.discriminator else None,
             **data,
         }
 
@@ -172,6 +172,6 @@ class Discriminator:
 
     def dump(self) -> dict[str, Any]:
         return {
-            "propertyName": self.property_name,
-            "mapping": self.mapping,
+            'propertyName': self.property_name,
+            'mapping': self.mapping,
         }

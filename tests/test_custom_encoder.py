@@ -14,8 +14,8 @@ class Foo:
 
 def test_custom_encoder():
     serializer = Serializer(Foo)
-    val = Foo(val="foo")
-    raw = {"val": "FOO"}
+    val = Foo(val='foo')
+    raw = {'val': 'FOO'}
     assert serializer.dump(val) == raw
     assert serializer.load(raw) == val
 

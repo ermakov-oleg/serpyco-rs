@@ -5,7 +5,8 @@ from ._impl import Serializer as _Serializer
 from ._json_schema import JsonschemaRSValidator, Validator, get_json_schema
 from .metadata import CamelCase, OmitNone
 
-_T = TypeVar("_T", bound=Any)
+
+_T = TypeVar('_T', bound=Any)
 
 
 class Serializer(Generic[_T]):
