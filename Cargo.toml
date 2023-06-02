@@ -14,7 +14,7 @@ name = "serpyco_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.18.3", features = ["extension-module"] }
+pyo3 = { version = "0.19", features = ["extension-module"] }
 pyo3-ffi = "*"
 cfg-if = "*"
 speedate = "0.8.1"
@@ -23,4 +23,4 @@ dyn-clone = "1.0"
 atomic_refcell = "0.1.10"
 
 [build-dependencies]
-pyo3-build-config = { version = "0.18.3", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.19", features = ["resolve-config"] }

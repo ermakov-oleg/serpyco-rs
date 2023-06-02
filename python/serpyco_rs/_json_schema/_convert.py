@@ -8,7 +8,7 @@ if sys.version_info >= (3, 10):
 else:
     from typing_extensions import TypeGuard
 
-from serpyco_rs import _describe as describe
+from .. import _describe as describe  # noqa: TID252
 from ._entities import (
     ArrayType,
     Boolean,

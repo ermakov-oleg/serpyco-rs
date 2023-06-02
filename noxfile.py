@@ -16,14 +16,14 @@ def build(session):
 
     session.run_always('maturin', 'develop', '-r')
 
-@nox.session
+@nox.session(python=False)
 def test(session):
     build(session)
     install(session, '-r', 'requirements/dev.txt')
     session.run('pytest', '-vss', 'tests/', *session.posargs)
 
 
-@nox.session
+@nox.session(python=False)
 def lint(session):
     build(session)
     install(session, '-r', 'requirements/lint.txt')
@@ -31,7 +31,7 @@ def lint(session):
     session.cd('python/serpyco_rs')
     paths = ['.', '../../tests', '../../bench']
     session.run('black', *(['--check', '--diff', *paths] if _is_ci() else paths))
-    session.run('ruff', '.', *([] if _is_ci() else ['--fix']))
+    session.run('ruff', '.')
 
 
 @nox.session(python=False)
@@ -40,7 +40,7 @@ def rust_lint(session):
     session.run('cargo', 'clippy', '--all-targets', '--all-features', '--', '-D', 'warnings')
 
 
-@nox.session
+@nox.session(python=False)
 def type_check(session):
     build(session)
     install(session, '-r', 'requirements/type_check.txt')
@@ -51,7 +51,7 @@ def type_check(session):
     session.run('mypy', '.', '--strict', '--implicit-reexport', '--pretty')
 
 
-@nox.session
+@nox.session(python=False)
 def bench(session):
     build(session)
     install(session, '-r', 'requirements/bench.txt')
