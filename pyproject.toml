@@ -9,7 +9,9 @@ python-source = "python"
 name = "serpyco-rs"
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
 requires-python = ">=3.9"
+license = {file = "LICENSE"}
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
