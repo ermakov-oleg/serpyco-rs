@@ -27,7 +27,7 @@ classifiers = [
 dependencies = [
     "typing-inspect>=0.8.0",
     "attributes-doc",
-    "jsonschema_rs",
+    "jsonschema_rs<1",
     "typing-extensions",
 ]
 
