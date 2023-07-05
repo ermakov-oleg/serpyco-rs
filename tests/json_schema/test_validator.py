@@ -166,7 +166,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
         (
             Optional[int],
             'foo',
-            _mk_e(m='"foo" is not valid under any of the given schemas', sp='anyOf'),
+            _mk_e(m='"foo" is not valid under any of the schemas listed in the \'anyOf\' keyword', sp='anyOf'),
         ),
         (EntityTest, {}, _mk_e(m='"key" is a required property', sp='required')),
         (
@@ -193,7 +193,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
             {'type': 'buz'},
-            _mk_e(m='{"type":"buz"} is not valid under any of the given schemas', sp='oneOf'),
+            _mk_e(m='{"type":"buz"} is not valid under any of the schemas listed in the \'oneOf\' keyword', sp='oneOf'),
         ),
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
