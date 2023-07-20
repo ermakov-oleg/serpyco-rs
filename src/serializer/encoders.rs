@@ -1,8 +1,8 @@
 use crate::serializer::dateutil::{parse_date, parse_time};
 use crate::serializer::py::{
-    create_new_object, from_ptr_or_err, is_none, iter_over_dict_items, obj_to_str, parse_f64,
-    parse_i64, parse_u64, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr,
-    py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal,
+    create_new_object, from_ptr_or_err, is_none, iter_over_dict_items, obj_to_str, parse_number,
+    py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item,
+    py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal,
 };
 use crate::serializer::types::{FALSE, ISOFORMAT_STR, NONE_PY_TYPE, TRUE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
@@ -61,15 +61,7 @@ impl Encoder for NoopEncoder {
                 };
                 Ok(py_bool)
             }
-            Value::Number(number) => {
-                if number.is_f64() {
-                    Ok(parse_f64(number.as_f64().unwrap()))
-                } else if number.is_i64() {
-                    Ok(parse_i64(number.as_i64().unwrap()))
-                } else {
-                    Ok(parse_u64(number.as_u64().unwrap()))
-                }
-            }
+            Value::Number(number) => Ok(parse_number(number)),
             Value::String(string) => Ok(unicode_from_str(&string)),
             Value::Array(_) | Value::Object(_) => {
                 Err(ValidationError::new_err("invalid value type"))
@@ -450,7 +442,7 @@ impl Encoder for EnumEncoder {
             let py_string = unicode_from_str(&s);
             self.load(py_string)
         } else if let Value::Number(n) = value {
-            let py_number = ffi!(PyLong_FromLong(n.as_i64().unwrap()));
+            let py_number = parse_number(n);
             self.load(py_number)
         } else {
             Err(ValidationError::new_err("invalid value type"))
