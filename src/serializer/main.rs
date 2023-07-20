@@ -83,9 +83,8 @@ impl Serializer {
     #[inline]
     pub fn load_json(&self, value: &PyAny, validate: bool) -> PyResult<Py<PyAny>> {
         let string = py_str_to_str(value.as_ptr())?;
-        let serde_value: Value = serde_json::from_str(string).map_err(|e| {
-            ValidationError::new_err(format!("Invalid JSON string: {}", e))
-        })?;
+        let serde_value: Value = serde_json::from_str(string)
+            .map_err(|e| ValidationError::new_err(format!("Invalid JSON string: {}", e)))?;
         if validate {
             if let Some(compiled) = &self.schema {
                 schema::raise_on_error(value.py(), compiled, &serde_value)?;

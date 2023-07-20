@@ -4,7 +4,7 @@ use crate::serializer::py::{
     py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
     py_str_to_str, py_tuple_get_item, to_decimal,
 };
-use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
+use crate::serializer::types::{FALSE, ISOFORMAT_STR, NONE_PY_TYPE, TRUE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::types::PyString;
@@ -18,7 +18,7 @@ use std::sync::Arc;
 use crate::serializer::py_str::unicode_from_str;
 
 use super::dateutil::parse_datetime;
-use super::macros::{call_method, call_object, ffi};
+use super::macros::{call_method, call_object, ffi, use_immortal};
 
 use dyn_clone::{clone_trait_object, DynClone};
 
@@ -52,17 +52,13 @@ impl Encoder for NoopEncoder {
 
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
         match value {
-            Value::Null => {
-                ffi!(Py_INCREF(NONE_PY_TYPE));
-                Ok(unsafe { NONE_PY_TYPE })
-            }
+            Value::Null => Ok(use_immortal!(NONE_PY_TYPE)),
             Value::Bool(bool) => {
                 let py_bool = if bool {
-                    ffi!(Py_True())
+                    use_immortal!(TRUE)
                 } else {
-                    ffi!(Py_False())
+                    use_immortal!(FALSE)
                 };
-                ffi!(Py_INCREF(py_bool));
                 Ok(py_bool)
             }
             Value::Number(number) => {
@@ -471,8 +467,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         if value == unsafe { NONE_PY_TYPE } {
-            ffi!(Py_INCREF(NONE_PY_TYPE));
-            Ok(value)
+            Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.dump(value)
         }
@@ -481,8 +476,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         if value == unsafe { NONE_PY_TYPE } {
-            ffi!(Py_INCREF(NONE_PY_TYPE));
-            Ok(value)
+            Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.load(value)
         }
@@ -491,8 +485,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
         if value == Value::Null {
-            ffi!(Py_INCREF(NONE_PY_TYPE));
-            Ok(unsafe { NONE_PY_TYPE })
+            Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.load_value(value)
         }

@@ -2,9 +2,10 @@ use pyo3::ffi::PyObject;
 use pyo3::types::PyModule;
 use pyo3::Python;
 use pyo3::{AsPyPointer, Py, PyAny, PyResult};
+use std::os::raw::c_char;
 use std::sync::Once;
 
-use crate::serializer::py::{py_object_get_attr, to_py_string};
+use crate::serializer::py::py_object_get_attr;
 
 pub static mut INTEGER_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut STRING_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -37,6 +38,8 @@ pub static mut DECIMAL_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_TUPLE_0: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__NEW__: *mut PyObject = 0 as *mut PyObject;
 pub static mut EMPTY_UNICODE: *mut PyObject = 0 as *mut PyObject;
+pub static mut TRUE: *mut PyObject = 0 as *mut PyObject;
+pub static mut FALSE: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -146,14 +149,21 @@ pub fn init(py: Python<'_>) {
         NONE_PY_TYPE = get_attr_ptr!(builtins, "None");
 
         let object = get_attr_ptr!(builtins, "object");
-        PY_OBJECT__NEW__ = py_object_get_attr(object, to_py_string("__new__")).unwrap();
+        let new_str = pyo3_ffi::PyUnicode_InternFromString("__new__\0".as_ptr() as *const c_char);
+        PY_OBJECT__NEW__ = py_object_get_attr(object, new_str).unwrap();
 
+        let decimal_str =
+            pyo3_ffi::PyUnicode_InternFromString("Decimal\0".as_ptr() as *const c_char);
         let decimal = PyModule::import(py, "decimal").unwrap();
-        DECIMAL_PY_TYPE = py_object_get_attr(decimal.as_ptr(), to_py_string("Decimal")).unwrap();
+        DECIMAL_PY_TYPE = py_object_get_attr(decimal.as_ptr(), decimal_str).unwrap();
 
-        ITEMS_STR = to_py_string("items");
-        VALUE_STR = to_py_string("value");
-        ISOFORMAT_STR = to_py_string("isoformat");
+        ITEMS_STR = pyo3_ffi::PyUnicode_InternFromString("items\0".as_ptr() as *const c_char);
+        VALUE_STR = pyo3_ffi::PyUnicode_InternFromString("value\0".as_ptr() as *const c_char);
+        ISOFORMAT_STR =
+            pyo3_ffi::PyUnicode_InternFromString("isoformat\0".as_ptr() as *const c_char);
+
+        TRUE = pyo3_ffi::Py_True();
+        FALSE = pyo3_ffi::Py_False();
 
         EMPTY_UNICODE = pyo3_ffi::PyUnicode_New(0, 255);
         PY_TUPLE_0 = pyo3_ffi::PyTuple_New(0);

@@ -2,8 +2,7 @@ use crate::serializer::macros::{call_method, ffi};
 use crate::serializer::types::{DECIMAL_PY_TYPE, ITEMS_STR, NOT_SET, PY_OBJECT__NEW__};
 use pyo3::{ffi, AsPyPointer, PyAny, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
-use std::ffi::CString;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_int;
 use std::ptr::NonNull;
 
 #[inline]
@@ -37,12 +36,6 @@ pub fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject
 #[inline]
 pub fn obj_to_str(obj: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     from_ptr_or_err(ffi!(PyObject_Str(obj)))
-}
-
-pub fn to_py_string(s: &str) -> *mut ffi::PyObject {
-    let c_str = CString::new(s).unwrap();
-    let c_world: *const c_char = c_str.as_ptr() as *const c_char;
-    ffi!(PyUnicode_InternFromString(c_world))
 }
 
 #[inline]
