@@ -36,6 +36,7 @@ pub static mut NONE_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DECIMAL_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_TUPLE_0: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__NEW__: *mut PyObject = 0 as *mut PyObject;
+pub static mut EMPTY_UNICODE: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -154,6 +155,7 @@ pub fn init(py: Python<'_>) {
         VALUE_STR = to_py_string("value");
         ISOFORMAT_STR = to_py_string("isoformat");
 
+        EMPTY_UNICODE = pyo3_ffi::PyUnicode_New(0, 255);
         PY_TUPLE_0 = pyo3_ffi::PyTuple_New(0);
     });
 }

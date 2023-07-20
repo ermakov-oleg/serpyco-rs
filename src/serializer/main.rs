@@ -1,11 +1,16 @@
-use crate::serializer::encoders::{
+use super::encoders::{
     CustomEncoder, DateEncoder, DateTimeEncoder, Encoders, LazyEncoder, TEncoder, TimeEncoder,
     TypedDictEncoder, UnionEncoder,
 };
+use super::py::py_str_to_str;
+use super::schema;
+use super::ValidationError;
 use atomic_refcell::AtomicRefCell;
+use jsonschema::JSONSchema;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 use pyo3::{AsPyPointer, PyAny, PyResult};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -23,16 +28,34 @@ type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
 #[derive(Debug)]
 pub struct Serializer {
     pub encoder: Box<TEncoder>,
+    schema: Option<JSONSchema>,
 }
 
 #[pymethods]
 impl Serializer {
     #[new]
-    fn new(type_info: &PyAny) -> PyResult<Self> {
+    fn new(type_info: &PyAny, schema: &PyAny) -> PyResult<Self> {
         let obj_type = get_object_type(type_info)?;
         let mut encoder_state: HashMap<usize, EncoderStateValue> = HashMap::new();
+
+        if schema.is_none() {
+            return Ok(Self {
+                encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state)?,
+                schema: None,
+            });
+        }
+
+        let schema_str = py_str_to_str(schema.as_ptr())?;
+        let serde_schema: Value = serde_json::from_str(schema_str).map_err(|e| {
+            ValidationError::new_err(format!("Error while parsing JSON string: {}", e))
+        })?;
+
+        let compiled = JSONSchema::compile(&serde_schema)
+            .map_err(|e| ValidationError::new_err(format!("Invalid json schema: {}", e)))?;
+
         let serializer = Self {
             encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state)?,
+            schema: Some(compiled),
         };
         Ok(serializer)
     }
@@ -53,6 +76,25 @@ impl Serializer {
             Ok(Py::from_owned_ptr(
                 value.py(),
                 self.encoder.load(value.as_ptr())?,
+            ))
+        }
+    }
+
+    #[inline]
+    pub fn load_json(&self, value: &PyAny, validate: bool) -> PyResult<Py<PyAny>> {
+        let string = py_str_to_str(value.as_ptr())?;
+        let serde_value: Value = serde_json::from_str(string).map_err(|e| {
+            ValidationError::new_err(format!("Invalid JSON string: {}", e))
+        })?;
+        if validate {
+            if let Some(compiled) = &self.schema {
+                schema::raise_on_error(value.py(), compiled, &serde_value)?;
+            }
+        }
+        unsafe {
+            Ok(Py::from_owned_ptr(
+                value.py(),
+                self.encoder.load_value(serde_value)?,
             ))
         }
     }
@@ -139,6 +181,7 @@ pub fn get_encoder(
                     encoders,
                     dump_discriminator: dump_discriminator.into(),
                     load_discriminator: load_discriminator.into(),
+                    load_discriminator_rs: load_discriminator.to_string_lossy().into(),
                 }),
             )?
         }
@@ -246,6 +289,7 @@ fn iterate_on_fields(
         let fld = Field {
             name: f_name.into(),
             dict_key: dict_key.into(),
+            dict_key_rs: dict_key.to_string_lossy().into(),
             encoder: get_encoder(py, f_type, encoder_state)?,
             required,
             default: match is_not_set(f_default)? {

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from .libs import marshmallow, mashumaro, pydantic, serpyco, serpyco_rs
@@ -33,6 +35,34 @@ def test_load(benchmark, lib):
     benchmark.extra_info['lib'] = lib
     benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
     benchmark(serializer.load, test_dict, validate=False)
+
+
+@pytest.mark.parametrize('lib', serializers.keys())
+def test_load_json(benchmark, lib):
+    serializer = serializers[lib]
+    test_data = json.dumps(serializer.dump(serializer.test_object))
+    serializer.load_json(test_data, validate=False)  # warmup
+
+    benchmark.group = 'load raw json'
+    benchmark.extra_info['lib'] = lib
+    benchmark.extra_info['correct'] = (
+        serializer.load_json(json.dumps(serializer.dump(serializer.test_object))) == serializer.test_object
+    )
+    benchmark(serializer.load_json, test_data, validate=False)
+
+
+@pytest.mark.parametrize('lib', serializers.keys())
+def test_load_json_validate(benchmark, lib):
+    serializer = serializers[lib]
+    test_data = json.dumps(serializer.dump(serializer.test_object))
+    serializer.load_json(test_data, validate=True)  # warmup
+
+    benchmark.group = 'load raw json with validate'
+    benchmark.extra_info['lib'] = lib
+    benchmark.extra_info['correct'] = (
+        serializer.load_json(json.dumps(serializer.dump(serializer.test_object))) == serializer.test_object
+    )
+    benchmark(serializer.load_json, test_data, validate=True)
 
 
 @pytest.mark.parametrize('lib', serializers.keys())

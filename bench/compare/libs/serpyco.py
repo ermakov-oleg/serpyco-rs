@@ -14,5 +14,9 @@ def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
     return _serializer.load(data, validate=validate)
 
 
+def load_json(data: str, validate: bool = True) -> Dataclass:
+    return _serializer.load_json(data, validate=validate)
+
+
 def dump(obj: Dataclass) -> dict[str, Any]:
     return _serializer.dump(obj)

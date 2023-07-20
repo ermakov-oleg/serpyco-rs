@@ -26,5 +26,9 @@ def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
     return Dataclass(**data)
 
 
+def load_json(data: str, validate: bool = True) -> Dataclass:
+    return Dataclass.model_validate_json(data)
+
+
 def dump(obj: Dataclass) -> dict[str, Any]:
-    return obj.dict()
+    return obj.model_dump()

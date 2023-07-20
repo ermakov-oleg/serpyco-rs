@@ -17,10 +17,16 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.19", features = ["extension-module"] }
 pyo3-ffi = "*"
 cfg-if = "*"
-speedate = "0.9.0"
+speedate = "0.11.0"
 
 dyn-clone = "1.0"
 atomic_refcell = "0.1.10"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+bytecount = { version = "^0.6.3", default_features = false, features = ["runtime-dispatch-simd"] }
+encoding_rs = { version = "0.8", default_features = false }
+jsonschema = "0.17"
 
 [build-dependencies]
 pyo3-build-config = { version = "0.19", features = ["resolve-config"] }

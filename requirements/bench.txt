@@ -6,4 +6,5 @@ serpyco
 pydantic
 marshmallow
 marshmallow-dataclass
-mashumaro
+mashumaro[orjson]
+orjson
