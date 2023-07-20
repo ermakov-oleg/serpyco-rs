@@ -1,5 +1,7 @@
 use crate::serializer::macros::{call_method, ffi};
-use crate::serializer::types::{DECIMAL_PY_TYPE, ITEMS_STR, NOT_SET, PY_OBJECT__NEW__};
+use crate::serializer::types::{
+    DECIMAL_PY_TYPE, ITEMS_STR, NONE_PY_TYPE, NOT_SET, PY_OBJECT__NEW__,
+};
 use pyo3::{ffi, AsPyPointer, PyAny, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 use std::os::raw::c_int;
@@ -23,6 +25,11 @@ pub fn py_len(obj: *mut ffi::PyObject) -> PyResult<Py_ssize_t> {
 #[inline]
 pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
     Ok(obj.as_ptr() == unsafe { NOT_SET })
+}
+
+#[inline]
+pub fn is_none(obj: *mut ffi::PyObject) -> bool {
+    obj == unsafe { NONE_PY_TYPE }
 }
 
 #[inline]
@@ -100,6 +107,21 @@ pub fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
         }
     };
     Ok(unsafe { std::str::from_utf8_unchecked(utf8_slice) })
+}
+
+#[inline(always)]
+pub fn parse_i64(val: i64) -> *mut ffi::PyObject {
+    ffi!(PyLong_FromLongLong(val))
+}
+
+#[inline(always)]
+pub fn parse_u64(val: u64) -> *mut ffi::PyObject {
+    ffi!(PyLong_FromUnsignedLongLong(val))
+}
+
+#[inline(always)]
+pub fn parse_f64(val: f64) -> *mut ffi::PyObject {
+    ffi!(PyFloat_FromDouble(val))
 }
 
 #[inline]

@@ -1,8 +1,8 @@
 use crate::serializer::dateutil::{parse_date, parse_time};
 use crate::serializer::py::{
-    create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len,
-    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
-    py_str_to_str, py_tuple_get_item, to_decimal,
+    create_new_object, from_ptr_or_err, is_none, iter_over_dict_items, obj_to_str, parse_f64,
+    parse_i64, parse_u64, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr,
+    py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal,
 };
 use crate::serializer::types::{FALSE, ISOFORMAT_STR, NONE_PY_TYPE, TRUE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
@@ -63,11 +63,11 @@ impl Encoder for NoopEncoder {
             }
             Value::Number(number) => {
                 if number.is_f64() {
-                    let py_number = ffi!(PyFloat_FromDouble(number.as_f64().unwrap()));
-                    Ok(py_number)
+                    Ok(parse_f64(number.as_f64().unwrap()))
+                } else if number.is_i64() {
+                    Ok(parse_i64(number.as_i64().unwrap()))
                 } else {
-                    let py_number = ffi!(PyLong_FromLong(number.as_i64().unwrap()));
-                    Ok(py_number)
+                    Ok(parse_u64(number.as_u64().unwrap()))
                 }
             }
             Value::String(string) => Ok(unicode_from_str(&string)),
@@ -466,7 +466,7 @@ pub struct OptionalEncoder {
 impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if value == unsafe { NONE_PY_TYPE } {
+        if is_none(value) {
             Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.dump(value)
@@ -475,7 +475,7 @@ impl Encoder for OptionalEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if value == unsafe { NONE_PY_TYPE } {
+        if is_none(value) {
             Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.load(value)
