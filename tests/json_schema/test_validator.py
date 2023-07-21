@@ -1,3 +1,4 @@
+import json
 import sys
 import uuid
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from typing import Annotated, Any, Literal, Optional, Union
 from unittest import mock
 
 import pytest
+from serpyco_rs import Serializer
 from serpyco_rs._describe import describe_type
 from serpyco_rs._json_schema import JsonschemaRSValidator, get_json_schema
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError
@@ -210,12 +212,15 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> ErrorItem:
     ),
 )
 def test_validate__validation_error(cls, value, err):
-    v = JsonschemaRSValidator(get_json_schema(describe_type(cls)))
-
+    serializer = Serializer(cls)
+    raw_value = json.dumps(value)
     with pytest.raises(SchemaValidationError) as exc_info:
-        v.validate(value)
+        serializer.load(value)
 
-    assert exc_info.value.errors == [err]
+    with pytest.raises(SchemaValidationError) as raw_exc_info:
+        serializer.load_json(raw_value)
+
+    assert exc_info.value.errors == raw_exc_info.value.errors == [err]
 
 
 def test_validate__error_format():
@@ -228,20 +233,29 @@ def test_validate__error_format():
         foo: int
         bar: Inner
 
-    v = JsonschemaRSValidator(get_json_schema(describe_type(A)))
+    serializer = Serializer(A)
+
+    value = {'foo': '1', 'bar': {'buz': None}, 'qux': 0}
 
     with pytest.raises(SchemaValidationError) as exc_info:
-        v.validate({'foo': '1', 'bar': {'buz': None}, 'qux': 0})
+        serializer.load(value)
 
-    assert exc_info.value.errors == [
-        ErrorItem(
-            message='"baz" is a required property',
-            instance_path='bar',
-            schema_path='required',
-        ),
-        ErrorItem(
-            message='"1" is not of type "integer"',
-            instance_path='foo',
-            schema_path='properties/foo/type',
-        ),
-    ]
+    with pytest.raises(SchemaValidationError) as raw_exc_info:
+        serializer.load_json(json.dumps(value))
+
+    assert (
+        exc_info.value.errors
+        == raw_exc_info.value.errors
+        == [
+            ErrorItem(
+                message='"baz" is a required property',
+                instance_path='bar',
+                schema_path='required',
+            ),
+            ErrorItem(
+                message='"1" is not of type "integer"',
+                instance_path='foo',
+                schema_path='properties/foo/type',
+            ),
+        ]
+    )

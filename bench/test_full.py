@@ -1,5 +1,5 @@
-import pytest
 import orjson
+import pytest
 
 from .compare.libs import serpyco_rs as serializer
 from .utils import repeat
@@ -27,7 +27,7 @@ def test_load_validate(benchmark):
     benchmark(repeat(lambda: serializer.load(test_dict, validate=True), count=100))
 
 
-@pytest.mark.parametrize('raw', [True, False], ids=["raw", "python"])
+@pytest.mark.parametrize('raw', [True, False], ids=['raw', 'python'])
 def test_load_validate_compare(benchmark, raw):
     raw_data = orjson.dumps(serializer.dump(serializer.test_object)).decode('utf-8')
 

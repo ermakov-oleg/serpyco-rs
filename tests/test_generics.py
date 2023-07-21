@@ -134,7 +134,7 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.CustomType[no_format,keep_nones]': {
-                    'description': 'CustomType(q: ' 'str, ' 'w: ' 'int)',
+                    'description': 'CustomType(q: str, w: int)',
                     'properties': {'q': {'type': 'string'}, 'w': {'type': 'integer'}},
                     'required': ['q', 'w'],
                     'type': 'object',

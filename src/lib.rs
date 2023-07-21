@@ -11,8 +11,12 @@ fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
         py.get_type::<serializer::ValidationError>(),
     )?;
     m.add(
-        "SchemaValidationError",
-        py.get_type::<serializer::SchemaValidationError>(),
+        "InnerSchemaValidationError",
+        py.get_type::<serializer::InnerSchemaValidationError>(),
+    )?;
+    m.add(
+        "InnerErrorItem",
+        py.get_type::<serializer::InnerErrorItem>(),
     )?;
     Ok(())
 }

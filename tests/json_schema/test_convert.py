@@ -68,7 +68,7 @@ def test_to_json_schema():
                     'description': 'Docs',
                     'properties': {
                         'a': {
-                            'description': 'A ' 'field ' 'with ' 'bounds',
+                            'description': 'A field with bounds',
                             'maximum': 10,
                             'minimum': 0,
                             'type': 'integer',
@@ -139,19 +139,19 @@ def test_to_json_schema():
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.InnerData[no_format,keep_nones]': {
-                    'description': 'Some ' 'important ' 'entity',
+                    'description': 'Some important entity',
                     'properties': {'foo_filed': {'type': 'string'}},
                     'required': ['foo_filed'],
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.InnerData[no_format,omit_nones]': {
-                    'description': 'Some ' 'important ' 'entity',
+                    'description': 'Some important entity',
                     'properties': {'foo_filed': {'type': 'string'}},
                     'required': ['foo_filed'],
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.InnerData[camel_case,keep_nones]': {
-                    'description': 'Some ' 'important ' 'entity',
+                    'description': 'Some important entity',
                     'properties': {'fooFiled': {'type': 'string'}},
                     'required': ['fooFiled'],
                     'type': 'object',

@@ -9,5 +9,5 @@ mod types;
 
 pub use encoders::ValidationError;
 pub use main::Serializer;
-pub use schema::SchemaValidationError;
+pub use schema::{InnerErrorItem, InnerSchemaValidationError};
 pub use types::init;

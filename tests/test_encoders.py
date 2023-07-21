@@ -1,6 +1,6 @@
+import json
 import sys
 import uuid
-import json
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -121,8 +121,8 @@ def test_tuple__invalid_number_items():
     assert exec_info.value.args[0] == 'Invalid number of items for tuple'
 
     with pytest.raises(ValidationError) as exec_info:
-        serializer.load_json('[1]')
-    assert exec_info.value.args[0] == '[1] has less than 3 items'
+        serializer.load_json('[1]', validate=False)
+    assert exec_info.value.args[0] == 'Invalid number of items for tuple'
 
 
 @pytest.mark.parametrize(
@@ -230,7 +230,7 @@ def test_optional():
     assert serializer.dump(T(foo=1)) == {'foo': 1}
     assert serializer.load({}) == T()
     assert serializer.load({'foo': 12}) == T(foo=12)
-    assert serializer.load_json("{}") == T()
+    assert serializer.load_json('{}') == T()
     assert serializer.load_json('{"foo": 12}') == T(foo=12)
 
 

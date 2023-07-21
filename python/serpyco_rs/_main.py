@@ -2,8 +2,9 @@ import json
 from typing import Annotated, Any, Generic, TypeVar, cast
 
 from ._describe import describe_type
-from ._impl import Serializer as _Serializer
+from ._impl import InnerSchemaValidationError, Serializer as _Serializer
 from ._json_schema import JsonschemaRSValidator, Validator, get_json_schema
+from .exceptions import ErrorItem, SchemaValidationError
 from .metadata import CamelCase, OmitNone
 
 
@@ -36,7 +37,20 @@ class Serializer(Generic[_T]):
         return self._encoder.load(data)
 
     def load_json(self, data: str, validate: bool = True) -> _T:
-        return self._encoder.load_json(data, validate)
+        try:
+            return self._encoder.load_json(data, validate)
+        except InnerSchemaValidationError as e:
+            items = e.args[0]
+            raise SchemaValidationError(
+                errors=[
+                    ErrorItem(
+                        message=item.args[0],
+                        schema_path=item.args[1],
+                        instance_path=item.args[2],
+                    )
+                    for item in items
+                ]
+            ) from None
 
     def get_json_schema(self) -> dict[str, Any]:
         return self._schema
