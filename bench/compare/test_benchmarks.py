@@ -38,6 +38,18 @@ def test_load(benchmark, lib):
 
 
 @pytest.mark.parametrize('lib', serializers.keys())
+def test_load_validate(benchmark, lib):
+    serializer = serializers[lib]
+    test_dict = serializer.dump(serializer.test_object)
+    serializer.load(test_dict, validate=True)  # warmup
+
+    benchmark.group = 'load with validate'
+    benchmark.extra_info['lib'] = lib
+    benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
+    benchmark(serializer.load, test_dict, validate=True)
+
+
+@pytest.mark.parametrize('lib', serializers.keys())
 def test_load_json(benchmark, lib):
     serializer = serializers[lib]
     test_data = json.dumps(serializer.dump(serializer.test_object))
@@ -45,9 +57,7 @@ def test_load_json(benchmark, lib):
 
     benchmark.group = 'load raw json'
     benchmark.extra_info['lib'] = lib
-    benchmark.extra_info['correct'] = (
-        serializer.load_json(json.dumps(serializer.dump(serializer.test_object))) == serializer.test_object
-    )
+    benchmark.extra_info['correct'] = serializer.load_json(test_data) == serializer.test_object
     benchmark(serializer.load_json, test_data, validate=False)
 
 
@@ -59,19 +69,5 @@ def test_load_json_validate(benchmark, lib):
 
     benchmark.group = 'load raw json with validate'
     benchmark.extra_info['lib'] = lib
-    benchmark.extra_info['correct'] = (
-        serializer.load_json(json.dumps(serializer.dump(serializer.test_object))) == serializer.test_object
-    )
+    benchmark.extra_info['correct'] = serializer.load_json(test_data) == serializer.test_object
     benchmark(serializer.load_json, test_data, validate=True)
-
-
-@pytest.mark.parametrize('lib', serializers.keys())
-def test_load_validate(benchmark, lib):
-    serializer = serializers[lib]
-    test_dict = serializer.dump(serializer.test_object)
-    serializer.load(test_dict, validate=True)  # warmup
-
-    benchmark.group = 'load with validate'
-    benchmark.extra_info['lib'] = lib
-    benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
-    benchmark(serializer.load, test_dict, validate=True)

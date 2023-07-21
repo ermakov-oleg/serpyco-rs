@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from mashumaro import DataClassDictMixin
 from mashumaro.mixins.json import DataClassJSONMixin
+from orjson import orjson
 
 from .base import make_test_object
 
@@ -39,7 +40,7 @@ def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
 
 
 def load_json(data: str, validate: bool = True) -> Dataclass:
-    return Dataclass.from_json(data)
+    return Dataclass.from_json(data, decoder=orjson.loads)
 
 
 def dump(obj: Dataclass) -> dict[str, Any]:
