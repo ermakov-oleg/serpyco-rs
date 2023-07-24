@@ -1,3 +1,4 @@
+import json
 import sys
 from dataclasses import dataclass
 from typing import Annotated, Literal, Optional, Union
@@ -46,6 +47,7 @@ def test_tagged_union():
     raw = {'childs': [{'type': 'foo', 'val': 1}, {'type': 'bar', 'val': '12'}]}
     assert serializer.dump(val) == raw
     assert serializer.load(raw) == val
+    assert serializer.load_json(json.dumps(raw)) == val
 
 
 def test_tagged_union__invalid_discriminator_type():
@@ -139,6 +141,7 @@ def test_tagged_union__with_forward_refs():
     }
     assert serializer.dump(data) == raw_data
     assert serializer.load(raw_data) == data
+    assert serializer.load_json(json.dumps(raw_data)) == data
 
 
 def test_tagged_union__camel_case_filed_format():

@@ -529,7 +529,7 @@ impl Encoder for TupleEncoder {
 
     #[inline]
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
-        if let Value::Array(mut items) = value {
+        if let Value::Array(items) = value {
             let len = items.len();
             if len != self.encoders.len() {
                 return Err(ValidationError::new_err(
@@ -538,7 +538,7 @@ impl Encoder for TupleEncoder {
             }
 
             let tuple = ffi!(PyTuple_New(len as isize));
-            for (i, val) in items.drain(..).enumerate() {
+            for (i, val) in items.into_iter().enumerate() {
                 let item = self.encoders[i].load_value(val)?;
                 ffi!(PyTuple_SetItem(tuple, i as isize, item));
             }
@@ -590,7 +590,7 @@ impl Encoder for UnionEncoder {
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
         if let Value::Object(mut obj) = value {
             let discriminator = obj
-                .remove(&self.load_discriminator_rs)
+                .get(&self.load_discriminator_rs)
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
                 .ok_or(ValidationError::new_err("missing discriminator"))?;
             let encoder = self
