@@ -26,6 +26,8 @@ print(result)
 >> {'name': 'foo', 'num': 2, 'tags': ['hello', 'world']}
 ```
 
+Inspired by [serpyco](https://pypi.org/project/serpyco/).
+
 serpyco-rs works by analysing the dataclass fields and can recognize many types : `list`, `tuple`, `Optional`... 
 You can also embed other dataclasses in a definition.
 
@@ -264,6 +266,28 @@ assert ser.load(val) == Foo(val='bar')
 ```
 
 **Note:** `CustomEncoder` has no effect to validation and JSON Schema generation.
+
+### Load data from raw json
+
+`serpyco-rs` can load data from raw json string.
+
+Load data from raw json string is faster than `[or]json.loads` + `Serializer.load` about 20%+.
+This is possible because `serpyco-rs` uses `serde_json` to load data from a raw json string and avoids unnecessary conversion of python objects to serde_json::Value for validation process.
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+@dataclass
+class A:
+    foo: int
+    bar: str
+    
+ser = Serializer(A)
+
+print(ser.load_json('{"foo": 1, "bar": "buz"}'))
+>> A(foo=1, bar='buz')
+```
 
 
 ## Getting JSON Schema

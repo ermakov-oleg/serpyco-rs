@@ -59,13 +59,12 @@ def bench(session):
     session.run(
         'pytest',
         '--verbose',
-        '--benchmark-min-time=0.25',
-        '--benchmark-max-time=0.5',
+        '--benchmark-min-time=0.5',
+        '--benchmark-max-time=1',
         '--benchmark-disable-gc',
         '--benchmark-autosave',
         '--benchmark-save-data',
         '--benchmark-compare',
-        '--ignore=bench/test_full.py',
         *(session.posargs if session.posargs else ['bench']),
     )
 

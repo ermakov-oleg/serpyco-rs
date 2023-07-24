@@ -1,21 +1,24 @@
 use crate::serializer::dateutil::{parse_date, parse_time};
 use crate::serializer::py::{
-    create_new_object, from_ptr_or_err, iter_over_dict_items, obj_to_str, py_len,
-    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
-    py_str_to_str, py_tuple_get_item, to_decimal,
+    create_new_object, from_ptr_or_err, is_none, iter_over_dict_items, obj_to_str, parse_number,
+    py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item,
+    py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal,
 };
-use crate::serializer::types::{ISOFORMAT_STR, NONE_PY_TYPE, UUID_PY_TYPE, VALUE_STR};
+use crate::serializer::types::{FALSE, ISOFORMAT_STR, NONE_PY_TYPE, TRUE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
 use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::types::PyString;
 use pyo3::{AsPyPointer, Py, PyAny, PyResult};
 use pyo3_ffi::PyObject;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use crate::serializer::py_str::unicode_from_str;
+
 use super::dateutil::parse_datetime;
-use super::macros::{call_method, call_object, ffi};
+use super::macros::{call_method, call_object, ffi, use_immortal};
 
 use dyn_clone::{clone_trait_object, DynClone};
 
@@ -26,6 +29,7 @@ pub type TEncoder = dyn Encoder + Send + Sync;
 pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject>;
 }
 
 clone_trait_object!(Encoder);
@@ -45,6 +49,25 @@ impl Encoder for NoopEncoder {
         ffi!(Py_INCREF(value));
         Ok(value)
     }
+
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        match value {
+            Value::Null => Ok(use_immortal!(NONE_PY_TYPE)),
+            Value::Bool(bool) => {
+                let py_bool = if bool {
+                    use_immortal!(TRUE)
+                } else {
+                    use_immortal!(FALSE)
+                };
+                Ok(py_bool)
+            }
+            Value::Number(number) => Ok(parse_number(number)),
+            Value::String(string) => Ok(unicode_from_str(&string)),
+            Value::Array(_) | Value::Object(_) => {
+                Err(ValidationError::new_err("invalid value type"))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +84,16 @@ impl Encoder for DecimalEncoder {
         to_decimal(value).map_err(|e| {
             ValidationError::new_err(format!("invalid Decimal value: {value:?} error: {e:?}"))
         })
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::String(string) = value {
+            let py_string = unicode_from_str(&string);
+            self.load(py_string)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
     }
 }
 
@@ -89,7 +122,6 @@ impl Encoder for DictionaryEncoder {
             ffi!(Py_DECREF(value));
             ffi!(Py_DECREF(item));
         }
-
         Ok(dict_ptr)
     }
 
@@ -109,6 +141,22 @@ impl Encoder for DictionaryEncoder {
         }
 
         Ok(dict_ptr)
+    }
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::Object(object) = value {
+            let dict_ptr = ffi!(PyDict_New());
+            for (key, value) in object {
+                let key = self.key_encoder.load_value(Value::String(key))?;
+                let value = self.value_encoder.load_value(value)?;
+                ffi!(PyDict_SetItem(dict_ptr, key, value));
+                ffi!(Py_DECREF(key));
+                ffi!(Py_DECREF(value));
+            }
+            Ok(dict_ptr)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
     }
 }
 
@@ -144,6 +192,20 @@ impl Encoder for ArrayEncoder {
         }
         Ok(list)
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::Array(array) = value {
+            let list = ffi!(PyList_New(array.len().try_into().unwrap()));
+            for (i, item) in array.into_iter().enumerate() {
+                let val = self.encoder.load_value(item)?;
+                ffi!(PyList_SetItem(list, i as isize, val));
+            }
+            Ok(list)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -157,6 +219,7 @@ pub struct EntityEncoder {
 pub struct Field {
     pub(crate) name: Py<PyString>,
     pub(crate) dict_key: Py<PyString>,
+    pub(crate) dict_key_rs: String,
     pub(crate) encoder: Box<TEncoder>,
     pub(crate) required: bool,
     pub(crate) default: Option<Py<PyAny>>,
@@ -208,6 +271,33 @@ impl Encoder for EntityEncoder {
             ffi!(Py_DECREF(val));
         }
         Ok(obj)
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::Object(mut object) = value {
+            let obj = create_new_object(self.cls.as_ptr())?;
+            for field in &self.fields {
+                let val = match object.remove(&field.dict_key_rs) {
+                    Some(val) => field.encoder.load_value(val)?, // new obj or RC +1
+                    None => match (&field.default, &field.default_factory) {
+                        (Some(val), _) => val.clone().as_ptr(),
+                        (_, Some(val)) => call_object!(val.as_ptr())?,
+                        (None, _) => {
+                            return Err(ValidationError::new_err(format!(
+                                "data dictionary is missing required parameter {}",
+                                &field.name
+                            )))
+                        }
+                    },
+                };
+                py_object_set_attr(obj, field.name.as_ptr(), val)?; // val RC +1
+                ffi!(Py_DECREF(val));
+            }
+            Ok(obj)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
     }
 }
 
@@ -276,6 +366,33 @@ impl Encoder for TypedDictEncoder {
         }
         Ok(dict_ptr)
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::Object(mut object) = value {
+            let dict_ptr = ffi!(PyDict_New());
+            for field in &self.fields {
+                let val = match object.remove(&field.dict_key_rs) {
+                    Some(val) => field.encoder.load_value(val)?, // new obj or RC +1
+                    None => {
+                        if field.required {
+                            return Err(ValidationError::new_err(format!(
+                                "data dictionary is missing required parameter {}",
+                                &field.dict_key
+                            )));
+                        } else {
+                            continue;
+                        }
+                    }
+                };
+                ffi!(PyDict_SetItem(dict_ptr, field.name.as_ptr(), val)); // key and val RC +1
+                ffi!(Py_DECREF(val));
+            }
+            Ok(dict_ptr)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -290,6 +407,16 @@ impl Encoder for UUIDEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         py_object_call1_make_tuple_or_err(unsafe { UUID_PY_TYPE }, value)
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::String(s) = value {
+            let py_string = unicode_from_str(&s);
+            self.load(py_string)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
     }
 }
 
@@ -308,6 +435,19 @@ impl Encoder for EnumEncoder {
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         py_object_call1_make_tuple_or_err(self.enum_type.as_ptr(), value)
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::String(s) = value {
+            let py_string = unicode_from_str(&s);
+            self.load(py_string)
+        } else if let Value::Number(n) = value {
+            let py_number = parse_number(n);
+            self.load(py_number)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -318,9 +458,8 @@ pub struct OptionalEncoder {
 impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if value == unsafe { NONE_PY_TYPE } {
-            ffi!(Py_INCREF(NONE_PY_TYPE));
-            Ok(value)
+        if is_none(value) {
+            Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.dump(value)
         }
@@ -328,11 +467,19 @@ impl Encoder for OptionalEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if value == unsafe { NONE_PY_TYPE } {
-            ffi!(Py_INCREF(NONE_PY_TYPE));
-            Ok(value)
+        if is_none(value) {
+            Ok(use_immortal!(NONE_PY_TYPE))
         } else {
             self.encoder.load(value)
+        }
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if value == Value::Null {
+            Ok(use_immortal!(NONE_PY_TYPE))
+        } else {
+            self.encoder.load_value(value)
         }
     }
 }
@@ -379,6 +526,27 @@ impl Encoder for TupleEncoder {
         }
         Ok(tuple)
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::Array(items) = value {
+            let len = items.len();
+            if len != self.encoders.len() {
+                return Err(ValidationError::new_err(
+                    "Invalid number of items for tuple",
+                ));
+            }
+
+            let tuple = ffi!(PyTuple_New(len as isize));
+            for (i, val) in items.into_iter().enumerate() {
+                let item = self.encoders[i].load_value(val)?;
+                ffi!(PyTuple_SetItem(tuple, i as isize, item));
+            }
+            Ok(tuple)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -386,6 +554,7 @@ pub struct UnionEncoder {
     pub(crate) encoders: HashMap<String, Box<TEncoder>>,
     pub(crate) dump_discriminator: Py<PyString>,
     pub(crate) load_discriminator: Py<PyString>,
+    pub(crate) load_discriminator_rs: String,
 }
 
 impl Encoder for UnionEncoder {
@@ -416,6 +585,25 @@ impl Encoder for UnionEncoder {
         ffi!(Py_DECREF(discriminator));
         encoder.load(value)
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::Object(obj) = value {
+            let discriminator = obj
+                .get(&self.load_discriminator_rs)
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .ok_or(ValidationError::new_err("missing discriminator"))?;
+            let encoder = self
+                .encoders
+                .get(&discriminator)
+                .ok_or(ValidationError::new_err(format!(
+                    "No encoder for '{discriminator}' discriminator"
+                )))?;
+            encoder.load_value(Value::Object(obj))
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -430,6 +618,15 @@ impl Encoder for TimeEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         parse_time(py_str_to_str(value)?)
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::String(s) = value {
+            parse_time(&s)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
     }
 }
 
@@ -446,6 +643,15 @@ impl Encoder for DateTimeEncoder {
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         parse_datetime(py_str_to_str(value)?)
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::String(s) = value {
+            parse_datetime(&s)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -460,6 +666,15 @@ impl Encoder for DateEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         parse_date(py_str_to_str(value)?)
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        if let Value::String(s) = value {
+            parse_date(&s)
+        } else {
+            Err(ValidationError::new_err("invalid value type"))
+        }
     }
 }
 
@@ -500,6 +715,19 @@ impl Encoder for LazyEncoder {
             )),
         }
     }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        match self.inner.borrow().as_ref() {
+            Some(encoder) => match encoder {
+                Encoders::Entity(encoder) => encoder.load_value(value),
+                Encoders::TypedDict(encoder) => encoder.load_value(value),
+            },
+            None => Err(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            )),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -524,5 +752,10 @@ impl Encoder for CustomEncoder {
             Some(ref load) => py_object_call1_make_tuple_or_err(load.as_ptr(), value),
             None => self.inner.load(value),
         }
+    }
+
+    #[inline]
+    fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
+        self.inner.load_value(value)
     }
 }

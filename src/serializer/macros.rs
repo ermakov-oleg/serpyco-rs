@@ -75,6 +75,22 @@ macro_rules! call_object {
     };
 }
 
+#[cfg(Py_3_12)]
+macro_rules! use_immortal {
+    ($op:expr) => {
+        unsafe { $op }
+    };
+}
+
+#[cfg(not(Py_3_12))]
+macro_rules! use_immortal {
+    ($op:expr) => {{
+        ffi!(Py_INCREF($op));
+        unsafe { $op }
+    }};
+}
+
 pub(crate) use call_method;
 pub(crate) use call_object;
 pub(crate) use ffi;
+pub(crate) use use_immortal;

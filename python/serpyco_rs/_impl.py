@@ -1,1 +1,1 @@
-from ._serpyco_rs import Serializer, ValidationError  # pyright: ignore
+from ._serpyco_rs import InnerSchemaValidationError, Serializer, ValidationError  # pyright: ignore
