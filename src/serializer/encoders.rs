@@ -588,7 +588,7 @@ impl Encoder for UnionEncoder {
 
     #[inline]
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
-        if let Value::Object(mut obj) = value {
+        if let Value::Object(obj) = value {
             let discriminator = obj
                 .get(&self.load_discriminator_rs)
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
