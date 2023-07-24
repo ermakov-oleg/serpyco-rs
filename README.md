@@ -26,6 +26,8 @@ print(result)
 >> {'name': 'foo', 'num': 2, 'tags': ['hello', 'world']}
 ```
 
+Inspired by [serpyco](https://pypi.org/project/serpyco/).
+
 serpyco-rs works by analysing the dataclass fields and can recognize many types : `list`, `tuple`, `Optional`... 
 You can also embed other dataclasses in a definition.
 
