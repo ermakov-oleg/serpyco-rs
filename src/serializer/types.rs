@@ -31,6 +31,7 @@ pub static mut LITERAL_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut NOT_SET: *mut PyObject = 0 as *mut PyObject;
 pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut ISOFORMAT_STR: *mut PyObject = 0 as *mut PyObject;
+pub static mut DATE_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut UUID_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut NONE_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -118,6 +119,10 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
 
 pub fn init(py: Python<'_>) {
     INIT.call_once(|| unsafe {
+        if pyo3_ffi::PyDateTimeAPI().is_null() {
+            // initialize datetime module
+            pyo3_ffi::PyDateTime_IMPORT()
+        };
         let describe = PyModule::import(py, "serpyco_rs._describe").unwrap();
         INTEGER_TYPE = get_attr_ptr!(describe, "IntegerType");
         STRING_TYPE = get_attr_ptr!(describe, "StringType");
@@ -161,6 +166,7 @@ pub fn init(py: Python<'_>) {
         VALUE_STR = pyo3_ffi::PyUnicode_InternFromString("value\0".as_ptr() as *const c_char);
         ISOFORMAT_STR =
             pyo3_ffi::PyUnicode_InternFromString("isoformat\0".as_ptr() as *const c_char);
+        DATE_STR = pyo3_ffi::PyUnicode_InternFromString("date\0".as_ptr() as *const c_char);
 
         TRUE = pyo3_ffi::Py_True();
         FALSE = pyo3_ffi::Py_False();

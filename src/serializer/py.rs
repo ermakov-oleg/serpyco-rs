@@ -1,6 +1,6 @@
 use crate::serializer::macros::{call_method, ffi};
 use crate::serializer::types::{
-    DECIMAL_PY_TYPE, ITEMS_STR, NONE_PY_TYPE, NOT_SET, PY_OBJECT__NEW__,
+    DATE_STR, DECIMAL_PY_TYPE, ITEMS_STR, NONE_PY_TYPE, NOT_SET, PY_OBJECT__NEW__,
 };
 use pyo3::{ffi, AsPyPointer, PyAny, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
@@ -31,6 +31,16 @@ pub fn is_not_set(obj: &PyAny) -> PyResult<bool> {
 #[inline]
 pub fn is_none(obj: *mut ffi::PyObject) -> bool {
     obj == unsafe { NONE_PY_TYPE }
+}
+
+#[inline]
+pub fn is_datetime(obj: *mut ffi::PyObject) -> bool {
+    ffi!(PyDateTime_Check(obj)) == 1
+}
+
+#[inline]
+pub fn datetime_to_date(obj: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
+    call_method!(obj, DATE_STR)
 }
 
 #[inline]

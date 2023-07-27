@@ -59,13 +59,7 @@ pub fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
 }
 
 fn ensure_datetime_api() -> &'static pyo3_ffi::PyDateTime_CAPI {
-    unsafe {
-        if pyo3_ffi::PyDateTimeAPI().is_null() {
-            pyo3_ffi::PyDateTime_IMPORT()
-        }
-
-        &*pyo3_ffi::PyDateTimeAPI()
-    }
+    unsafe { &*pyo3_ffi::PyDateTimeAPI() }
 }
 
 fn py_timezone(offset: Option<i32>) -> PyResult<*mut PyObject> {

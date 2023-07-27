@@ -325,4 +325,3 @@ print(ser.get_json_schema())
     }
 }
 ```
-

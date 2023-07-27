@@ -1,8 +1,9 @@
 use crate::serializer::dateutil::{parse_date, parse_time};
 use crate::serializer::py::{
-    create_new_object, from_ptr_or_err, is_none, iter_over_dict_items, obj_to_str, parse_number,
-    py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item,
-    py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal,
+    create_new_object, datetime_to_date, from_ptr_or_err, is_datetime, is_none,
+    iter_over_dict_items, obj_to_str, parse_number, py_len, py_object_call1_make_tuple_or_err,
+    py_object_get_attr, py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_get_item,
+    to_decimal,
 };
 use crate::serializer::types::{FALSE, ISOFORMAT_STR, NONE_PY_TYPE, TRUE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
@@ -660,7 +661,12 @@ pub struct DateEncoder;
 impl Encoder for DateEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        call_method!(value, ISOFORMAT_STR)
+        let date = if is_datetime(value) {
+            datetime_to_date(value)?
+        } else {
+            value
+        };
+        call_method!(date, ISOFORMAT_STR)
     }
 
     #[inline]

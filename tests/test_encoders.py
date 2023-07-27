@@ -10,8 +10,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
-from serpyco_rs import Serializer, ValidationError
 from typing_extensions import TypedDict
+
+from serpyco_rs import Serializer, ValidationError
 
 
 @pytest.mark.parametrize(
@@ -196,8 +197,11 @@ def test_time_load(value, expected):
     ['value', 'expected'],
     [
         (time(12, 34), '12:34:00'),
+        (time(12, 34, tzinfo=tzoffset(None, 10800)), '12:34:00+03:00'),
         (time(12, 34, 56), '12:34:56'),
         (time(12, 34, 56, 78), '12:34:56.000078'),
+        (time(12, 34, tzinfo=timezone.utc), '12:34:00+00:00'),
+        (time(12, 34, tzinfo=timezone(timedelta(hours=1))), '12:34:00+01:00'),
     ],
 )
 def test_time_dump(value, expected):
@@ -210,6 +214,11 @@ def test_date():
     assert serializer.load('2022-10-14') == date(2022, 10, 14)
     assert serializer.load_json(json.dumps('2022-10-13')) == date(2022, 10, 13)
     assert serializer.dump(date(2022, 10, 13)) == '2022-10-13'
+
+
+def test_date__dump_datatime__expect_date():
+    serializer = Serializer(date)
+    assert serializer.dump(datetime(2022, 10, 13, 12, 34, 56)) == '2022-10-13'
 
 
 def test_literal():
