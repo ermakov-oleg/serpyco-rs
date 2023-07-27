@@ -322,3 +322,24 @@ def test_to_json_schema__tagged_union():
             }
         },
     }
+
+
+def test_to_json_schema__force_none_as_default_for_optional():
+    @dataclass
+    class Data:
+        a: Optional[int]
+
+    serializer = Serializer(Data, force_default_for_optional=True)
+    assert serializer.get_json_schema() == {
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones,force_none]',
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'components': {
+            'schemas': {
+                'tests.json_schema.test_convert.Data[no_format,keep_nones,force_none]': {
+                    'description': mock.ANY,
+                    'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]}},
+                    'type': 'object',
+                }
+            }
+        },
+    }
