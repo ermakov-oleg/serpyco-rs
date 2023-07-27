@@ -151,7 +151,7 @@ def test_required_and_nullable():
 def test_nullable_without_default():
     @dataclass
     class Entity:
-        foo: int | None
+        foo: Optional[int]
 
     entity_serializer = Serializer(Entity)
 
@@ -163,7 +163,7 @@ def test_nullable_without_default():
 def test_nullable_without_default__force_none_as_default_for_optional():
     @dataclass
     class Entity:
-        foo: int | None
+        foo: Optional[int]
 
     entity_serializer = Serializer(Entity, force_default_for_optional=True)
 

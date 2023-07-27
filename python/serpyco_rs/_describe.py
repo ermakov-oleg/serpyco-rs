@@ -273,7 +273,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
     none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional, KeepDefaultForOptional)
     custom_encoder = _find_metadata(metadata, CustomEncoder)
-    annotation_wrapper = _wrap_annotated([filed_format, none_format])
+    annotation_wrapper = _wrap_annotated([filed_format, none_format, none_as_default_for_optional])
 
     meta_key = _MetaStateKey(
         cls=t,

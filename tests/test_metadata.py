@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import Annotated, Optional
 
 import pytest
-from serpyco_rs import Serializer
-from serpyco_rs.metadata import Alias, OmitNone
+from serpyco_rs import Serializer, SchemaValidationError
+from serpyco_rs.metadata import Alias, OmitNone, ForceDefaultForOptional
 
 
 def test_annotated_filed_alias():
@@ -62,3 +62,42 @@ def test_propagete__omit_none(omit_none, foo, expected):
 def test_omit_none_on_dict():
     serializer = Serializer(dict[str, Optional[bool]], omit_none=True)
     assert serializer.dump({'foo': True, 'bar': None}) == {'foo': True}
+
+
+def test_force_default_for_optional__propagate_to_nested():
+    @dataclass
+    class A:
+        bar: Optional[bool]
+
+    @dataclass
+    class B:
+        foo: Optional[A]
+
+    serializer = Serializer(B, force_default_for_optional=True)
+
+    print(serializer.get_json_schema())
+
+    assert serializer.load({}) == B(foo=None)
+    assert serializer.load({'foo': {}}) == B(foo=A(bar=None))
+
+
+def test_force_default_for_optional__override_by_annotated():
+    @dataclass
+    class A:
+        val: Optional[bool]
+
+    @dataclass
+    class B:
+        foo: Optional[A]
+        bar: Annotated[Optional[A], ForceDefaultForOptional]
+
+    serializer = Serializer(B)
+
+    assert serializer.load({'foo': None}) == B(foo=None, bar=None)
+
+    # foo is not annotated, and A.val is still nullable+required
+    with pytest.raises(SchemaValidationError):
+        serializer.load({'foo': {}})
+
+    # bar is annotated, and A.val is nullable+non required
+    assert serializer.load({'foo': None, 'bar': {}}) == B(foo=None, bar=A(val=None))
