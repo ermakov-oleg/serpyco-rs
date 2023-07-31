@@ -82,7 +82,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='a',
             ),
             EntityField(
@@ -91,7 +90,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='b',
             ),
             EntityField(
@@ -100,7 +98,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='c',
             ),
             EntityField(
@@ -109,7 +106,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='d',
             ),
             EntityField(
@@ -118,7 +114,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='e',
             ),
             EntityField(
@@ -127,7 +122,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='f',
             ),
             EntityField(
@@ -136,7 +130,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='g',
             ),
             EntityField(
@@ -145,7 +138,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='h',
             ),
             EntityField(
@@ -154,7 +146,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='i',
             ),
             EntityField(
@@ -163,7 +154,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='j',
             ),
             EntityField(
@@ -178,7 +168,6 @@ def test_describe__dataclass__supported():
                             doc=None,
                             default=NOT_SET,
                             default_factory=NOT_SET,
-                            is_property=False,
                             dict_key='a',
                         )
                     ],
@@ -189,7 +178,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='k',
             ),
             EntityField(
@@ -202,7 +190,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='l',
             ),
             EntityField(
@@ -215,7 +202,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='m',
             ),
             EntityField(
@@ -229,7 +215,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='n',
             ),
             EntityField(
@@ -243,7 +228,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='o',
             ),
             EntityField(
@@ -252,7 +236,6 @@ def test_describe__dataclass__supported():
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,
-                is_property=False,
                 dict_key='p',
             ),
         ],
@@ -714,6 +697,7 @@ def test_describe__typed_dict():
             EntityField(
                 name='bar_field',
                 dict_key='barField',
+                required=False,
                 type=StringType(custom_encoder=None),
                 default=None,
             ),
@@ -739,6 +723,7 @@ def test_describe__typed_dict__total_false():
             EntityField(
                 name='foo',
                 dict_key='foo',
+                required=False,
                 type=IntegerType(custom_encoder=None),
                 default=None,
             ),

@@ -10,9 +10,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
-from typing_extensions import TypedDict
-
 from serpyco_rs import Serializer, ValidationError
+from typing_extensions import TypedDict
 
 
 @pytest.mark.parametrize(

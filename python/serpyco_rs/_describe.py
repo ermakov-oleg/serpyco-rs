@@ -30,12 +30,14 @@ from .metadata import (
     Discriminator,
     FiledFormat,
     Format,
+    KeepDefaultForOptional,
     KeepNone,
     Max,
     MaxLength,
     Min,
     MinLength,
     NoFormat,
+    NoneAsDefaultForOptional,
     NoneFormat,
     OmitNone,
     Places,
@@ -141,18 +143,11 @@ class EntityField:
     name: str
     dict_key: str
     type: Type
+    required: bool = True
     doc: Optional[str] = None
     default: Any = NOT_SET
     default_factory: Union[Callable[[], Any], NotSet] = NOT_SET
-    is_property: bool = False
     is_discriminator_field: bool = False
-
-    @property
-    def required(self) -> bool:
-        return (
-            not (self.is_property or self.default != NOT_SET or self.default_factory != NOT_SET)
-            or self.is_discriminator_field
-        )
 
 
 @dataclasses.dataclass
@@ -215,6 +210,7 @@ class _MetaStateKey:
     cls: type
     field_format: FiledFormat
     none_format: NoneFormat
+    none_as_default_for_optional: NoneAsDefaultForOptional
     generics: Sequence[tuple[TypeVar, Any]]
 
 
@@ -275,19 +271,21 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
     generics = tuple((k, v) for k, v in sorted(zip(parameters, args), key=lambda x: repr(x[0])))
     filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
+    none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional, KeepDefaultForOptional)
     custom_encoder = _find_metadata(metadata, CustomEncoder)
-    annotation_wrapper = _wrap_annotated([filed_format, none_format])
+    annotation_wrapper = _wrap_annotated([filed_format, none_format, none_as_default_for_optional])
 
     meta_key = _MetaStateKey(
         cls=t,
         field_format=filed_format,
         none_format=none_format,
+        none_as_default_for_optional=none_as_default_for_optional,
         generics=generics,
     )
 
     if meta.has_in_state(meta_key):
         return RecursionHolder(
-            name=_generate_name(t, filed_format, none_format, generics),
+            name=_generate_name(t, filed_format, none_format, none_as_default_for_optional, generics),
             meta=meta,
             state_key=meta_key,
             custom_encoder=None,
@@ -378,6 +376,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
                 cls_filed_format=filed_format,
                 cls_none_format=none_format,
                 custom_encoder=custom_encoder,
+                cls_none_as_default_for_optional=none_as_default_for_optional,
                 meta=meta,
             )
             meta.add_to_state(meta_key, entity_type)
@@ -432,6 +431,7 @@ def _describe_entity(
     generics: Sequence[tuple[TypeVar, Any]],
     cls_filed_format: FiledFormat,
     cls_none_format: NoneFormat,
+    cls_none_as_default_for_optional: NoneAsDefaultForOptional,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: _Meta,
 ) -> Union[EntityType, TypedDictType]:
@@ -447,11 +447,20 @@ def _describe_entity(
     fields = []
     for field in _get_entity_fields(t):
         type_ = _replace_generics(types.get(field.name, field.type), generics)
-        type_ = Annotated[type_, cls_filed_format, cls_none_format]
+        type_ = Annotated[type_, cls_filed_format, cls_none_format, cls_none_as_default_for_optional]
 
         metadata = _get_annotated_metadata(type_)
         field_type = describe_type(type_, meta)
         alias = _find_metadata(metadata, Alias)
+        none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional)
+
+        is_discriminator_field = field.name == discriminator_field
+        required = not (field.default != NOT_SET or field.default_factory != NOT_SET) or is_discriminator_field
+
+        default = field.default
+        if required and none_as_default_for_optional and none_as_default_for_optional.use:
+            default = None
+            required = False
 
         fields.append(
             EntityField(
@@ -459,16 +468,16 @@ def _describe_entity(
                 dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
                 doc=docs.get(field.name),
                 type=field_type,
-                default=field.default,
+                default=default,
                 default_factory=field.default_factory,
-                is_property=False,
-                is_discriminator_field=field.name == discriminator_field,
+                is_discriminator_field=is_discriminator_field,
+                required=required,
             )
         )
 
     if is_typeddict(t):
         return TypedDictType(
-            name=_generate_name(t, cls_filed_format, cls_none_format, generics),
+            name=_generate_name(t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional, generics),
             fields=fields,
             omit_none=cls_none_format is OmitNone,
             generics=generics,
@@ -478,7 +487,7 @@ def _describe_entity(
 
     return EntityType(
         cls=t,
-        name=_generate_name(t, cls_filed_format, cls_none_format, generics),
+        name=_generate_name(t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional, generics),
         fields=fields,
         omit_none=cls_none_format is OmitNone,
         generics=generics,
@@ -582,14 +591,19 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
 
 
 def _generate_name(
-    cls: Any, field_format: FiledFormat, none_format: NoneFormat, generics: Sequence[tuple[TypeVar, Any]]
+    cls: Any,
+    field_format: FiledFormat,
+    none_format: NoneFormat,
+    cls_none_as_default_for_optional: NoneAsDefaultForOptional,
+    generics: Sequence[tuple[TypeVar, Any]],
 ) -> str:
     name = cls.__name__
     if generics:
         cls = _replace_generics(cls, generics)
         name = repr(cls)
     nones = 'omit_nones' if none_format.omit else 'keep_nones'
-    return f'{cls.__module__}.{name}[{field_format.format.value},{nones}]'
+    force_none = ',force_none' if cls_none_as_default_for_optional.use else ''
+    return f'{cls.__module__}.{name}[{field_format.format.value},{nones}{force_none}]'
 
 
 def _get_globals(t: Any) -> dict[str, Any]:

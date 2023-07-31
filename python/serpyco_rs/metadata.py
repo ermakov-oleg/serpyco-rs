@@ -63,6 +63,15 @@ KeepNone: NoneFormat = NoneFormat(False)
 OmitNone: NoneFormat = NoneFormat(True)
 
 
+@dataclass(frozen=True)
+class NoneAsDefaultForOptional:
+    use: bool
+
+
+ForceDefaultForOptional: NoneAsDefaultForOptional = NoneAsDefaultForOptional(True)
+KeepDefaultForOptional: NoneAsDefaultForOptional = NoneAsDefaultForOptional(False)
+
+
 _I = TypeVar('_I')
 _O = TypeVar('_O')
 

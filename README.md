@@ -117,6 +117,7 @@ Currently available:
 * Min / Max
 * MinLength / MaxLength
 * CustomEncoder
+* NoneAsDefaultForOptional (ForceDefaultForOptional)
 
 
 ### Alias
@@ -244,6 +245,32 @@ ser = Serializer(Annotated[str, MinLength(5)])
 ser.load("1234")
 >> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='', schema_path='minLength')]
 ```
+
+### NoneAsDefaultForOptional
+`ForceDefaultForOptional` / `KeepDefaultForOptional` can be used to set None as default value for optional (nullable) fields.
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+
+@dataclass
+class Foo:
+    val: int                 # not nullable + required
+    val1: int | None         # nullable + required
+    val2: int | None = None  # nullable + not required
+
+ser_force_default = Serializer(Foo, force_default_for_optional=True)  # or Serializer(Annotated[Foo, ForceDefaultForOptional])
+ser = Serializer(Foo)
+
+# all fields except val are optional and nullable
+assert ser_force_default.load({'val': 1}) == Foo(val=1, val1=None, val2=None) 
+
+# val1 field is required and nullable and val1 should be present in the dict
+ser.load({'val': 1})
+>> SchemaValidationError: [ErrorItem(message='"val1" is a required property', instance_path='', schema_path='required')]
+```
+
 
 ### Custom encoders for fields
 

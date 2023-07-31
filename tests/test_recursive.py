@@ -38,6 +38,7 @@ def test_describe__recursive_type__parsed():
                             name='next',
                             dict_key='next',
                             default=None,
+                            required=False,
                             type=OptionalType(
                                 inner=RecursionHolder(
                                     name=ANY,
