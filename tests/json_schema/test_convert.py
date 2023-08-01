@@ -257,7 +257,6 @@ def test_to_json_schema__literal():
     serializer = Serializer(Literal['foo'])
     assert serializer.get_json_schema() == {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
-        'components': {'schemas': {}},
         'enum': ['foo'],
     }
 

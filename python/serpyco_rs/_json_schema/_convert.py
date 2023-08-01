@@ -28,12 +28,11 @@ def get_json_schema(t: describe.Type) -> dict[str, Any]:
     schema = to_json_schema(t)
     definitions: dict[str, Any] = {}
     schema_def = schema.dump(definitions)
+    components = {'components': {'schemas': definitions}} if definitions else {}
     return {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         **schema_def,
-        'components': {
-            'schemas': definitions,
-        },
+        **components,
     }
 
 
