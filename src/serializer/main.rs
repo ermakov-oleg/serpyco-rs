@@ -23,7 +23,7 @@ use super::encoders::{
 
 type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
 
-#[pyclass]
+#[pyclass(frozen, module = "serde_json")]
 #[derive(Debug)]
 pub struct Serializer {
     pub encoder: Box<TEncoder>,
