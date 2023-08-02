@@ -24,7 +24,7 @@ impl ValidationError {
     }
 }
 
-#[pyclass(extends=ValidationError ,module="serpyco_rs")]
+#[pyclass(extends=ValidationError, module="serpyco_rs")]
 #[derive(Debug)]
 pub(crate) struct SchemaValidationError {
     #[pyo3(get)]
@@ -51,7 +51,7 @@ impl SchemaValidationError {
     }
 }
 
-#[pyclass(frozen)]
+#[pyclass(frozen, module="serpyco_rs")]
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ErrorItem {
     #[pyo3(get)]
