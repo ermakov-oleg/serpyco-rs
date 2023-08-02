@@ -2,8 +2,8 @@
 use pyo3::{
     exceptions,
     ffi::{
-        PyDictObject, PyFloat_AS_DOUBLE, PyList_GET_ITEM, PyList_GET_SIZE, PyLong_AsLongLong,
-        PyObject_GetAttr, PyTuple_GET_ITEM, PyTuple_GET_SIZE, Py_TYPE,
+        PyFloat_AS_DOUBLE, PyList_GET_ITEM, PyList_GET_SIZE, PyLong_AsLongLong, PyObject_GetAttr,
+        PyTuple_GET_ITEM, PyTuple_GET_SIZE, Py_TYPE,
     },
     prelude::*,
     types::PyAny,
@@ -138,7 +138,7 @@ impl Serialize for SerializePyObject {
                 if self.recursion_depth == RECURSION_LIMIT {
                     return Err(ser::Error::custom("Recursion limit reached"));
                 }
-                let length = unsafe { (*self.object.cast::<PyDictObject>()).ma_used } as usize;
+                let length = unsafe { pyo3::ffi::PyDict_Size(self.object) } as usize;
                 if length == 0 {
                     serializer.serialize_map(Some(0))?.end()
                 } else {
@@ -152,7 +152,7 @@ impl Serialize for SerializePyObject {
                         }
                         check_type_is_str(key)?;
                         let slice = py_str_to_str(key).expect("Failed to convert PyStr to &str");
-                        #[allow(clippy::integer_arithmetic)]
+                        #[allow(clippy::arithmetic_side_effects)]
                         map.serialize_entry(
                             slice,
                             &SerializePyObject::new(value, self.recursion_depth + 1),
@@ -179,7 +179,7 @@ impl Serialize for SerializePyObject {
                             type_ptr = current_ob_type;
                             ob_type = get_object_type(current_ob_type);
                         }
-                        #[allow(clippy::integer_arithmetic)]
+                        #[allow(clippy::arithmetic_side_effects)]
                         sequence.serialize_element(&SerializePyObject::with_obtype(
                             elem,
                             ob_type.clone(),
@@ -207,7 +207,7 @@ impl Serialize for SerializePyObject {
                             type_ptr = current_ob_type;
                             ob_type = get_object_type(current_ob_type);
                         }
-                        #[allow(clippy::integer_arithmetic)]
+                        #[allow(clippy::arithmetic_side_effects)]
                         sequence.serialize_element(&SerializePyObject::with_obtype(
                             elem,
                             ob_type.clone(),
@@ -219,7 +219,7 @@ impl Serialize for SerializePyObject {
             }
             ObjectType::Enum => {
                 let value = unsafe { PyObject_GetAttr(self.object, types::VALUE_STR) };
-                #[allow(clippy::integer_arithmetic)]
+                #[allow(clippy::arithmetic_side_effects)]
                 SerializePyObject::new(value, self.recursion_depth + 1).serialize(serializer)
             }
             ObjectType::Unknown(ref type_name) => Err(ser::Error::custom(format!(
