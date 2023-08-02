@@ -9,6 +9,7 @@ use super::types::NONE_PY_TYPE;
 
 use crate::errors::{ToPyErr, ValidationError};
 
+#[inline]
 pub(crate) fn parse_time(value: &str) -> PyResult<*mut PyObject> {
     let time = Time::parse_str(value).map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
@@ -25,6 +26,7 @@ pub(crate) fn parse_time(value: &str) -> PyResult<*mut PyObject> {
     }
 }
 
+#[inline]
 pub(crate) fn parse_date(value: &str) -> PyResult<*mut PyObject> {
     let date = Date::parse_str(value).map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
@@ -39,6 +41,7 @@ pub(crate) fn parse_date(value: &str) -> PyResult<*mut PyObject> {
     }
 }
 
+#[inline]
 pub(crate) fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
     let datetime = DateTime::parse_str(value).map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
@@ -58,10 +61,12 @@ pub(crate) fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
     from_ptr_or_err(ptr)
 }
 
+#[inline]
 fn ensure_datetime_api() -> &'static pyo3_ffi::PyDateTime_CAPI {
     unsafe { &*pyo3_ffi::PyDateTimeAPI() }
 }
 
+#[inline]
 fn py_timezone(offset: Option<i32>) -> PyResult<*mut PyObject> {
     return match offset {
         Some(offset) => {
