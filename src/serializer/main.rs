@@ -58,8 +58,7 @@ impl Serializer {
     #[inline]
     pub fn load(&self, value: &PyAny, validate: bool) -> PyResult<Py<PyAny>> {
         if validate {
-            let serde_value = jsonschema::to_value(value)?;
-            jsonschema::validate(value.py(), &self.schema, &serde_value)?;
+            jsonschema::validate_python(&self.schema, value)?;
         }
         unsafe {
             Ok(Py::from_owned_ptr(

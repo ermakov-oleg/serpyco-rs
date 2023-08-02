@@ -1,3 +1,4 @@
+use super::ser;
 use crate::errors::{ErrorItem, SchemaValidationError, ToPyErr, ValidationError};
 use crate::python::py_str_to_str;
 use jsonschema::JSONSchema;
@@ -16,11 +17,12 @@ pub(crate) fn compile(schema: &PyAny) -> PyResult<JSONSchema> {
     Ok(compiled)
 }
 
-pub(crate) fn validate(
-    py: Python<'_>,
-    compiled: &jsonschema::JSONSchema,
-    instance: &Value,
-) -> PyResult<()> {
+pub(crate) fn validate_python(compiled: &JSONSchema, instance: &PyAny) -> PyResult<()> {
+    let serde_value = ser::to_value(instance)?;
+    validate(instance.py(), compiled, &serde_value)
+}
+
+pub(crate) fn validate(py: Python<'_>, compiled: &JSONSchema, instance: &Value) -> PyResult<()> {
     // is valid significantly faster than validate
     if compiled.is_valid(instance) {
         return Ok(());
