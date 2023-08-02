@@ -1,3 +1,4 @@
+// Taken from orjson
 use super::macros::{ffi, use_immortal};
 use super::types::EMPTY_UNICODE;
 use pyo3_ffi::*;

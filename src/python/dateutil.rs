@@ -4,12 +4,12 @@ use pyo3::{PyErr, PyResult};
 use pyo3_ffi::{PyObject, PyTimeZone_FromOffset};
 use speedate::{Date, DateTime, ParseError, Time};
 
-use crate::serializer::types::NONE_PY_TYPE;
-
-use super::encoders::ValidationError;
 use super::py::from_ptr_or_err;
+use super::types::NONE_PY_TYPE;
 
-pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
+use crate::errors::{ToPyErr, ValidationError};
+
+pub(crate) fn parse_time(value: &str) -> PyResult<*mut PyObject> {
     let time = Time::parse_str(value).map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
     unsafe {
@@ -25,7 +25,7 @@ pub fn parse_time(value: &str) -> PyResult<*mut PyObject> {
     }
 }
 
-pub fn parse_date(value: &str) -> PyResult<*mut PyObject> {
+pub(crate) fn parse_date(value: &str) -> PyResult<*mut PyObject> {
     let date = Date::parse_str(value).map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
     unsafe {
@@ -39,7 +39,7 @@ pub fn parse_date(value: &str) -> PyResult<*mut PyObject> {
     }
 }
 
-pub fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
+pub(crate) fn parse_datetime(value: &str) -> PyResult<*mut PyObject> {
     let datetime = DateTime::parse_str(value).map_err(InnerParseError::from)?;
     let api = ensure_datetime_api();
     let ptr = unsafe {

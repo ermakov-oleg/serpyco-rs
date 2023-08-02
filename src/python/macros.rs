@@ -34,7 +34,7 @@ macro_rules! call_method {
 #[cfg(not(Py_3_9))]
 macro_rules! call_method {
     ($obj1:expr, $obj2:expr) => {
-        from_ptr_or_err(unsafe {
+        crate::python::from_ptr_or_err(unsafe {
             pyo3_ffi::PyObject_CallMethodObjArgs(
                 $obj1,
                 $obj2,
@@ -43,7 +43,7 @@ macro_rules! call_method {
         })
     };
     ($obj1:expr, $obj2:expr, $obj3:expr) => {
-        from_ptr_or_err(unsafe {
+        crate::python::from_ptr_or_err(unsafe {
             pyo3_ffi::PyObject_CallMethodObjArgs(
                 $obj1,
                 $obj2,
@@ -65,10 +65,10 @@ macro_rules! call_object {
 #[cfg(not(Py_3_9))]
 macro_rules! call_object {
     ($obj1:expr) => {
-        from_ptr_or_err(unsafe {
+        crate::python::from_ptr_or_err(unsafe {
             pyo3_ffi::PyObject_Call(
                 $obj1,
-                $crate::serializer::types::PY_TUPLE_0,
+                $crate::python::types::PY_TUPLE_0,
                 std::ptr::null_mut() as *mut pyo3_ffi::PyObject,
             )
         })

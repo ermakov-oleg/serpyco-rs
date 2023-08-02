@@ -5,7 +5,7 @@ use pyo3::{AsPyPointer, Py, PyAny, PyResult};
 use std::os::raw::c_char;
 use std::sync::Once;
 
-use crate::serializer::py::py_object_get_attr;
+use super::py::py_object_get_attr;
 
 pub static mut INTEGER_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut STRING_TYPE: *mut PyObject = 0 as *mut PyObject;
