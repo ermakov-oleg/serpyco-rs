@@ -26,3 +26,7 @@ jsonschema = { version = "0.17", default_features = false }
 
 [build-dependencies]
 pyo3-build-config = { version = "0.19", features = ["resolve-config"] }
+
+[profile.release]
+codegen-units = 1
+lto = "on"
