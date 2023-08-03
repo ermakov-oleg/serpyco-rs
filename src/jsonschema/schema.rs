@@ -1,7 +1,9 @@
+use super::format::{datetime_validator, time_validator, uuid_validator};
 use super::ser;
 use crate::errors::{ErrorItem, SchemaValidationError, ToPyErr, ValidationError};
+use crate::jsonschema::format::date_validator;
 use crate::python::py_str_to_str;
-use jsonschema::JSONSchema;
+use jsonschema::{Draft, JSONSchema};
 use pyo3::types::PyList;
 use pyo3::types::PyType;
 use pyo3::{AsPyPointer, IntoPy, Py, PyAny, PyErr, PyResult, Python};
@@ -12,8 +14,17 @@ pub(crate) fn compile(schema: &PyAny) -> PyResult<JSONSchema> {
     let serde_schema: Value = serde_json::from_str(schema_str)
         .map_err(|e| ValidationError::new_err(format!("Error while parsing JSON string: {}", e)))?;
 
-    let compiled = JSONSchema::compile(&serde_schema)
+    let compiled = JSONSchema::options()
+        .with_draft(Draft::Draft202012)
+        .with_format("date-time", datetime_validator)
+        .with_format("date", date_validator)
+        .with_format("time", time_validator)
+        .with_format("uuid", uuid_validator)
+        .should_validate_formats(true)
+        .should_ignore_unknown_formats(false)
+        .compile(&serde_schema)
         .map_err(|e| ValidationError::new_err(format!("Invalid json schema: {}", e)))?;
+
     Ok(compiled)
 }
 
@@ -37,7 +48,7 @@ pub(crate) fn validate(py: Python<'_>, compiled: &JSONSchema, instance: &Value) 
         let pyerror_type = PyType::new::<SchemaValidationError>(py);
         return Err(PyErr::from_type(
             pyerror_type,
-            ("Validation failed".to_string(), errors),
+            ("Schema validation failed".to_string(), errors),
         ));
     }
     Ok(())

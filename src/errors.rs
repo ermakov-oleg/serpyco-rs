@@ -1,6 +1,6 @@
 use pyo3::pyclass::CompareOp;
 use pyo3::types::PyList;
-use pyo3::{exceptions, pyclass, pymethods, Py, PyErr, PyErrArguments, PyRef, PyTypeInfo};
+use pyo3::{exceptions, pyclass, pymethods, Py, PyCell, PyErr, PyErrArguments, PyRef, PyTypeInfo};
 use std::fmt::Debug;
 
 #[pyclass(extends=exceptions::PyValueError, module="serpyco_rs", subclass)]
@@ -41,13 +41,38 @@ impl SchemaValidationError {
         )
     }
 
-    fn __str__(&self) -> String {
-        "".to_string() // todo: ...
+    fn __str__(self_: PyRef<'_, Self>) -> String {
+        let super_ = self_.as_ref(); // Get &ValidationError
+
+        let mut result = String::new();
+        result.push_str(&format!("{}:\n", super_.message));
+
+        for error in self_.errors.as_ref(self_.py()).iter() {
+            let message = match error.downcast::<PyCell<ErrorItem>>() {
+                Ok(cell) => cell.borrow().__str__(),
+                Err(e) => format!("Error: {}", e),
+            };
+            result.push_str(&format!("- {}\n", message));
+        }
+        result
     }
 
-    fn __repr__(self_: PyRef<Self>) -> String {
+    fn __repr__(self_: PyRef<'_, Self>) -> String {
         let super_ = self_.as_ref(); // Get &ValidationError
-        format!("<SchemaValidationError: {}>", super_.message) // todo: ...
+
+        let mut result = String::new();
+        result.push_str("SchemaValidationError(\n");
+        result.push_str(&format!("    message=\"{}\",\n", super_.message));
+        result.push_str("    errors=[\n");
+        for error in self_.errors.as_ref(self_.py()).iter() {
+            let message = match error.downcast::<PyCell<ErrorItem>>() {
+                Ok(cell) => cell.borrow().__repr__(),
+                Err(e) => format!("Error: {}", e),
+            };
+            result.push_str(&format!("        {},\n", message));
+        }
+        result.push_str("    ]\n)");
+        result
     }
 }
 
@@ -72,12 +97,16 @@ impl ErrorItem {
             instance_path,
         }
     }
+
     fn __str__(&self) -> String {
-        self.message.clone()
+        format!(
+            "{} (schema_path='{}', instance_path='{}')",
+            self.message, self.schema_path, self.instance_path
+        )
     }
     fn __repr__(&self) -> String {
         format!(
-            "<ErrorItem(message=\"{}\", schema_path=\"{}\", instance_path=\"{}\")>",
+            "ErrorItem(message='{}', schema_path='{}', instance_path='{}')",
             self.message, self.schema_path, self.instance_path
         )
     }

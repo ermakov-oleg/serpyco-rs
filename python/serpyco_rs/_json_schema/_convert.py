@@ -102,34 +102,24 @@ def _(_: describe.UUIDType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(_: describe.TimeType, doc: Optional[str] = None) -> Schema:
-    iso8601_pattern = (
-        r'^[0-9][0-9]:[0-9][0-9](:[0-9][0-9](\.[0-9]+)?)?'  # HH:mm:ss.ssss
-        r'?(([+-][0-9][0-9]:?[0-9][0-9])|Z)?$'  # timezone
-    )
     return StringType(
-        pattern=iso8601_pattern,
+        format='time',
         description=doc,
     )
 
 
 @to_json_schema.register
 def _(_: describe.DateTimeType, doc: Optional[str] = None) -> Schema:
-    iso8601_pattern = (
-        r'^[0-9]{4}-[0-9][0-9]-[0-9][0-9]T'  # YYYY-MM-DD
-        r'[0-9][0-9]:[0-9][0-9]:[0-9][0-9](\.[0-9]+)'  # HH:mm:ss.ssss
-        r'?(([+-][0-9][0-9]:[0-9][0-9])|Z)?$'  # timezone
-    )
     return StringType(
-        pattern=iso8601_pattern,
+        format='date-time',
         description=doc,
     )
 
 
 @to_json_schema.register
 def _(_: describe.DateType, doc: Optional[str] = None) -> Schema:
-    iso8601_pattern = r'^[0-9]{4}-[0-9][0-9]-[0-9][0-9]$'  # YYYY-MM-DD
     return StringType(
-        pattern=iso8601_pattern,
+        format='date',
         description=doc,
     )
 
