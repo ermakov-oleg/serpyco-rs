@@ -1,6 +1,7 @@
 import json
 import sys
 import uuid
+import textwrap
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -74,12 +75,11 @@ class TypedDictTotalFalse(TypedDict, total=False):
         (time, '12:34:00+03:00'),
         (time, '12:34:56.000078+03:00'),
         (time, '12:34:56.000078+00:00'),
-        # todo: add datetime exemplars
         (datetime, '2022-10-10T14:23:43'),
         (datetime, '2022-10-10T14:23:43.123456'),
         (datetime, '2022-10-10T14:23:43.123456Z'),
         (datetime, '2022-10-10T14:23:43.123456+00:00'),
-        # (datetime, '2022-10-10T14:23:43.123456-30:00'),  # todo: check
+        (datetime, '2022-10-10T14:23:43.123456-00:00'),
         (date, '2020-07-17'),
         (EnumTest, 'foo'),
         (Optional[int], None),
@@ -116,15 +116,15 @@ if sys.version_info >= (3, 10):
         Serializer(cls).load(value)
 
 
-def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], bool]:
-    def cmp(e: ErrorItem) -> bool:
-        return e.message == m and e.instance_path == ip and e.schema_path == sp
+def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], None]:
+    def cmp(e: ErrorItem) -> None:
+        assert e.message == m and e.instance_path == ip and e.schema_path == sp
 
     return cmp
 
 
 @pytest.mark.parametrize(
-    ['cls', 'value', 'comparator'],
+    ['cls', 'value', 'check'],
     (
         (bool, 1, _mk_e(m='1 is not of type "boolean"')),
         (str, 1, _mk_e(m='1 is not of type "string"')),
@@ -161,10 +161,11 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], bool]:
             10.1,
             _mk_e(m='10.1 is greater than the maximum of 1', sp='maximum'),
         ),
-        # (uuid.UUID, "asd", ''),  # todo: validation don't work
-        (time, '12:34:a', _mk_e(sp='pattern')),
-        (datetime, '2022-10-10//12', _mk_e(sp='pattern')),
-        (date, '17-02-2022', _mk_e(sp='pattern')),
+        (uuid.UUID, "asd", _mk_e(sp='format')),
+        (time, '12:34:a', _mk_e(sp='format')),
+        (datetime, '2022-10-10//12', _mk_e(sp='format')),
+        (date, '17-02-2022', _mk_e(sp='format')),
+        (datetime, '2022-10-10T14:23:43.123456-30:00', _mk_e(sp='format')),
         (EnumTest, 'buz', _mk_e(m='"buz" is not one of ["foo","bar"]', sp='enum')),
         (
             Optional[int],
@@ -192,7 +193,15 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], bool]:
             ['1', 1, True, 0],
             _mk_e(m='["1",1,true,0] has more than 3 items', sp='maxItems'),
         ),
-        # (tuple[str, bool], [1, '1'], ''),   # todo: validation don't work
+        (
+            tuple[str, bool],
+            ['1', 1],
+            _mk_e(
+                m='1 is not of type "boolean"',
+                sp='prefixItems/1/type',
+                ip='1',
+            ),
+        ),
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
             {'type': 'buz'},
@@ -212,7 +221,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], bool]:
         (TypedDictTotalFalse, {}, _mk_e(m='"bar" is a required property')),
     ),
 )
-def test_validate__validation_error(cls, value, comparator):
+def test_validate__validation_error(cls, value, check):
     serializer = Serializer(cls)
     raw_value = json.dumps(value)
     with pytest.raises(SchemaValidationError) as exc_info:
@@ -222,7 +231,7 @@ def test_validate__validation_error(cls, value, comparator):
         serializer.load_json(raw_value)
 
     assert len(exc_info.value.errors) == 1
-    assert comparator(exc_info.value.errors[0])
+    check(exc_info.value.errors[0])
     assert exc_info.value.errors == raw_exc_info.value.errors
 
 
@@ -270,4 +279,40 @@ def test_validation_exceptions_inheritance():
         serializer.load('1')
 
     assert isinstance(exc_info.value, ValidationError)
-    assert exc_info.value.message == 'Validation failed'
+    assert exc_info.value.message == 'Schema validation failed'
+
+
+def test_validation_error_message():
+    @dataclass
+    class A:
+        foo: int
+        bar: str
+
+    serializer = Serializer(A)
+    with pytest.raises(SchemaValidationError) as exc_info:
+        serializer.load({'foo': '1', 'bar': 2})
+
+    error = exc_info.value
+    error_item = error.errors[0]
+
+    assert str(error_item) == ("""2 is not of type "string" (schema_path='properties/bar/type', instance_path='bar')""")
+    assert repr(error_item) == (
+        """ErrorItem(message='2 is not of type "string"', schema_path='properties/bar/type', instance_path='bar')"""
+    )
+    assert str(error) == textwrap.dedent(
+        """\
+    Schema validation failed:
+    - 2 is not of type "string" (schema_path='properties/bar/type', instance_path='bar')
+    - "1" is not of type "integer" (schema_path='properties/foo/type', instance_path='foo')
+      """
+    )
+    assert repr(error) == textwrap.dedent(
+        """\
+    SchemaValidationError(
+        message="Schema validation failed",
+        errors=[
+            ErrorItem(message='2 is not of type "string"', schema_path='properties/bar/type', instance_path='bar'),
+            ErrorItem(message='"1" is not of type "integer"', schema_path='properties/foo/type', instance_path='foo'),
+        ]
+    )"""
+    )
