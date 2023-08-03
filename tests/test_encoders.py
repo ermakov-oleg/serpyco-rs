@@ -278,3 +278,9 @@ def test_typed_dict():
     assert serializer.dump({'foo_filed': 1, 'generic_field': True}) == {'fooFiled': 1, 'genericField': True}
     assert serializer.load({'fooFiled': 1, 'genericField': True}) == {'foo_filed': 1, 'generic_field': True}
     assert serializer.load_json('{"fooFiled": 1, "genericField": true}') == {'foo_filed': 1, 'generic_field': True}
+
+
+def test_bytes():
+    serializer = Serializer(bytes, pass_through_bytes=True)
+    assert serializer.dump(b'foo') == b'foo'
+    assert serializer.load(b'foo') == b'foo'

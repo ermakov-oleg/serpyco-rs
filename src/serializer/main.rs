@@ -28,19 +28,21 @@ type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
 pub struct Serializer {
     pub encoder: Box<TEncoder>,
     schema: jsonschema::JSONSchema,
+    pass_through_bytes: bool,
 }
 
 #[pymethods]
 impl Serializer {
     #[new]
-    fn new(type_info: &PyAny, schema: &PyAny) -> PyResult<Self> {
+    fn new(type_info: &PyAny, schema: &PyAny, pass_through_bytes: bool) -> PyResult<Self> {
         let obj_type = get_object_type(type_info)?;
         let mut encoder_state: HashMap<usize, EncoderStateValue> = HashMap::new();
-        let schema = jsonschema::compile(schema)?;
+        let schema = jsonschema::compile(schema, pass_through_bytes)?;
 
         let serializer = Self {
             encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state)?,
             schema,
+            pass_through_bytes,
         };
         Ok(serializer)
     }
@@ -58,7 +60,7 @@ impl Serializer {
     #[inline]
     pub fn load(&self, value: &PyAny, validate: bool) -> PyResult<Py<PyAny>> {
         if validate {
-            jsonschema::validate_python(&self.schema, value)?;
+            jsonschema::validate_python(&self.schema, self.pass_through_bytes, value)?;
         }
         unsafe {
             Ok(Py::from_owned_ptr(

@@ -342,3 +342,25 @@ def test_to_json_schema__force_none_as_default_for_optional():
             }
         },
     }
+
+
+def test_to_json_schema__bytes():
+    @dataclass
+    class Data:
+        a: bytes
+
+    serializer = Serializer(Data, pass_through_bytes=True)
+    assert serializer.get_json_schema() == {
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones]',
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'components': {
+            'schemas': {
+                'tests.json_schema.test_convert.Data[no_format,keep_nones]': {
+                    'description': mock.ANY,
+                    'properties': {'a': {'type': 'string', 'format': 'binary'}},
+                    'type': 'object',
+                    'required': ['a'],
+                }
+            }
+        },
+    }

@@ -4,6 +4,7 @@ use pyo3::ffi::{
     PyMapping_GetItemString, PyObject, PyObject_GenericGetDict, PyTuple_New, PyTypeObject,
     PyUnicode_New, Py_DECREF, Py_None, Py_TYPE, Py_True,
 };
+use pyo3_ffi::PyBytes_FromStringAndSize;
 use std::{os::raw::c_char, sync::Once};
 
 pub static mut TRUE: *mut pyo3::ffi::PyObject = 0 as *mut pyo3::ffi::PyObject;
@@ -17,6 +18,7 @@ pub static mut LIST_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut DICT_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut TUPLE_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut ENUM_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
+pub static mut BYTES_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
@@ -48,6 +50,7 @@ pub fn init() {
         INT_TYPE = Py_TYPE(PyLong_FromLongLong(0));
         FLOAT_TYPE = Py_TYPE(PyFloat_FromDouble(0.0));
         ENUM_TYPE = look_up_enum_type();
+        BYTES_TYPE = Py_TYPE(PyBytes_FromStringAndSize(std::ptr::null_mut(), 0_isize));
         VALUE_STR = pyo3::ffi::PyUnicode_InternFromString("value\0".as_ptr().cast::<c_char>());
     });
 }

@@ -31,6 +31,7 @@ pub enum ObjectType {
     Dict,
     Tuple,
     Enum,
+    Bytes,
     Unknown(String),
 }
 
@@ -38,15 +39,21 @@ struct SerializePyObject {
     object: *mut pyo3::ffi::PyObject,
     object_type: ObjectType,
     recursion_depth: u8,
+    pass_through_bytes: bool,
 }
 
 impl SerializePyObject {
     #[inline]
-    pub fn new(object: *mut pyo3::ffi::PyObject, recursion_depth: u8) -> Self {
+    pub fn new(
+        object: *mut pyo3::ffi::PyObject,
+        recursion_depth: u8,
+        pass_through_bytes: bool,
+    ) -> Self {
         SerializePyObject {
             object,
             object_type: get_object_type_from_object(object),
             recursion_depth,
+            pass_through_bytes,
         }
     }
 
@@ -55,11 +62,13 @@ impl SerializePyObject {
         object: *mut pyo3::ffi::PyObject,
         object_type: ObjectType,
         recursion_depth: u8,
+        pass_through_bytes: bool,
     ) -> Self {
         SerializePyObject {
             object,
             object_type,
             recursion_depth,
+            pass_through_bytes,
         }
     }
 }
@@ -110,6 +119,8 @@ pub fn get_object_type(object_type: *mut pyo3::ffi::PyTypeObject) -> ObjectType 
         ObjectType::Tuple
     } else if object_type == unsafe { types::DICT_TYPE } {
         ObjectType::Dict
+    } else if object_type == unsafe { types::BYTES_TYPE } {
+        ObjectType::Bytes
     } else if is_enum_subclass(object_type) {
         ObjectType::Enum
     } else {
@@ -134,6 +145,7 @@ impl Serialize for SerializePyObject {
             }
             ObjectType::Bool => serializer.serialize_bool(self.object == unsafe { types::TRUE }),
             ObjectType::None => serializer.serialize_unit(),
+            ObjectType::Bytes if self.pass_through_bytes => serializer.serialize_str(""),
             ObjectType::Dict => {
                 if self.recursion_depth == RECURSION_LIMIT {
                     return Err(ser::Error::custom("Recursion limit reached"));
@@ -155,7 +167,11 @@ impl Serialize for SerializePyObject {
                         #[allow(clippy::arithmetic_side_effects)]
                         map.serialize_entry(
                             slice,
-                            &SerializePyObject::new(value, self.recursion_depth + 1),
+                            &SerializePyObject::new(
+                                value,
+                                self.recursion_depth + 1,
+                                self.pass_through_bytes,
+                            ),
                         )?;
                     }
                     map.end()
@@ -184,6 +200,7 @@ impl Serialize for SerializePyObject {
                             elem,
                             ob_type.clone(),
                             self.recursion_depth + 1,
+                            self.pass_through_bytes,
                         ))?;
                     }
                     sequence.end()
@@ -212,6 +229,7 @@ impl Serialize for SerializePyObject {
                             elem,
                             ob_type.clone(),
                             self.recursion_depth + 1,
+                            self.pass_through_bytes,
                         ))?;
                     }
                     sequence.end()
@@ -220,8 +238,10 @@ impl Serialize for SerializePyObject {
             ObjectType::Enum => {
                 let value = unsafe { PyObject_GetAttr(self.object, types::VALUE_STR) };
                 #[allow(clippy::arithmetic_side_effects)]
-                SerializePyObject::new(value, self.recursion_depth + 1).serialize(serializer)
+                SerializePyObject::new(value, self.recursion_depth + 1, self.pass_through_bytes)
+                    .serialize(serializer)
             }
+            ObjectType::Bytes => Err(ser::Error::custom("Bytes are not supported")),
             ObjectType::Unknown(ref type_name) => Err(ser::Error::custom(format!(
                 "Unsupported type: '{}'",
                 type_name
@@ -231,7 +251,11 @@ impl Serialize for SerializePyObject {
 }
 
 #[inline]
-pub(crate) fn to_value(object: &PyAny) -> PyResult<serde_json::Value> {
-    serde_json::to_value(SerializePyObject::new(object.as_ptr(), 0))
-        .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
+pub(crate) fn to_value(object: &PyAny, pass_through_bytes: bool) -> PyResult<serde_json::Value> {
+    serde_json::to_value(SerializePyObject::new(
+        object.as_ptr(),
+        0,
+        pass_through_bytes,
+    ))
+    .map_err(|err| exceptions::PyValueError::new_err(err.to_string()))
 }
