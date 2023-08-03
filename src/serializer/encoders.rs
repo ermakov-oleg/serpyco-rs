@@ -1,13 +1,12 @@
-use crate::serializer::dateutil::{parse_date, parse_time};
-use crate::serializer::py::{
-    create_new_object, datetime_to_date, from_ptr_or_err, is_datetime, is_none,
-    iter_over_dict_items, obj_to_str, parse_number, py_len, py_object_call1_make_tuple_or_err,
-    py_object_get_attr, py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_get_item,
-    to_decimal,
+use crate::python::{
+    call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime,
+    is_none, iter_over_dict_items, obj_to_str, parse_date, parse_datetime, parse_number,
+    parse_time, py_len, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item,
+    py_object_set_attr, py_str_to_str, py_tuple_get_item, to_bool, to_decimal, to_uuid,
+    unicode_from_str,
 };
-use crate::serializer::types::{FALSE, ISOFORMAT_STR, NONE_PY_TYPE, TRUE, UUID_PY_TYPE, VALUE_STR};
 use atomic_refcell::AtomicRefCell;
-use pyo3::exceptions::{PyException, PyRuntimeError};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::PyString;
 use pyo3::{AsPyPointer, Py, PyAny, PyResult};
 use pyo3_ffi::PyObject;
@@ -16,14 +15,10 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use crate::serializer::py_str::unicode_from_str;
+use crate::python::macros::{call_object, ffi};
 
-use super::dateutil::parse_datetime;
-use super::macros::{call_method, call_object, ffi, use_immortal};
-
+use crate::errors::{ToPyErr, ValidationError};
 use dyn_clone::{clone_trait_object, DynClone};
-
-pyo3::create_exception!(serpyco_rs, ValidationError, PyException);
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
@@ -53,15 +48,8 @@ impl Encoder for NoopEncoder {
 
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
         match value {
-            Value::Null => Ok(use_immortal!(NONE_PY_TYPE)),
-            Value::Bool(bool) => {
-                let py_bool = if bool {
-                    use_immortal!(TRUE)
-                } else {
-                    use_immortal!(FALSE)
-                };
-                Ok(py_bool)
-            }
+            Value::Null => Ok(get_none()),
+            Value::Bool(bool) => Ok(to_bool(bool)),
             Value::Number(number) => Ok(parse_number(number)),
             Value::String(string) => Ok(unicode_from_str(&string)),
             Value::Array(_) | Value::Object(_) => {
@@ -116,7 +104,7 @@ impl Encoder for DictionaryEncoder {
             let key = self.key_encoder.dump(py_tuple_get_item(item, 0)?)?; // new obj or RC +1
             let value = self.value_encoder.dump(py_tuple_get_item(item, 1)?)?; // new obj or RC +1
 
-            if !self.omit_none || value != unsafe { NONE_PY_TYPE } {
+            if !self.omit_none || !is_none(value) {
                 ffi!(PyDict_SetItem(dict_ptr, key, value)); // key and val or RC +1
             }
             ffi!(Py_DECREF(key));
@@ -236,7 +224,7 @@ impl Encoder for EntityEncoder {
             let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr())); // val RC +1
             let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
 
-            if field.required || !self.omit_none || dump_result != unsafe { NONE_PY_TYPE } {
+            if field.required || !self.omit_none || !is_none(dump_result) {
                 ffi!(PyDict_SetItem(
                     dict_ptr,
                     field.dict_key.as_ptr(),
@@ -330,7 +318,7 @@ impl Encoder for TypedDictEncoder {
 
             let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
 
-            if field.required || !self.omit_none || dump_result != unsafe { NONE_PY_TYPE } {
+            if field.required || !self.omit_none || !is_none(dump_result) {
                 ffi!(PyDict_SetItem(
                     dict_ptr,
                     field.dict_key.as_ptr(),
@@ -407,7 +395,7 @@ impl Encoder for UUIDEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        py_object_call1_make_tuple_or_err(unsafe { UUID_PY_TYPE }, value)
+        to_uuid(value)
     }
 
     #[inline]
@@ -429,7 +417,7 @@ pub struct EnumEncoder {
 impl Encoder for EnumEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        py_object_get_attr(value, unsafe { VALUE_STR })
+        get_value_attr(value)
     }
 
     #[inline]
@@ -460,7 +448,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         if is_none(value) {
-            Ok(use_immortal!(NONE_PY_TYPE))
+            Ok(get_none())
         } else {
             self.encoder.dump(value)
         }
@@ -469,7 +457,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         if is_none(value) {
-            Ok(use_immortal!(NONE_PY_TYPE))
+            Ok(get_none())
         } else {
             self.encoder.load(value)
         }
@@ -478,7 +466,7 @@ impl Encoder for OptionalEncoder {
     #[inline]
     fn load_value(&self, value: Value) -> PyResult<*mut PyObject> {
         if value == Value::Null {
-            Ok(use_immortal!(NONE_PY_TYPE))
+            Ok(get_none())
         } else {
             self.encoder.load_value(value)
         }
@@ -613,7 +601,7 @@ pub struct TimeEncoder;
 impl Encoder for TimeEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        call_method!(value, ISOFORMAT_STR)
+        call_isoformat(value)
     }
 
     #[inline]
@@ -637,7 +625,7 @@ pub struct DateTimeEncoder;
 impl Encoder for DateTimeEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        call_method!(value, ISOFORMAT_STR)
+        call_isoformat(value)
     }
 
     #[inline]
@@ -666,7 +654,7 @@ impl Encoder for DateEncoder {
         } else {
             value
         };
-        call_method!(date, ISOFORMAT_STR)
+        call_isoformat(date)
     }
 
     #[inline]

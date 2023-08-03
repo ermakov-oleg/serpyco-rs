@@ -10,8 +10,8 @@ name = "serpyco_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.19", features = ["extension-module"] }
-pyo3-ffi = "*"
+pyo3 = { version = "0.19.2", features = ["extension-module"] }
+pyo3-ffi = "0.19.2"
 cfg-if = "*"
 speedate = "0.11.0"
 
@@ -26,3 +26,7 @@ jsonschema = { version = "0.17", default_features = false }
 
 [build-dependencies]
 pyo3-build-config = { version = "0.19", features = ["resolve-config"] }
+
+[profile.release]
+codegen-units = 1
+lto = "on"

@@ -19,7 +19,7 @@ jobs:
         with:
           manylinux: auto
           command: build
-          args: --release --sdist -o dist --find-interpreter
+          args: --release --sdist -o dist --interpreter 3.9 3.10 3.11 3.12
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v2
