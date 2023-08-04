@@ -18,6 +18,7 @@ class Serializer(Generic[_T]):
         camelcase_fields: bool = False,
         omit_none: bool = False,
         force_default_for_optional: bool = False,
+        pass_through_bytes: bool = False,
     ) -> None:
         if camelcase_fields:
             t = cast(type[_T], Annotated[t, CamelCase])
@@ -27,7 +28,9 @@ class Serializer(Generic[_T]):
             t = cast(type(_T), Annotated[t, ForceDefaultForOptional])  # type: ignore
         type_info = describe_type(t)
         self._schema = get_json_schema(type_info)
-        self._encoder: _Serializer[_T] = _Serializer(type_info, json.dumps(self._schema))
+        self._encoder: _Serializer[_T] = _Serializer(
+            type_info, schema=json.dumps(self._schema), pass_through_bytes=pass_through_bytes
+        )
 
     def dump(self, value: _T) -> Any:
         return self._encoder.dump(value)

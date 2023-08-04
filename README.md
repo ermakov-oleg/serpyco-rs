@@ -61,6 +61,7 @@ There is support for generic types from the standard typing module:
 * Enum
 * List
 * Dict
+* Bytes (pass through)
 * TypedDict
 * Mapping
 * Sequence
@@ -293,6 +294,23 @@ assert ser.load(val) == Foo(val='bar')
 ```
 
 **Note:** `CustomEncoder` has no effect to validation and JSON Schema generation.
+
+### Bytes fields
+
+`serpyco-rs` can loads bytes fields as is (without base64 encoding and validation).
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+@dataclass
+class Foo:
+    val: bytes
+
+ser = Serializer(Foo, pass_through_bytes=True)
+ser.load({'val': b'123'}) == Foo(val=b'123')
+```
+
 
 ### Load data from raw json
 

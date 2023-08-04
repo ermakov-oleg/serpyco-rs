@@ -59,7 +59,6 @@ class TypedDictTotalFalse(TypedDict, total=False):
         (Annotated[str, MinLength(1), MaxLength(3)], '12'),
         (int, -99),
         (Annotated[int, Min(1), Max(1000)], 99),
-        # (bytes, b'xx'),  # todo: fix bytes validation
         (float, 1.3),
         (Annotated[float, Min(0), Max(0.4)], 0.1),
         (Decimal, '0.1'),  # support str
