@@ -246,7 +246,11 @@ impl Encoder for EntityEncoder {
             let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
                 Ok(val) => field.encoder.load(val)?, // new obj or RC +1
                 Err(e) => match (&field.default, &field.default_factory) {
-                    (Some(val), _) => val.clone().as_ptr(),
+                    (Some(val), _) => {
+                        let val = val.as_ptr();
+                        ffi!(Py_INCREF(val));
+                        val
+                    }
                     (_, Some(val)) => call_object!(val.as_ptr())?,
                     (None, _) => {
                         return Err(ValidationError::new_err(format!(
@@ -270,7 +274,11 @@ impl Encoder for EntityEncoder {
                 let val = match object.remove(&field.dict_key_rs) {
                     Some(val) => field.encoder.load_value(val)?, // new obj or RC +1
                     None => match (&field.default, &field.default_factory) {
-                        (Some(val), _) => val.clone().as_ptr(),
+                        (Some(val), _) => {
+                            let val = val.as_ptr();
+                            ffi!(Py_INCREF(val));
+                            val
+                        }
                         (_, Some(val)) => call_object!(val.as_ptr())?,
                         (None, _) => {
                             return Err(ValidationError::new_err(format!(
