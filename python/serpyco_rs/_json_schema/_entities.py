@@ -69,6 +69,7 @@ class NumberType(Schema):
     multipleOf: int | None = None
     minimum: float | None = None
     maximum: float | None = None
+    format: str | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
@@ -76,6 +77,7 @@ class NumberType(Schema):
             'multipleOf': self.multipleOf,
             'minimum': self.minimum,
             'maximum': self.maximum,
+            'format': self.format,
             **data,
         }
         return {k: v for k, v in data.items() if v is not None}

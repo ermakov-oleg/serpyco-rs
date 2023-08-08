@@ -74,7 +74,9 @@ def test_to_json_schema():
                             'type': 'integer',
                         },
                         'b': {'type': 'number'},
-                        'c': {'oneOf': [{'type': 'string'}, {'type': 'number'}]},
+                        'c': {
+                            'oneOf': [{'type': 'string', 'format': 'decimal'}, {'type': 'number', 'format': 'decimal'}]
+                        },
                         'd': {'type': 'boolean'},
                         'e': {'maxLength': 5, 'minLength': 1, 'type': 'string'},
                         'f': {'format': 'uuid', 'type': 'string'},

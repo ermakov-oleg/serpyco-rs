@@ -16,3 +16,7 @@ pub(crate) fn time_validator(item: &str) -> bool {
 pub(crate) fn date_validator(item: &str) -> bool {
     Date::parse_str(item).is_ok()
 }
+
+pub(crate) fn decimal_validator(item: &str) -> bool {
+    item.parse::<f64>().is_ok()
+}

@@ -1,4 +1,4 @@
-use super::format::{datetime_validator, time_validator, uuid_validator};
+use super::format::{datetime_validator, decimal_validator, time_validator, uuid_validator};
 use super::ser;
 use crate::errors::{ErrorItem, SchemaValidationError, ToPyErr, ValidationError};
 use crate::jsonschema::format::date_validator;
@@ -21,6 +21,7 @@ pub(crate) fn compile(schema: &PyAny, pass_through_bytes: bool) -> PyResult<JSON
         .with_format("date", date_validator)
         .with_format("time", time_validator)
         .with_format("uuid", uuid_validator)
+        .with_format("decimal", decimal_validator)
         .should_validate_formats(true)
         .should_ignore_unknown_formats(false);
 
