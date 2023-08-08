@@ -80,8 +80,12 @@ def _(arg: describe.FloatType, doc: Optional[str] = None) -> Schema:
 def _(_: describe.DecimalType, doc: Optional[str] = None) -> Schema:
     return Schema(
         oneOf=[
-            StringType(),
-            NumberType(),
+            StringType(
+                format='decimal',
+            ),
+            NumberType(
+                format='decimal',
+            ),
         ],
         description=doc,
     )
