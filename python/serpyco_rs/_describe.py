@@ -664,7 +664,7 @@ def _is_required_in_typeddict(t: Any, key: str) -> bool:
     raise RuntimeError(f'Expected TypedDict, got "{t!r}"')
 
 
-def _get_dataclass_doc(cls: Any) -> str | None:
+def _get_dataclass_doc(cls: Any) -> Optional[str]:
     """Dataclass has automatically generated docstring, which is not very useful."""
     doc: str = cls.__doc__
     if doc is None or doc.startswith(f'{cls.__name__}('):
