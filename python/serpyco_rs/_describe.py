@@ -625,6 +625,12 @@ def _get_discriminator_value(t: Any, name: str) -> str:
         if field.name == name:
             if _is_str_literal(field.type):
                 args = get_args(field.type)
+                if len(args) != 1:
+                    raise RuntimeError(
+                        f'Type {t} has invalid discriminator field "{name}". '
+                        f'Discriminator supports only Literal[<str>] with one argument.'
+                    )
+
                 return cast(str, args[0])
 
             raise RuntimeError(
