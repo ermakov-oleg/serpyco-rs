@@ -101,7 +101,6 @@ def test_generics__swagger_schema():
         'components': {
             'schemas': {
                 'tests.test_generics.A[no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'a': {
                             '$ref': '#/components/schemas/tests.test_generics.tests.test_generics.GenericType[bool][no_format,keep_nones]'
@@ -134,13 +133,11 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.CustomType[no_format,keep_nones]': {
-                    'description': 'CustomType(q: str, w: int)',
                     'properties': {'q': {'type': 'string'}, 'w': {'type': 'integer'}},
                     'required': ['q', 'w'],
                     'type': 'object',
                 },
                 'tests.test_generics.tests.test_generics.GenericType[bool][no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'boolean'}]},
@@ -148,7 +145,6 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.tests.test_generics.GenericType[float][no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'number'}]},
@@ -156,7 +152,6 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.tests.test_generics.GenericType[int][no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]},
@@ -164,7 +159,6 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.tests.test_generics.GenericType[str][no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
@@ -172,7 +166,6 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.tests.test_generics.GenericType[tests.test_generics.CustomType][no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {

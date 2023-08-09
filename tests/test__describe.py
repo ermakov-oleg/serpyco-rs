@@ -172,7 +172,7 @@ def test_describe__dataclass__supported():
                         )
                     ],
                     generics=(),
-                    doc='SomeOtherEntity(a: int)',
+                    doc=None,
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -328,7 +328,6 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
         name=ANY,
         generics=((T, int),),
         fields=[EntityField(name='x', type=IntegerType(custom_encoder=None), dict_key='x')],
-        doc='SomeOtherEntity(x: ~T)',
         custom_encoder=None,
     )
 
@@ -381,7 +380,6 @@ def test_describe__dataclass_and_annotated_with_min_max__parsed():
                 type=IntegerType(min=10, max=20, custom_encoder=None),
             )
         ],
-        doc='SomeEntity(x: typing.Annotated[int, Min(value=10), Max(value=20)])',
         custom_encoder=None,
     )
 
@@ -403,7 +401,6 @@ def test_describe__dataclass_and_annotated_with_min_max_length__parsed():
                 type=StringType(min_length=10, max_length=20, custom_encoder=None),
             )
         ],
-        doc='SomeEntity(x: typing.Annotated[str, MinLength(value=10), MaxLength(value=20)])',
         custom_encoder=None,
     )
 

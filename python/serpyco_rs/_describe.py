@@ -491,7 +491,7 @@ def _describe_entity(
         fields=fields,
         omit_none=cls_none_format is OmitNone,
         generics=generics,
-        doc=t.__doc__,
+        doc=_get_dataclass_doc(t),
         custom_encoder=custom_encoder,
     )
 
@@ -662,3 +662,11 @@ def _is_required_in_typeddict(t: Any, key: str) -> bool:
             return key not in t.__optional_keys__
         return key in t.__required_keys__
     raise RuntimeError(f'Expected TypedDict, got "{t!r}"')
+
+
+def _get_dataclass_doc(cls: Any) -> str | None:
+    """Dataclass has automatically generated docstring, which is not very useful."""
+    doc: str = cls.__doc__
+    if doc is None or doc.startswith(f'{cls.__name__}('):
+        return None
+    return doc

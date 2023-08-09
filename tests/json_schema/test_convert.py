@@ -285,13 +285,11 @@ def test_to_json_schema__tagged_union():
         'components': {
             'schemas': {
                 'tests.json_schema.test_convert.Bar[no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {'type': {'enum': ['bar']}, 'val': {'type': 'string'}},
                     'required': ['val', 'type'],
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.Base[no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {
                         'field': {
                             'discriminator': {
@@ -315,7 +313,6 @@ def test_to_json_schema__tagged_union():
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.Foo[no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {'type': {'enum': ['foo']}, 'val': {'type': 'integer'}},
                     'required': ['val', 'type'],
                     'type': 'object',
@@ -337,7 +334,6 @@ def test_to_json_schema__force_none_as_default_for_optional():
         'components': {
             'schemas': {
                 'tests.json_schema.test_convert.Data[no_format,keep_nones,force_none]': {
-                    'description': mock.ANY,
                     'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]}},
                     'type': 'object',
                 }
@@ -358,7 +354,6 @@ def test_to_json_schema__bytes():
         'components': {
             'schemas': {
                 'tests.json_schema.test_convert.Data[no_format,keep_nones]': {
-                    'description': mock.ANY,
                     'properties': {'a': {'type': 'string', 'format': 'binary'}},
                     'type': 'object',
                     'required': ['a'],
