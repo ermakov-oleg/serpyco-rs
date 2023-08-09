@@ -307,7 +307,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         if simple := simple_type_mapping.get(t):
             return simple(custom_encoder=custom_encoder)
 
-        number_type_mapping: Mapping[type, Union[type[IntegerType], type[FloatType]]] = {
+        number_type_mapping: Mapping[type, type[Union[IntegerType, FloatType]]] = {
             int: IntegerType,
             float: FloatType,
         }
