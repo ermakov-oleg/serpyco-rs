@@ -54,6 +54,7 @@ def test_dict_encoder():
     assert serializer.dump(val) == {'a': '123.3'}
     assert serializer.load({'a': '123.3'}) == val
     assert serializer.load_json('{"a": "123.3"}') == val
+    assert serializer.load_json('{"a": 123.3}') == val
 
 
 def test_array_encoder():

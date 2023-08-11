@@ -80,6 +80,9 @@ impl Encoder for DecimalEncoder {
         if let Value::String(string) = value {
             let py_string = unicode_from_str(&string);
             self.load(py_string)
+        } else if let Value::Number(number) = value {
+            let py_number = parse_number(number);
+            self.load(py_number)
         } else {
             Err(ValidationError::new_err("invalid value type"))
         }
