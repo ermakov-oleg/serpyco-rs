@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "serpyco-rs"
-version = "0.15.3"
+version = "0.15.4"
 dependencies = [
  "atomic_refcell",
  "bytecount",
