@@ -32,10 +32,10 @@ def test_simple_types(type, value):
 
 def test_decimal():
     serializer = Serializer(Decimal)
-    assert serializer.dump(Decimal(123)) == '123'
-    assert serializer.load(123) == Decimal(123)
-    assert serializer.load('123') == Decimal(123)
-    assert serializer.load_json('"123"') == Decimal(123)
+    assert serializer.dump(Decimal('123.1')) == '123.1'
+    assert serializer.load(123.1) == Decimal('123.1')
+    assert serializer.load('123.1') == Decimal('123.1')
+    assert serializer.load_json('"123.1"') == Decimal('123.1')
 
 
 def test_decimal_invalid_value__raise_validation_error():
