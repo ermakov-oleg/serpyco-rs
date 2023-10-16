@@ -1,6 +1,6 @@
 use super::macros::{call_method, ffi};
 use super::types::{
-    DATE_STR, DECIMAL_PY_TYPE, FALSE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, NOT_SET,
+    DATE_STR, DECIMAL_PY_TYPE, FALSE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE,
     PY_OBJECT__NEW__, TRUE, UUID_PY_TYPE, VALUE_STR,
 };
 use crate::python::macros::use_immortal;
@@ -49,11 +49,6 @@ pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<Py_ssize_t> {
     } else {
         Ok(v)
     }
-}
-
-#[inline]
-pub(crate) fn is_not_set(obj: &PyAny) -> PyResult<bool> {
-    Ok(obj.as_ptr() == unsafe { NOT_SET })
 }
 
 #[inline]

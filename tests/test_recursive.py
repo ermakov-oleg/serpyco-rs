@@ -3,7 +3,16 @@ from typing import Optional
 from unittest.mock import ANY
 
 from serpyco_rs import Serializer
-from serpyco_rs._describe import EntityField, EntityType, OptionalType, RecursionHolder, StringType, describe_type
+from serpyco_rs._describe import (
+    NOT_SET,
+    EntityField,
+    EntityType,
+    OptionalType,
+    RecursionHolder,
+    StringType,
+    describe_type,
+)
+from serpyco_rs._impl import DefaultValue
 
 
 @dataclass
@@ -25,21 +34,21 @@ def test_describe__recursive_type__parsed():
             EntityField(
                 name='head',
                 dict_key='head',
-                type=EntityType(
+                field_type=EntityType(
                     cls=Node,
                     name=ANY,
                     fields=[
                         EntityField(
                             name='value',
                             dict_key='value',
-                            type=StringType(custom_encoder=None),
+                            field_type=StringType(custom_encoder=None),
                         ),
                         EntityField(
                             name='next',
                             dict_key='next',
-                            default=None,
+                            default=DefaultValue.some(None),
                             required=False,
-                            type=OptionalType(
+                            field_type=OptionalType(
                                 inner=RecursionHolder(
                                     name=ANY,
                                     meta=ANY,

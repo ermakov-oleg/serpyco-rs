@@ -71,9 +71,8 @@ fn into_err_item(
     error: jsonschema::ValidationError<'_>,
 ) -> PyResult<Py<ErrorItem>> {
     let message = error.to_string();
-    let schema_path = into_path(error.schema_path);
     let instance_path = into_path(error.instance_path);
-    Py::new(py, ErrorItem::new(message, schema_path, instance_path))
+    Py::new(py, ErrorItem::new(message, instance_path))
 }
 
 fn into_path(pointer: jsonschema::paths::JSONPointer) -> String {

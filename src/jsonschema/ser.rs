@@ -20,7 +20,7 @@ use std::ffi::CStr;
 
 pub const RECURSION_LIMIT: u8 = 255;
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObjectType {
     Str,
     Int,
@@ -78,14 +78,14 @@ fn is_enum_subclass(object_type: *mut pyo3::ffi::PyTypeObject) -> bool {
     unsafe { (*(object_type.cast::<ffi::PyTypeObject>())).ob_type == types::ENUM_TYPE }
 }
 
-fn get_object_type_from_object(object: *mut pyo3::ffi::PyObject) -> ObjectType {
+pub fn get_object_type_from_object(object: *mut pyo3::ffi::PyObject) -> ObjectType {
     unsafe {
         let object_type = Py_TYPE(object);
         get_object_type(object_type)
     }
 }
 
-fn get_type_name(object_type: *mut pyo3::ffi::PyTypeObject) -> std::borrow::Cow<'static, str> {
+pub fn get_type_name(object_type: *mut pyo3::ffi::PyTypeObject) -> std::borrow::Cow<'static, str> {
     unsafe { CStr::from_ptr((*object_type).tp_name).to_string_lossy() }
 }
 

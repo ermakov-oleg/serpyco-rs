@@ -1,0 +1,494 @@
+use std::any::Any;
+use pyo3::prelude::*;
+use std::collections::hash_map::DefaultHasher;
+use pyo3::types::{PyNone, PyTuple};
+
+
+
+macro_rules! py_eq {
+    ($obj1:expr, $obj2:expr, $py:expr) => {
+        $obj1.as_ref($py).eq($obj2.as_ref($py))?
+    };
+}
+
+
+#[pyclass(frozen, module = "serde_json", subclass)]
+#[derive(Debug, Clone)]
+pub struct BaseType {
+    #[pyo3(get)]
+    pub custom_encoder: Option<Py<PyAny>>,
+}
+
+#[pymethods]
+impl BaseType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> Self {
+        BaseType {
+            custom_encoder: custom_encoder.map(|x| x.into()),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<Type: custom_encoder={:?}>", self.custom_encoder)
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
+        match (&self.custom_encoder, &other.custom_encoder) {
+            (Some(a), Some(b)) => Ok(py_eq!(a, b, py)),
+            (None, None) => Ok(true),
+            _ => Ok(false),
+        }
+    }
+}
+
+#[pyclass(frozen, module = "serde_json", subclass)]
+#[derive(Debug, Clone)]
+pub struct CustomEncoder {
+    #[pyo3(get)]
+    pub serialize: Option<Py<PyAny>>,
+    #[pyo3(get)]
+    pub deserialize: Option<Py<PyAny>>,
+}
+
+#[pymethods]
+impl CustomEncoder {
+    #[new]
+    fn new(serialize: Option<&PyAny>, deserialize: Option<&PyAny>) -> PyResult<Self> {
+        Ok(CustomEncoder {
+            serialize: serialize.map(|x| x.into()),
+            deserialize: deserialize.map(|x| x.into()),
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<CustomEncoder: serialize={:?}, deserialize={:?}>",
+            self.serialize, self.deserialize
+        )
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntegerType {
+    #[pyo3(get)]
+    pub min: Option<i64>,
+    #[pyo3(get)]
+    pub max: Option<i64>,
+}
+
+#[pymethods]
+impl IntegerType {
+    #[new]
+    fn new(min: Option<i64>, max: Option<i64>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (IntegerType { min, max }, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<IntegerType: min={:?}, max={:?}>", self.min, self.max)
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct FloatType {
+    #[pyo3(get)]
+    pub min: Option<f64>,
+    #[pyo3(get)]
+    pub max: Option<f64>,
+}
+
+#[pymethods]
+impl FloatType {
+    #[new]
+    fn new(min: Option<f64>, max: Option<f64>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (FloatType { min, max }, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<FloatType: min={:?}, max={:?}>", self.min, self.max)
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecimalType {
+    #[pyo3(get)]
+    pub min: Option<f64>,
+    #[pyo3(get)]
+    pub max: Option<f64>,
+}
+
+#[pymethods]
+impl DecimalType {
+    #[new]
+    fn new(min: Option<f64>, max: Option<f64>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (DecimalType { min, max }, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<FloatType: min={:?}, max={:?}>", self.min, self.max)
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StringType {
+    #[pyo3(get)]
+    pub min_length: Option<usize>,
+    #[pyo3(get)]
+    pub max_length: Option<usize>,
+}
+
+#[pymethods]
+impl StringType {
+    #[new]
+    fn new(
+        min_length: Option<usize>,
+        max_length: Option<usize>,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        (
+            StringType {
+                min_length,
+                max_length,
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<StringType: min_length={:?}, max_length={:?}>",
+            self.min_length, self.max_length
+        )
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BooleanType {}
+
+#[pymethods]
+impl BooleanType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (BooleanType {}, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        "<BooleanType>".to_string()
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UUIDType {}
+
+#[pymethods]
+impl UUIDType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (UUIDType {}, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        "<UUIDType>".to_string()
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeType {}
+
+#[pymethods]
+impl TimeType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (TimeType {}, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        "<TimeType>".to_string()
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateTimeType {}
+
+#[pymethods]
+impl DateTimeType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (DateTimeType {}, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        "<TimeType>".to_string()
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DateType {}
+
+#[pymethods]
+impl DateType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (DateType {}, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(&self, other: &Self) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        "<TimeType>".to_string()
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub enum DefaultValueEnum {
+    None,
+    Value(Py<PyAny>),
+}
+
+#[pyclass(frozen, module = "serde_json", subclass)]
+#[derive(Debug, Clone)]
+pub struct DefaultValue(DefaultValueEnum);
+
+#[pymethods]
+impl DefaultValue {
+    #[staticmethod]
+    fn none() -> Self {
+        Self(DefaultValueEnum::None)
+    }
+    #[staticmethod]
+    fn some(value: &PyAny) -> Self {
+        Self(DefaultValueEnum::Value(value.into()))
+    }
+
+    fn is_none(&self) -> bool {
+        matches!(self.0, DefaultValueEnum::None)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        match &self.0 {
+            DefaultValueEnum::None => "Rust None".to_string(),
+            DefaultValueEnum::Value(value) => format!("{}", value.as_ref(py).repr().unwrap())
+        }
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+        self == other
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
+        match &self.0 {
+            DefaultValueEnum::None => Ok(0),
+            DefaultValueEnum::Value(value) => {
+                value.as_ref(py).hash()
+            }
+        }
+    }
+}
+
+
+impl Into<Option<Py<PyAny>>> for DefaultValue {
+    fn into(self) -> Option<Py<PyAny>> {
+        match self.0 {
+            DefaultValueEnum::None => None,
+            DefaultValueEnum::Value(value) => Some(value),
+        }
+    }
+}
+
+impl PartialEq<Self> for DefaultValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (DefaultValueEnum::None, DefaultValueEnum::None) => true,
+            (DefaultValueEnum::Value(a), DefaultValueEnum::Value(b)) => {
+                Python::with_gil(|py| {
+                    a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)
+                })
+            },
+            _ => false,
+        }
+    }
+}
+
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct EntityType {
+    #[pyo3(get)]
+    pub cls: Py<PyAny>,
+    #[pyo3(get)]
+    pub name: Py<PyAny>,
+    #[pyo3(get)]
+    pub fields: Vec<EntityField>,
+    #[pyo3(get)]
+    pub omit_none: bool,
+    #[pyo3(get)]
+    pub generics: Py<PyAny>,
+    #[pyo3(get)]
+    pub doc: Py<PyAny>,
+}
+
+#[pymethods]
+impl EntityType {
+    #[new]
+    #[pyo3(signature = (cls, name, fields, omit_none=false, generics=None, doc=None, custom_encoder=None))]
+    fn new(
+        cls: &PyAny,
+        name: &PyAny,
+        fields: Vec<EntityField>,
+        omit_none: bool,
+        generics: Option<&PyAny>,
+        doc: Option<&PyAny>,
+        custom_encoder: Option<&PyAny>,
+        py: Python<'_>,
+    ) -> (Self, BaseType) {
+        (
+            EntityType {
+                cls: cls.into(),
+                name: name.into(),
+                fields,
+                omit_none,
+                generics: generics.map_or(PyTuple::empty(py).into(), |x| x.into()),
+                doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(
+                base.__eq__(base_other, py)?
+                && py_eq!(self_.cls, other.cls, py)
+                && py_eq!(self_.name, other.name, py)
+                && self_.fields.len() == other.fields.len()
+                && self_.fields.iter().zip(other.fields.iter()).all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+                && self_.omit_none == other.omit_none
+                && py_eq!(self_.generics, other.generics, py)
+                && py_eq!(self_.doc, other.doc, py)
+        )
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        let fields = self.fields.iter().map(|f| f.__repr__(py)).collect::<Vec<String>>().join(", ");
+        format!(
+            "<EntityType: cls={:?}, name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
+            self.cls.to_string(),
+            self.name.to_string(),
+            fields,
+            self.omit_none,
+            self.generics.to_string(),
+            self.doc.to_string()
+        )
+    }
+}
+
+#[pyclass(frozen, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct EntityField {
+    #[pyo3(get)]
+    pub name: Py<PyAny>,
+    #[pyo3(get)]
+    pub dict_key: Py<PyAny>,
+    #[pyo3(get)]
+    pub field_type: Py<PyAny>,
+    #[pyo3(get)]
+    pub required: bool,
+    #[pyo3(get)]
+    pub is_discriminator_field: bool,
+    #[pyo3(get)]
+    pub default: DefaultValue,
+    #[pyo3(get)]
+    pub default_factory: DefaultValue,
+    #[pyo3(get)]
+    pub doc: Py<PyAny>,
+}
+
+#[pymethods]
+impl EntityField {
+    #[new]
+    #[pyo3(signature = (name, dict_key, field_type, required=true, is_discriminator_field=false, default=DefaultValue(DefaultValueEnum::None), default_factory=DefaultValue(DefaultValueEnum::None), doc=None))]
+    fn new(
+        name: &PyAny,
+        dict_key: &PyAny,
+        field_type: &PyAny,
+        required: bool,
+        is_discriminator_field: bool,
+        default: DefaultValue,
+        default_factory: DefaultValue,
+        doc: Option<&PyAny>,
+        py: Python<'_>,
+    ) -> Self {
+        EntityField {
+            name: name.into(),
+            dict_key: dict_key.into(),
+            field_type: field_type.into(),
+            required,
+            is_discriminator_field,
+            doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
+            default,
+            default_factory,
+        }
+    }
+
+    fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
+        Ok(
+            py_eq!(self.name, other.name, py)
+            && py_eq!(self.dict_key, other.dict_key, py)
+            && py_eq!(self.field_type, other.field_type, py)
+            && self.required == other.required
+            && self.is_discriminator_field == other.is_discriminator_field
+            && self.default == other.default
+            && self.default_factory == other.default_factory
+            && py_eq!(self.doc, other.doc, py)
+        )
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        format!("<EntityField: name={:?}, dict_key={:?}, field_type={:?}, required={:?}, is_discriminator_field={:?}, default={:?}, default_factory={:?}, doc={:?}>", self.name.to_string(), self.dict_key.to_string(), self.field_type.to_string(), self.required, self.is_discriminator_field, self.default, self.default_factory, self.doc.to_string())
+    }
+}

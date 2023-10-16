@@ -82,32 +82,26 @@ pub(crate) struct ErrorItem {
     #[pyo3(get)]
     message: String,
     #[pyo3(get)]
-    schema_path: String,
-    #[pyo3(get)]
     instance_path: String,
 }
 
 #[pymethods]
 impl ErrorItem {
     #[new]
-    pub fn new(message: String, schema_path: String, instance_path: String) -> Self {
+    pub fn new(message: String, instance_path: String) -> Self {
         ErrorItem {
             message,
-            schema_path,
             instance_path,
         }
     }
 
     fn __str__(&self) -> String {
-        format!(
-            "{} (schema_path='{}', instance_path='{}')",
-            self.message, self.schema_path, self.instance_path
-        )
+        format!("{} (instance_path='{}')", self.message, self.instance_path)
     }
     fn __repr__(&self) -> String {
         format!(
-            "ErrorItem(message='{}', schema_path='{}', instance_path='{}')",
-            self.message, self.schema_path, self.instance_path
+            "ErrorItem(message='{}', instance_path='{}')",
+            self.message, self.instance_path
         )
     }
     fn __richcmp__(&self, other: &ErrorItem, op: CompareOp) -> bool {

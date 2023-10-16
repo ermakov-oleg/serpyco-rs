@@ -24,7 +24,7 @@ from ._entities import (
 )
 
 
-def get_json_schema(t: describe.Type) -> dict[str, Any]:
+def get_json_schema(t: describe.BaseType) -> dict[str, Any]:
     schema = to_json_schema(t)
     definitions: dict[str, Any] = {}
     schema_def = schema.dump(definitions)
@@ -150,7 +150,7 @@ def _(arg: describe.OptionalType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
     return ObjectType(
-        properties={prop.dict_key: to_json_schema(prop.type, prop.doc) for prop in arg.fields},
+        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc) for prop in arg.fields},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,
         name=arg.name,
         description=arg.doc,
@@ -160,7 +160,7 @@ def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(arg: describe.TypedDictType, doc: Optional[str] = None) -> Schema:
     return ObjectType(
-        properties={prop.dict_key: to_json_schema(prop.type, prop.doc) for prop in arg.fields},
+        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc) for prop in arg.fields},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,
         name=arg.name,
         description=arg.doc,

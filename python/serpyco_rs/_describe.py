@@ -23,10 +23,39 @@ from uuid import UUID
 from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
+from ._describe_types import (
+    AnyType,
+    ArrayType,
+    BytesType,
+    DictionaryType,
+    EnumType,
+    LiteralType,
+    OptionalType,
+    RecursionHolder,
+    TupleType,
+    TypedDictType,
+    UnionType,
+)
+from ._impl import (
+    NOT_SET,
+    BaseType,
+    BooleanType,
+    CustomEncoder,
+    DateTimeType,
+    DateType,
+    DecimalType,
+    DefaultValue,
+    EntityField,
+    EntityType,
+    FloatType,
+    IntegerType,
+    StringType,
+    TimeType,
+    UUIDType,
+)
 from ._utils import to_camelcase
 from .metadata import (
     Alias,
-    CustomEncoder,
     Discriminator,
     FiledFormat,
     Format,
@@ -40,7 +69,6 @@ from .metadata import (
     NoneAsDefaultForOptional,
     NoneFormat,
     OmitNone,
-    Places,
 )
 
 
@@ -60,151 +88,6 @@ _NoneType = type(None)
 _T = TypeVar('_T')
 
 
-class NotSet:
-    def __repr__(self) -> str:
-        return 'NOT_SET'
-
-
-NOT_SET = NotSet()
-
-
-@dataclasses.dataclass
-class Type:
-    custom_encoder: Optional[CustomEncoder[Any, Any]]
-
-
-@dataclasses.dataclass
-class IntegerType(Type):
-    min: Optional[int] = None
-    max: Optional[int] = None
-
-
-@dataclasses.dataclass
-class StringType(Type):
-    min_length: Optional[int] = None
-    max_length: Optional[int] = None
-
-
-@dataclasses.dataclass
-class BytesType(Type):
-    pass
-
-
-@dataclasses.dataclass
-class FloatType(Type):
-    min: Optional[float] = None
-    max: Optional[float] = None
-
-
-@dataclasses.dataclass
-class DecimalType(Type):
-    places: Optional[int] = None
-    min: Optional[Decimal] = None
-    max: Optional[Decimal] = None
-
-
-@dataclasses.dataclass
-class BooleanType(Type):
-    pass
-
-
-@dataclasses.dataclass
-class UUIDType(Type):
-    pass
-
-
-@dataclasses.dataclass
-class TimeType(Type):
-    pass
-
-
-@dataclasses.dataclass
-class DateTimeType(Type):
-    pass
-
-
-@dataclasses.dataclass
-class DateType(Type):
-    pass
-
-
-@dataclasses.dataclass
-class EnumType(Type):
-    cls: type[Union[Enum, IntEnum]]
-
-
-@dataclasses.dataclass
-class LiteralType(Type):
-    args: Sequence[str]
-
-
-@dataclasses.dataclass
-class EntityField:
-    name: str
-    dict_key: str
-    type: Type
-    required: bool = True
-    doc: Optional[str] = None
-    default: Any = NOT_SET
-    default_factory: Union[Callable[[], Any], NotSet] = NOT_SET
-    is_discriminator_field: bool = False
-
-
-@dataclasses.dataclass
-class EntityType(Type):
-    cls: type[Any]
-    name: str
-    fields: Sequence[EntityField]
-    omit_none: bool = False
-    generics: Sequence[tuple[TypeVar, Any]] = tuple()
-    doc: Optional[str] = None
-
-
-@dataclasses.dataclass
-class TypedDictType(Type):
-    name: str
-    fields: Sequence[EntityField]
-    omit_none: bool = False
-    generics: Sequence[tuple[TypeVar, Any]] = tuple()
-    doc: Optional[str] = None
-
-
-@dataclasses.dataclass
-class OptionalType(Type):
-    inner: Type
-
-
-@dataclasses.dataclass
-class ArrayType(Type):
-    item_type: Type
-    is_sequence: bool
-
-
-@dataclasses.dataclass
-class DictionaryType(Type):
-    key_type: Type
-    value_type: Type
-    is_mapping: bool
-    omit_none: bool = False
-
-
-@dataclasses.dataclass
-class TupleType(Type):
-    item_types: Sequence[Type]
-
-
-@dataclasses.dataclass
-class UnionType(Type):
-    item_types: Mapping[str, Type]
-    dump_discriminator: str
-    load_discriminator: str
-
-
-@dataclasses.dataclass
-class AnyType(Type):
-    pass
-
-
 @dataclasses.dataclass(frozen=True, unsafe_hash=True)
 class _MetaStateKey:
     cls: type
@@ -217,13 +100,13 @@ class _MetaStateKey:
 @dataclasses.dataclass
 class _Meta:
     globals: dict[str, Any]
-    state: dict[_MetaStateKey, Optional[Type]]
+    state: dict[_MetaStateKey, Optional[BaseType]]
     discriminator_field: Optional[str] = None
 
-    def add_to_state(self, key: _MetaStateKey, value: Optional[Type]) -> None:
+    def add_to_state(self, key: _MetaStateKey, value: Optional[BaseType]) -> None:
         self.state[key] = value
 
-    def get_from_state(self, key: _MetaStateKey) -> Optional[Type]:
+    def get_from_state(self, key: _MetaStateKey) -> Optional[BaseType]:
         return self.state.get(key)
 
     def has_in_state(self, key: _MetaStateKey) -> bool:
@@ -231,18 +114,19 @@ class _Meta:
 
 
 @dataclasses.dataclass
-class RecursionHolder(Type):
+class _RecursionHolder(BaseType):
+    # todo: Should be used
     name: str
     state_key: _MetaStateKey
     meta: _Meta
 
-    def get_type(self) -> Type:
+    def get_type(self) -> BaseType:
         if type_ := self.meta.get_from_state(self.state_key):
             return type_
         raise RuntimeError('Recursive type not resolved')
 
 
-def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
+def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
@@ -295,7 +179,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         return AnyType(custom_encoder=custom_encoder)
 
     if isinstance(t, type):
-        simple_type_mapping: Mapping[type, type[Type]] = {
+        simple_type_mapping: Mapping[type, type[BaseType]] = {
             bytes: BytesType,
             bool: BooleanType,
             date: DateType,
@@ -324,11 +208,9 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
         if t is Decimal:
             min_meta = _find_metadata(metadata, Min)
             max_meta = _find_metadata(metadata, Max)
-            places_meta = _find_metadata(metadata, Places)
             return DecimalType(
                 min=cast(Decimal, min_meta.value) if min_meta else None,
                 max=cast(Decimal, max_meta.value) if max_meta else None,
-                places=places_meta.value if places_meta else None,
                 custom_encoder=custom_encoder,
             )
 
@@ -422,8 +304,8 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> Type:
 class _Field(Generic[_T]):
     name: str
     type: type[_T]
-    default: Union[_T, NotSet] = NOT_SET
-    default_factory: Union[Callable[[], _T], NotSet] = NOT_SET
+    default: DefaultValue[_T] = NOT_SET
+    default_factory: DefaultValue[_T] = NOT_SET
 
 
 def _describe_entity(
@@ -459,7 +341,7 @@ def _describe_entity(
 
         default = field.default
         if required and none_as_default_for_optional and none_as_default_for_optional.use:
-            default = None
+            default = DefaultValue.some(None)
             required = False
 
         fields.append(
@@ -467,7 +349,7 @@ def _describe_entity(
                 name=field.name,
                 dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
                 doc=docs.get(field.name),
-                type=field_type,
+                field_type=field_type,
                 default=default,
                 default_factory=field.default_factory,
                 is_discriminator_field=is_discriminator_field,
@@ -502,8 +384,10 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
             _Field(
                 name=f.name,
                 type=f.type,
-                default=(f.default if f.default is not dataclasses.MISSING else NOT_SET),
-                default_factory=(f.default_factory if f.default_factory is not dataclasses.MISSING else NOT_SET),
+                default=(DefaultValue.some(f.default) if f.default is not dataclasses.MISSING else NOT_SET),
+                default_factory=(
+                    DefaultValue.some(f.default_factory) if f.default_factory is not dataclasses.MISSING else NOT_SET
+                ),
             )
             for f in dataclasses.fields(t)
         ]
@@ -512,7 +396,7 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
             _Field(
                 name=field_name,
                 type=field_type,
-                default=NOT_SET if _is_required_in_typeddict(t, field_name) else None,
+                default=NOT_SET if _is_required_in_typeddict(t, field_name) else DefaultValue.some(None),
                 default_factory=NOT_SET,
             )
             for field_name, field_type in t.__annotations__.items()
@@ -524,7 +408,7 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                 name=f.name,
                 type=f.type,
                 default=(
-                    f.default
+                    DefaultValue.some(f.default)
                     if (
                         f.default is not attr.NOTHING
                         and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
@@ -532,7 +416,9 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                     else NOT_SET
                 ),
                 default_factory=(
-                    f.default.factory if isinstance(f.default, attr.Factory) else NOT_SET  # type: ignore[arg-type]
+                    DefaultValue.some(f.default.factory)
+                    if isinstance(f.default, attr.Factory)
+                    else NOT_SET  # type: ignore[arg-type]
                 ),
             )
             for f in attr.fields(t)

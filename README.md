@@ -230,7 +230,7 @@ from serpyco_rs.metadata import Min, Max
 ser = Serializer(Annotated[int, Min(1), Max(10)])
 
 ser.load(123)
->> SchemaValidationError: [ErrorItem(message='123 is greater than the maximum of 10', instance_path='', schema_path='maximum')]
+>> SchemaValidationError: [ErrorItem(message='123 is greater than the maximum of 10', instance_path='')]
 ```
 
 ### MinLength / MaxLength
@@ -244,7 +244,7 @@ from serpyco_rs.metadata import MinLength
 ser = Serializer(Annotated[str, MinLength(5)])
 
 ser.load("1234")
->> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='', schema_path='minLength')]
+>> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='')]
 ```
 
 ### NoneAsDefaultForOptional
@@ -269,7 +269,7 @@ assert ser_force_default.load({'val': 1}) == Foo(val=1, val1=None, val2=None)
 
 # val1 field is required and nullable and val1 should be present in the dict
 ser.load({'val': 1})
->> SchemaValidationError: [ErrorItem(message='"val1" is a required property', instance_path='', schema_path='required')]
+>> SchemaValidationError: [ErrorItem(message='"val1" is a required property', instance_path='')]
 ```
 
 

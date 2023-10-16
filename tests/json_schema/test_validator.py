@@ -1,21 +1,19 @@
-import json
 import sys
-import uuid
 import textwrap
+import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, Literal, Optional, Union, Callable
+from typing import Annotated, Any, Callable, Literal, Optional, Union
 from unittest import mock
 
 import pytest
+from typing_extensions import NotRequired, Required, TypedDict
+
 from serpyco_rs import Serializer
-from serpyco_rs._describe import describe_type
-from serpyco_rs._json_schema import get_json_schema
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError, ValidationError
 from serpyco_rs.metadata import Discriminator, Max, MaxLength, Min, MinLength
-from typing_extensions import NotRequired, Required, TypedDict
 
 
 class EnumTest(Enum):
@@ -99,6 +97,7 @@ class TypedDictTotalFalse(TypedDict, total=False):
 )
 def test_validate(cls, value):
     Serializer(cls).load(value)
+    Serializer(cls).load(value, validate=False)
 
 
 if sys.version_info >= (3, 10):
@@ -113,11 +112,12 @@ if sys.version_info >= (3, 10):
     )
     def test_validate_new_union(cls, value):
         Serializer(cls).load(value)
+        Serializer(cls).load(value, validate=False)
 
 
-def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], None]:
+def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
     def cmp(e: ErrorItem) -> None:
-        assert e.message == m and e.instance_path == ip and e.schema_path == sp
+        assert e.message == m and e.instance_path == ip
 
     return cmp
 
@@ -130,91 +130,90 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], None]:
         (
             Annotated[str, MinLength(2)],
             'a',
-            _mk_e(m='"a" is shorter than 2 characters', sp='minLength'),
+            _mk_e(m='"a" is shorter than 2 characters'),
         ),
         (
             Annotated[str, MaxLength(2)],
             'aaa',
-            _mk_e(m='"aaa" is longer than 2 characters', sp='maxLength'),
+            _mk_e(m='"aaa" is longer than 2 characters'),
         ),
         (int, 9.1, _mk_e(m='9.1 is not of type "integer"')),
         (int, '9', _mk_e(m='"9" is not of type "integer"')),
         (
             Annotated[int, Min(1)],
             0,
-            _mk_e(m='0 is less than the minimum of 1', sp='minimum'),
+            _mk_e(m='0 is less than the minimum of 1'),
         ),
         (
             Annotated[int, Max(1)],
             10,
-            _mk_e(m='10 is greater than the maximum of 1', sp='maximum'),
+            _mk_e(m='10 is greater than the maximum of 1'),
         ),
         (float, None, _mk_e(m='null is not of type "number"')),
         (
             Annotated[float, Min(1)],
             0.1,
-            _mk_e(m='0.1 is less than the minimum of 1', sp='minimum'),
+            _mk_e(m='0.1 is less than the minimum of 1.0'),
         ),
         (
             Annotated[float, Max(1)],
             10.1,
-            _mk_e(m='10.1 is greater than the maximum of 1', sp='maximum'),
+            _mk_e(m='10.1 is greater than the maximum of 1.0'),
         ),
-        (uuid.UUID, "asd", _mk_e(sp='format')),
-        (time, '12:34:a', _mk_e(sp='format')),
-        (datetime, '2022-10-10//12', _mk_e(sp='format')),
-        (date, '17-02-2022', _mk_e(sp='format')),
-        (datetime, '2022-10-10T14:23:43.123456-30:00', _mk_e(sp='format')),
-        (EnumTest, 'buz', _mk_e(m='"buz" is not one of ["foo","bar"]', sp='enum')),
+        (uuid.UUID, 'asd', _mk_e(ip='')),
+        (time, '12:34:a', _mk_e(ip='')),
+        (datetime, '2022-10-10//12', _mk_e(ip='')),
+        (date, '17-02-2022', _mk_e(ip='')),
+        (datetime, '2022-10-10T14:23:43.123456-30:00', _mk_e(ip='')),
+        (EnumTest, 'buz', _mk_e(m='"buz" is not one of ["foo","bar"]')),
         (
             Optional[int],
             'foo',
-            _mk_e(m='"foo" is not valid under any of the schemas listed in the \'anyOf\' keyword', sp='anyOf'),
+            _mk_e(m='"foo" is not valid under any of the schemas listed in the \'anyOf\' keyword'),
         ),
-        (EntityTest, {}, _mk_e(m='"key" is a required property', sp='required')),
+        (EntityTest, {}, _mk_e(m='"key" is a required property')),
         (
             list[int],
             [1, '1'],
-            _mk_e(m='"1" is not of type "integer"', ip='1', sp='items/type'),
+            _mk_e(m='"1" is not of type "integer"', ip='1'),
         ),
         (
             dict[str, int],
             {'a': '1'},
-            _mk_e(m='"1" is not of type "integer"', ip='a', sp='additionalProperties/type'),
+            _mk_e(m='"1" is not of type "integer"', ip='a'),
         ),
         (
             tuple[str, int, bool],
             ['1'],
-            _mk_e(m='["1"] has less than 3 items', sp='minItems'),
+            _mk_e(m='["1"] has less than 3 items'),
         ),
         (
             tuple[str, int, bool],
             ['1', 1, True, 0],
-            _mk_e(m='["1",1,true,0] has more than 3 items', sp='maxItems'),
+            _mk_e(m='["1",1,true,0] has more than 3 items'),
         ),
         (
             tuple[str, bool],
             ['1', 1],
             _mk_e(
                 m='1 is not of type "boolean"',
-                sp='prefixItems/1/type',
                 ip='1',
             ),
         ),
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
             {'type': 'buz'},
-            _mk_e(m='{"type":"buz"} is not valid under any of the schemas listed in the \'oneOf\' keyword', sp='oneOf'),
+            _mk_e(m='{"type":"buz"} is not valid under any of the schemas listed in the \'oneOf\' keyword'),
         ),
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
             {'type': 'foo', 'val': '123'},
-            _mk_e(sp='oneOf'),
+            _mk_e(ip=''),
         ),
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
             {'type': 'bar', 'val': 1},
-            _mk_e(sp='oneOf'),
+            _mk_e(ip=''),
         ),
         (TypedDictTotalTrue, {}, _mk_e(m='"foo" is a required property')),
         (TypedDictTotalFalse, {}, _mk_e(m='"bar" is a required property')),
@@ -222,16 +221,16 @@ def _mk_e(m=mock.ANY, ip=mock.ANY, sp=mock.ANY) -> Callable[[ErrorItem], None]:
 )
 def test_validate__validation_error(cls, value, check):
     serializer = Serializer(cls)
-    raw_value = json.dumps(value)
     with pytest.raises(SchemaValidationError) as exc_info:
         serializer.load(value)
 
-    with pytest.raises(SchemaValidationError) as raw_exc_info:
-        serializer.load_json(raw_value)
+    with pytest.raises(SchemaValidationError) as exc_info_new:
+        serializer.load(value, validate=False)
 
     assert len(exc_info.value.errors) == 1
+    assert len(exc_info_new.value.errors) == 1
     check(exc_info.value.errors[0])
-    assert exc_info.value.errors == raw_exc_info.value.errors
+    check(exc_info_new.value.errors[0])
 
 
 def test_validate__error_format():
@@ -251,25 +250,16 @@ def test_validate__error_format():
     with pytest.raises(SchemaValidationError) as exc_info:
         serializer.load(value)
 
-    with pytest.raises(SchemaValidationError) as raw_exc_info:
-        serializer.load_json(json.dumps(value))
-
-    assert (
-        exc_info.value.errors
-        == raw_exc_info.value.errors
-        == [
-            ErrorItem(
-                message='"baz" is a required property',
-                instance_path='bar',
-                schema_path='required',
-            ),
-            ErrorItem(
-                message='"1" is not of type "integer"',
-                instance_path='foo',
-                schema_path='properties/foo/type',
-            ),
-        ]
-    )
+    assert exc_info.value.errors == [
+        ErrorItem(
+            message='"baz" is a required property',
+            instance_path='bar',
+        ),
+        ErrorItem(
+            message='"1" is not of type "integer"',
+            instance_path='foo',
+        ),
+    ]
 
 
 def test_validation_exceptions_inheritance():
@@ -294,15 +284,13 @@ def test_validation_error_message():
     error = exc_info.value
     error_item = error.errors[0]
 
-    assert str(error_item) == ("""2 is not of type "string" (schema_path='properties/bar/type', instance_path='bar')""")
-    assert repr(error_item) == (
-        """ErrorItem(message='2 is not of type "string"', schema_path='properties/bar/type', instance_path='bar')"""
-    )
+    assert str(error_item) == ("""2 is not of type "string" (instance_path='bar')""")
+    assert repr(error_item) == ("""ErrorItem(message='2 is not of type "string"', instance_path='bar')""")
     assert str(error) == textwrap.dedent(
         """\
     Schema validation failed:
-    - 2 is not of type "string" (schema_path='properties/bar/type', instance_path='bar')
-    - "1" is not of type "integer" (schema_path='properties/foo/type', instance_path='foo')
+    - 2 is not of type "string" (instance_path='bar')
+    - "1" is not of type "integer" (instance_path='foo')
       """
     )
     assert repr(error) == textwrap.dedent(
@@ -310,8 +298,8 @@ def test_validation_error_message():
     SchemaValidationError(
         message="Schema validation failed",
         errors=[
-            ErrorItem(message='2 is not of type "string"', schema_path='properties/bar/type', instance_path='bar'),
-            ErrorItem(message='"1" is not of type "integer"', schema_path='properties/foo/type', instance_path='foo'),
+            ErrorItem(message='2 is not of type "string"', instance_path='bar'),
+            ErrorItem(message='"1" is not of type "integer"', instance_path='foo'),
         ]
     )"""
     )

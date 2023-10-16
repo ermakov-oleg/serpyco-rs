@@ -58,14 +58,16 @@ def bench(session):
 
     session.run(
         'pytest',
+        *(session.posargs if session.posargs else ['bench']),
         '--verbose',
+        '--memray',
+        '--native',
         '--benchmark-min-time=0.5',
         '--benchmark-max-time=1',
         '--benchmark-disable-gc',
         '--benchmark-autosave',
         '--benchmark-save-data',
         '--benchmark-compare',
-        *(session.posargs if session.posargs else ['bench']),
     )
 
 

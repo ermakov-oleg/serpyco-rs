@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from typing import Annotated, Optional
 
 import pytest
-from serpyco_rs import Serializer, SchemaValidationError
-from serpyco_rs.metadata import Alias, OmitNone, ForceDefaultForOptional
+from serpyco_rs import SchemaValidationError, Serializer
+from serpyco_rs.metadata import Alias, ForceDefaultForOptional, OmitNone
 
 
 def test_annotated_filed_alias():
