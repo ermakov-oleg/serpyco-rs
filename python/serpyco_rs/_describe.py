@@ -27,7 +27,6 @@ from ._describe_types import (
     AnyType,
     BytesType,
     DictionaryType,
-    EnumType,
     LiteralType,
     OptionalType,
     RecursionHolder,
@@ -52,6 +51,7 @@ from ._impl import (
     TimeType,
     UUIDType,
     TypedDictType,
+    EnumType,
 )
 from ._utils import to_camelcase
 from .metadata import (
@@ -247,7 +247,11 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
             )
 
         if issubclass(t, (Enum, IntEnum)):
-            return EnumType(cls=t, custom_encoder=custom_encoder)
+            return EnumType(
+                cls=t,
+                items=[item.value for item in t],
+                custom_encoder=custom_encoder
+            )
 
         if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
             meta.add_to_state(meta_key, None)

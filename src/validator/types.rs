@@ -1,9 +1,10 @@
-use std::any::Any;
+use std::fmt;
+use std::fmt::Display;
+
 use pyo3::prelude::*;
-use std::collections::hash_map::DefaultHasher;
 use pyo3::types::{PyNone, PyTuple};
 
-
+use super::value::Value;
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -602,3 +603,91 @@ impl ArrayType {
         )
     }
 }
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct EnumType {
+    #[pyo3(get)]
+    pub cls: Py<PyAny>,
+    #[pyo3(get)]
+    pub items: Py<PyAny>,
+    pub enum_items: Vec<EnumItem>,
+}
+
+#[pymethods]
+impl EnumType {
+    #[new]
+    #[pyo3(signature = (cls, items, custom_encoder=None))]
+    fn new(
+        cls: &PyAny,
+        items: &PyAny,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        let mut enum_items = vec![];
+        let py_items = Value::new(items.as_ptr());
+        if let Some(array) = py_items.as_array() {
+            for i in 0..array.len() {
+                let item = array.get_item(i);
+                if let Some(str) = item.as_str() {
+                    enum_items.push(EnumItem::String(str.to_string()));
+                } else if let Some(int) = item.as_int() {
+                    enum_items.push(EnumItem::Int(int));
+                }
+            }
+        }
+        (
+            EnumType {
+                cls: cls.into(),
+                items: items.into(),
+                enum_items,
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(
+            base.__eq__(base_other, py)?
+                && py_eq!(self_.cls, other.cls, py)
+                && py_eq!(self_.items, other.items, py)
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<EnumType: cls={:?}, items={:?}>",
+            self.cls.to_string(),
+            self.items.to_string(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnumItem {
+    Int(i64),
+    String(String),
+}
+
+pub struct EnumItems<'a>(&'a [EnumItem]);
+
+impl<'a> fmt::Display for EnumItems<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut items = vec![];
+        for item in self.0 {
+            match item {
+                EnumItem::Int(int) => items.push(int.to_string()),
+                EnumItem::String(str) => items.push(format!("\"{}\"", str)),
+            }
+        }
+        write!(f, "[{}]", items.join(","))
+    }
+}
+
+impl<'a> From<&'a Vec<EnumItem>> for EnumItems<'a> {
+    fn from(items: &'a Vec<EnumItem>) -> Self {
+        EnumItems(items.as_slice())
+    }
+}
+

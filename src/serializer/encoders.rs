@@ -20,9 +20,9 @@ use crate::python::{
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
 use crate::python::Type::Array;
-use crate::validator::types::{DecimalType, FloatType, IntegerType, StringType};
+use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::{Context, Value as PyValue, InstancePath, Array as PyArray};
-use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_type, missing_required_property};
+use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_enum_item, invalid_type, missing_required_property};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
@@ -196,9 +196,9 @@ impl Encoder for BooleanEncoder {
 
 #[derive(Debug, Clone)]
 pub struct DictionaryEncoder {
-    pub key_encoder: Box<TEncoder>,
-    pub value_encoder: Box<TEncoder>,
-    pub omit_none: bool,
+    pub(crate) key_encoder: Box<TEncoder>,
+    pub(crate) value_encoder: Box<TEncoder>,
+    pub(crate) omit_none: bool,
 }
 
 impl Encoder for DictionaryEncoder {
@@ -245,8 +245,8 @@ impl Encoder for DictionaryEncoder {
 
 #[derive(Debug, Clone)]
 pub struct ArrayEncoder {
-    pub encoder: Box<TEncoder>,
-    pub ctx: Context,
+    pub(crate) encoder: Box<TEncoder>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for ArrayEncoder {
@@ -465,6 +465,8 @@ impl Encoder for UUIDEncoder {
 #[derive(Debug, Clone)]
 pub struct EnumEncoder {
     pub(crate) enum_type: pyo3::PyObject,
+    pub(crate) enum_items: Vec<EnumItem>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for EnumEncoder {
@@ -475,7 +477,20 @@ impl Encoder for EnumEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        py_object_call1_make_tuple_or_err(self.enum_type.as_ptr(), value)
+        let py_val = PyValue::new(value);
+        let item = if let Some(val) = py_val.as_str() {
+            EnumItem::String(val.to_string())
+        } else if let Some(val) = py_val.as_int() {
+            EnumItem::Int(val)
+        } else {
+            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+        };
+
+        if self.enum_items.contains(&item) {
+            py_object_call1_make_tuple_or_err(self.enum_type.as_ptr(), value)
+        } else {
+            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+        }
     }
 }
 

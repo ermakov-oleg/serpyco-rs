@@ -19,11 +19,6 @@ class BytesType(Type):
 
 
 @dataclasses.dataclass
-class EnumType(Type):
-    cls: type[Union[Enum, IntEnum]]
-
-
-@dataclasses.dataclass
 class LiteralType(Type):
     args: Sequence[str]
 

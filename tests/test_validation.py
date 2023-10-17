@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any, TypedDict
+from enum import Enum
 
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
@@ -221,3 +222,12 @@ def test_list_validation__invalid_type():
 def test_list_validation__invalid_item_type():
     s = Serializer(list[int])
     _check_errors(s, [2, 3, 'foo'], [ErrorItem(message='"foo" is not of type "integer"', instance_path='2')])
+
+
+def test_enum_validation__invalid_type():
+    class A(Enum):
+        A = 1
+        B = 'foo'
+
+    s = Serializer(A)
+    _check_errors(s, 'bar', [ErrorItem(message='"bar" is not one of [1,"foo"]', instance_path='')])

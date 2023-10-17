@@ -21,6 +21,7 @@ from ._serpyco_rs import (
     ValidationError,
     TypedDictType,
     ArrayType,
+    EnumType,
 )
 
 

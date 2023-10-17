@@ -222,12 +222,15 @@ pub fn get_encoder(
             )?
         }
 
-        Type::Enum(type_info) => {
-            let py_type = type_info.getattr(py, "cls")?;
-            old_wrap_with_custom_encoder(
+        Type::Enum(type_info, base_type) => {
+            wrap_with_custom_encoder(
                 py,
-                type_info,
-                Box::new(EnumEncoder { enum_type: py_type }),
+                base_type,
+                Box::new(EnumEncoder {
+                    enum_type: type_info.cls,
+                    enum_items: type_info.enum_items,
+                    ctx
+                }),
             )?
         }
     };

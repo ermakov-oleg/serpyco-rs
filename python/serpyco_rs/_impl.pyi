@@ -1,5 +1,6 @@
-from typing import Any, Generic, TypeVar, Optional, Callable
+from typing import Any, Generic, TypeVar, Callable
 from collections.abc import Sequence
+from enum import Enum, IntEnum
 
 _T = TypeVar('_T')
 _I = TypeVar('_I')
@@ -144,5 +145,12 @@ class TypedDictType(BaseType):
 
 class ArrayType(BaseType):
     item_type: BaseType
-    
+
     def __init__(self, item_type: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+
+
+class EnumType(BaseType):
+    cls: type[Enum | IntEnum]
+    items: list[Any]
+
+    def __init__(self, cls: type[Enum | IntEnum], items: list[Any], custom_encoder: CustomEncoder[Any, Any] | None = None): ...

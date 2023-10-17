@@ -72,14 +72,38 @@ pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) ->
 }
 
 macro_rules! invalid_type {
-    ($type_: expr, $value: expr, $ctx: expr) => {
+    ($type_: expr, $value: expr, $path: expr) => {
         {
-            crate::validator::validators::_invalid_type($type_, $value, $ctx)?;
+            crate::validator::validators::_invalid_type($type_, $value, $path)?;
             unreachable!();  // todo: Discard the use of unreachable
         }
     }
 }
+
+
+pub fn _invalid_enum_item(items: EnumItems, value: Value, instance_path: &InstancePath) -> PyResult<()> {
+    let error = match value.as_str() {
+        Some(val) => format!(r#""{}" is not one of {}"#, val, items),
+        None => format!(r#"{} is not one of {}"#, value.to_string()?, items),
+    };
+    raise_error(error, instance_path)?;
+    Ok(())
+}
+
+macro_rules! invalid_enum_item {
+    ($items: expr, $value: expr, $path: expr) => {
+        {
+            crate::validator::validators::_invalid_enum_item($items, $value, $path)?;
+            unreachable!();  // todo: Discard the use of unreachable
+        }
+    }
+}
+
+
+
 pub(crate) use invalid_type;
+pub(crate) use invalid_enum_item;
+use crate::validator::types::{EnumItems};
 
 
 pub enum ValidationErrorKind {

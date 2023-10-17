@@ -8,7 +8,7 @@ use std::sync::Once;
 use super::py::py_object_get_attr;
 
 pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
-pub static mut ENUM_TYPE: *mut PyObject = 0 as *mut PyObject;
+
 pub static mut OPTIONAL_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -46,7 +46,7 @@ pub enum Type<Base = Option<BaseType>> {
     Entity(EntityType, Base, usize),
     TypedDict(TypedDictType, Base, usize),
     Array(ArrayType, Base),
-    Enum(Py<PyAny>),
+    Enum(EnumType, Base),
     Optional(Py<PyAny>),
     Dictionary(Py<PyAny>),
     Tuple(Py<PyAny>),
@@ -55,7 +55,7 @@ pub enum Type<Base = Option<BaseType>> {
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, FloatType, IntegerType, StringType, TimeType, TypedDictType, UUIDType};
+use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, EnumType, FloatType, IntegerType, StringType, TimeType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -83,8 +83,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::DateTime(t, base_type))
     } else if let Ok(t) = type_info.extract::<DateType>() {
         Ok(Type::Date(t, base_type))
-    } else if check_type!(type_info, ENUM_TYPE) {
-        Ok(Type::Enum(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<EnumType>() {
+        Ok(Type::Enum(t, base_type))
     } else if let Ok(t) = type_info.extract::<EntityType>() {
         let python_object_id = type_info.as_ptr() as *const _ as usize;
         Ok(Type::Entity(t, base_type, python_object_id))
@@ -122,7 +122,6 @@ pub fn init(py: Python<'_>) {
         };
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
         BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
-        ENUM_TYPE = get_attr_ptr!(describe, "EnumType");
         OPTIONAL_TYPE = get_attr_ptr!(describe, "OptionalType");
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
