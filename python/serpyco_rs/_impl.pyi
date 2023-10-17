@@ -123,3 +123,17 @@ class EntityType(BaseType):
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
+
+"""
+/*
+@dataclasses.dataclass
+class TypedDictType(Type):
+    name: str
+    fields: Sequence[Any]
+    # fields: Sequence[EntityField]
+    omit_none: bool = False
+    generics: Sequence[tuple[TypeVar, Any]] = tuple()
+    doc: Optional[str] = None
+
+*/
+"""

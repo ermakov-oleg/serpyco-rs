@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, TypedDict
 
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
@@ -182,3 +182,32 @@ def test_dataclass_validation__missing_field__whith_instance_path():
     _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo')])
 
 
+def test_typed_dict_validation__invalid_type():
+
+    class A(TypedDict):
+        a: int
+
+    s = Serializer(A)
+    with pytest.raises(SchemaValidationError) as e:
+        s.load('foo', validate=False)
+
+    assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
+
+
+def test_typed_dict_validation__missing_field():
+    class A(TypedDict):
+        a: int
+
+    s = Serializer(A)
+    _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='')])
+
+
+def test_typed_dict_validation__missing_field__whith_instance_path():
+    class Foo(TypedDict):
+        a: int
+
+    class Bar(TypedDict):
+        foo: Foo
+
+    s = Serializer(Bar)
+    _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo')])

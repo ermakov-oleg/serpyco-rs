@@ -414,7 +414,7 @@ impl EntityType {
     }
 
     fn __repr__(&self, py: Python<'_>) -> String {
-        let fields = self.fields.iter().map(|f| f.__repr__(py)).collect::<Vec<String>>().join(", ");
+        let fields = self.fields.iter().map(|f| f.__repr__()).collect::<Vec<String>>().join(", ");
         format!(
             "<EntityType: cls={:?}, name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
             self.cls.to_string(),
@@ -426,6 +426,74 @@ impl EntityType {
         )
     }
 }
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct TypedDictType {
+    #[pyo3(get)]
+    pub name: Py<PyAny>,
+    #[pyo3(get)]
+    pub fields: Vec<EntityField>,
+    #[pyo3(get)]
+    pub omit_none: bool,
+    #[pyo3(get)]
+    pub generics: Py<PyAny>,
+    #[pyo3(get)]
+    pub doc: Py<PyAny>,
+}
+
+#[pymethods]
+impl TypedDictType {
+    #[new]
+    #[pyo3(signature = (name, fields, omit_none=false, generics=None, doc=None, custom_encoder=None))]
+    fn new(
+        name: &PyAny,
+        fields: Vec<EntityField>,
+        omit_none: bool,
+        generics: Option<&PyAny>,
+        doc: Option<&PyAny>,
+        custom_encoder: Option<&PyAny>,
+        py: Python<'_>,
+    ) -> (Self, BaseType) {
+        (
+            TypedDictType {
+                name: name.into(),
+                fields,
+                omit_none,
+                generics: generics.map_or(PyTuple::empty(py).into(), |x| x.into()),
+                doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(
+            base.__eq__(base_other, py)?
+                && py_eq!(self_.name, other.name, py)
+                && self_.fields.len() == other.fields.len()
+                && self_.fields.iter().zip(other.fields.iter()).all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+                && self_.omit_none == other.omit_none
+                && py_eq!(self_.generics, other.generics, py)
+                && py_eq!(self_.doc, other.doc, py)
+        )
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> String {
+        let fields = self.fields.iter().map(|f| f.__repr__()).collect::<Vec<String>>().join(", ");
+        format!(
+            "<TypedDictType: name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
+            self.name.to_string(),
+            fields,
+            self.omit_none,
+            self.generics.to_string(),
+            self.doc.to_string()
+        )
+    }
+}
+
 
 #[pyclass(frozen, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -488,7 +556,7 @@ impl EntityField {
         )
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
+    fn __repr__(&self) -> String {
         format!("<EntityField: name={:?}, dict_key={:?}, field_type={:?}, required={:?}, is_discriminator_field={:?}, default={:?}, default_factory={:?}, doc={:?}>", self.name.to_string(), self.dict_key.to_string(), self.field_type.to_string(), self.required, self.is_discriminator_field, self.default, self.default_factory, self.doc.to_string())
     }
 }

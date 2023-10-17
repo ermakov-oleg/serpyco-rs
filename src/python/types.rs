@@ -10,7 +10,6 @@ use super::py::py_object_get_attr;
 
 pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ENUM_TYPE: *mut PyObject = 0 as *mut PyObject;
-pub static mut TYPED_DICT_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut OPTIONAL_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ARRAY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -47,8 +46,8 @@ pub enum Type<Base = Option<BaseType>> {
     DateTime(DateTimeType, Base),
     Date(DateType, Base),
     Entity(EntityType, Base, usize),
+    TypedDict(TypedDictType, Base, usize),
     Enum(Py<PyAny>),
-    TypedDict(Py<PyAny>),
     Optional(Py<PyAny>),
     Array(Py<PyAny>),
     Dictionary(Py<PyAny>),
@@ -58,10 +57,7 @@ pub enum Type<Base = Option<BaseType>> {
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{
-    BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, FloatType, IntegerType,
-    StringType, TimeType, UUIDType,
-};
+use crate::validator::types::{BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, FloatType, IntegerType, StringType, TimeType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -94,8 +90,9 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     } else if let Ok(t) = type_info.extract::<EntityType>() {
         let python_object_id = type_info.as_ptr() as *const _ as usize;
         Ok(Type::Entity(t, base_type, python_object_id))
-    } else if check_type!(type_info, TYPED_DICT_TYPE) {
-        Ok(Type::TypedDict(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<TypedDictType>() {
+        let python_object_id = type_info.as_ptr() as *const _ as usize;
+        Ok(Type::TypedDict(t, base_type, python_object_id))
     } else if check_type!(type_info, OPTIONAL_TYPE) {
         Ok(Type::Optional(type_info.into()))
     } else if check_type!(type_info, ARRAY_TYPE) {
@@ -128,7 +125,6 @@ pub fn init(py: Python<'_>) {
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
         BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
         ENUM_TYPE = get_attr_ptr!(describe, "EnumType");
-        TYPED_DICT_TYPE = get_attr_ptr!(describe, "TypedDictType");
         OPTIONAL_TYPE = get_attr_ptr!(describe, "OptionalType");
         ARRAY_TYPE = get_attr_ptr!(describe, "ArrayType");
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");

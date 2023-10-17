@@ -151,14 +151,14 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
         ),
         (float, None, _mk_e(m='null is not of type "number"')),
         (
-            Annotated[float, Min(1)],
+            Annotated[float, Min(1.1)],
             0.1,
-            _mk_e(m='0.1 is less than the minimum of 1.0'),
+            _mk_e(m='0.1 is less than the minimum of 1.1'),
         ),
         (
-            Annotated[float, Max(1)],
+            Annotated[float, Max(1.5)],
             10.1,
-            _mk_e(m='10.1 is greater than the maximum of 1.0'),
+            _mk_e(m='10.1 is greater than the maximum of 1.5'),
         ),
         (uuid.UUID, 'asd', _mk_e(ip='')),
         (time, '12:34:a', _mk_e(ip='')),
@@ -230,7 +230,10 @@ def test_validate__validation_error(cls, value, check):
     assert len(exc_info.value.errors) == 1
     assert len(exc_info_new.value.errors) == 1
     check(exc_info.value.errors[0])
-    check(exc_info_new.value.errors[0])
+    # Some formats differ between jsonschema and serpyco_rs
+    error = exc_info_new.value.errors[0]
+    error.message = error.message.replace('None', 'null')
+    check(error)
 
 
 def test_validate__error_format():

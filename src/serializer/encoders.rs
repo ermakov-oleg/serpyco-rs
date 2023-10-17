@@ -362,6 +362,7 @@ impl Encoder for EntityEncoder {
 pub struct TypedDictEncoder {
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for TypedDictEncoder {
@@ -403,26 +404,31 @@ impl Encoder for TypedDictEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let dict_ptr = ffi!(PyDict_New());
-        for field in &self.fields {
-            let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
-                Ok(val) => field.encoder.load(val, instance_path)?, // new obj or RC +1
-                Err(e) => {
-                    if field.required {
-                        return Err(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {} (err: {})",
-                            &field.dict_key, e
-                        )));
-                    } else {
-                        continue;
+        let py_value = PyValue::new(value);
+        if let Some(dict) = py_value.as_dict() {
+            let dict_ptr = ffi!(PyDict_New());
+            for field in &self.fields {
+                let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
+                    Ok(val) => {
+                        let instance_path = instance_path.push(field.dict_key_rs.clone());
+                        field.encoder.load(val, &instance_path)? // new obj or RC +1
+                    },
+                    Err(e) => {
+                        if field.required {
+                            return Err(missing_required_property(&field.dict_key_rs, instance_path));
+                        } else {
+                            continue;
+                        }
                     }
-                }
-            };
-            ffi!(PyDict_SetItem(dict_ptr, field.name.as_ptr(), val));
-            // key and val RC +1
-            ffi!(Py_DECREF(val));
+                };
+                ffi!(PyDict_SetItem(dict_ptr, field.name.as_ptr(), val));
+                // key and val RC +1
+                ffi!(Py_DECREF(val));
+            }
+            Ok(dict_ptr)
+        } else {
+            invalid_type!("object", py_value, instance_path)
         }
-        Ok(dict_ptr)
     }
 }
 

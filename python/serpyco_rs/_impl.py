@@ -19,6 +19,7 @@ from ._serpyco_rs import (
     TimeType,
     UUIDType,
     ValidationError,
+    TypedDictType,
 )
 
 

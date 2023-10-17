@@ -1,11 +1,9 @@
 import dataclasses
-from collections.abc import Callable, Mapping, Sequence
-from decimal import Decimal
+from collections.abc import Mapping, Sequence
 from enum import Enum, IntEnum
 from typing import (
     Any,
     Optional,
-    TypeVar,
     Union,
 )
 
@@ -28,16 +26,6 @@ class EnumType(Type):
 @dataclasses.dataclass
 class LiteralType(Type):
     args: Sequence[str]
-
-
-@dataclasses.dataclass
-class TypedDictType(Type):
-    name: str
-    fields: Sequence[Any]
-    # fields: Sequence[EntityField]
-    omit_none: bool = False
-    generics: Sequence[tuple[TypeVar, Any]] = tuple()
-    doc: Optional[str] = None
 
 
 @dataclasses.dataclass

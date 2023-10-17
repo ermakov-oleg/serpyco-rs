@@ -33,7 +33,6 @@ from ._describe_types import (
     OptionalType,
     RecursionHolder,
     TupleType,
-    TypedDictType,
     UnionType,
 )
 from ._impl import (
@@ -52,6 +51,7 @@ from ._impl import (
     StringType,
     TimeType,
     UUIDType,
+    TypedDictType,
 )
 from ._utils import to_camelcase
 from .metadata import (

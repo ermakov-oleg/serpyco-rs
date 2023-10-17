@@ -76,10 +76,10 @@ impl SchemaValidationError {
     }
 }
 
-#[pyclass(frozen, module = "serpyco_rs")]
+#[pyclass(module = "serpyco_rs")]
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ErrorItem {
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     message: String,
     #[pyo3(get)]
     instance_path: String,

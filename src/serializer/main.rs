@@ -8,7 +8,7 @@ use pyo3::types::{PyDict, PyString};
 
 use crate::jsonschema;
 use crate::python::{get_object_type, Type};
-use crate::serializer::encoders::{BooleanEncoder, FloatEncoder, IntEncoder, StringEncoder};
+use crate::serializer::encoders::{BooleanEncoder, FloatEncoder, IntEncoder, StringEncoder, TypedDictEncoder};
 use crate::validator::{Context, InstancePath, types};
 use crate::validator::types::{BaseType, EntityField};
 
@@ -201,18 +201,14 @@ pub fn get_encoder(
                 .replace(Encoders::Entity(encoder.clone()));
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
-        Type::TypedDict(type_info) => {
-            unimplemented!("TypedDict")
-            // let class_fields = type_info.getattr(py, "fields")?;
-            // let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
-            // let fields = iterate_on_fields(py, class_fields, encoder_state, ctx)?;
-            //
-            // let encoder = TypedDictEncoder { fields, omit_none };
-            // let python_object_id = type_info.as_ptr() as *const _ as usize;
-            // let val = encoder_state.entry(python_object_id).or_default();
-            // AtomicRefCell::<Option<Encoders>>::borrow_mut(val)
-            //     .replace(Encoders::TypedDict(encoder.clone()));
-            // old_wrap_with_custom_encoder(py, type_info, Box::new(encoder))?
+        Type::TypedDict(type_info, base_type, python_object_id) => {
+            let fields = iterate_on_fields(py, type_info.fields, encoder_state, ctx.clone())?;
+
+            let encoder = TypedDictEncoder { fields, omit_none: type_info.omit_none, ctx };
+            let val = encoder_state.entry(python_object_id).or_default();
+            AtomicRefCell::<Option<Encoders>>::borrow_mut(val)
+                .replace(Encoders::TypedDict(encoder.clone()));
+            wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::RecursionHolder(type_info) => {
             let inner_type = type_info.call_method0(py, "get_type")?;

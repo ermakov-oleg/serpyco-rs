@@ -26,6 +26,7 @@ fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<types::DateTimeType>()?;
     m.add_class::<types::DateType>()?;
     m.add_class::<types::EntityType>()?;
+    m.add_class::<types::TypedDictType>()?;
     m.add_class::<types::EntityField>()?;
     m.add_class::<types::DefaultValue>()?;
 
