@@ -1,19 +1,22 @@
 use std::fmt::{Debug, Formatter};
 
-use pyo3::{AsPyPointer, PyResult};
+use pyo3::{AsPyPointer, PyErr, PyResult};
 
 use crate::jsonschema::ser::ObjectType;
 use crate::python::macros::ffi;
-use crate::python::{obj_to_str, py_object_get_item, py_str_to_str};
+use crate::python::{obj_to_str, py_len, py_object_get_item, py_str_to_str};
 
 use super::py_types::get_object_type_from_object;
 
+/// Represents a Python value.
+/// This is a wrapper around a PyObject pointer.
 pub struct Value {
     py_object: *mut pyo3::ffi::PyObject,
     pub object_type: ObjectType,
 }
 
 impl Value {
+    /// Creates a new value from the given PyObject.
     pub fn new(py_object: *mut pyo3::ffi::PyObject) -> Self {
         Value {
             py_object,
@@ -23,10 +26,7 @@ impl Value {
 }
 
 impl Value {
-    pub fn is_valid_type(&self) -> bool {
-        !matches!(self.object_type, ObjectType::Unknown(_))
-    }
-
+    /// Returns the pointer to the underlying PyObject.
     pub fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
         self.py_object
     }
@@ -82,6 +82,7 @@ impl Value {
         }
     }
 
+    /// Represents as Dict value.
     pub fn as_dict(&self) -> Option<Dict> {
         if self.object_type == ObjectType::Dict {
             Some(Dict::new(self.py_object))
@@ -97,98 +98,81 @@ impl Value {
     }
 }
 
+
+/// Represents a Python array.
+/// This is a wrapper around a PyObject pointer.
 pub struct Array {
     py_object: *mut pyo3::ffi::PyObject,
 }
 
 impl Array {
+
+    /// Creates a new array from the given PyObject.
     pub fn new(py_object: *mut pyo3::ffi::PyObject) -> Self {
-        Array { py_object }
+        Array {
+            py_object,
+        }
+    }
+
+    /// Creates a new empty array with the given capacity.
+    pub fn new_with_capacity(capacity: isize) -> Self {
+        let py_object = ffi!(PyList_New(capacity));
+        Array {
+            py_object,
+        }
     }
 }
 
 impl Array {
+
+    /// Returns the pointer to the underlying PyObject.
+    #[inline]
+    pub fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
+        self.py_object
+    }
+
     /// Returns the length of the array.
     #[inline]
-    pub fn len(&self) -> usize {
-        ffi!(PyList_GET_SIZE(self.py_object)) as usize
+    pub fn len(&self) -> isize {
+        ffi!(PyList_GET_SIZE(self.py_object)) // rc not changed
     }
 
     /// Returns the value at the given index.
-    /// This method will return None if the index is out of bounds.
+    /// Will panic if the index is out of bounds.
     #[inline]
-    pub fn get(&self, index: usize) -> Option<Value> {
-        if index >= self.len() {
-            return None;
-        }
-        let item = ffi!(PyList_GET_ITEM(self.py_object, index as isize));
-        Some(Value::new(item))
+    pub fn get_item(&self, index: isize) -> Value {
+        let item = ffi!(PyList_GET_ITEM(self.py_object, index));  // rc not changed
+        Value::new(item)
+    }
+
+    /// Sets the value at the given index.
+    #[inline]
+    pub fn set(&mut self, index: isize, value: *mut pyo3::ffi::PyObject) {
+        ffi!(PyList_SetItem(self.py_object, index, value));
     }
 }
 
+
+/// Represents a Python dict.
+/// This is a wrapper around a PyObject pointer.
 pub struct Dict {
     py_object: *mut pyo3::ffi::PyObject,
 }
 
 impl Dict {
+    /// Creates a new dict from the given PyObject.
     pub fn new(py_object: *mut pyo3::ffi::PyObject) -> Self {
         Dict { py_object }
     }
 }
 
 impl Dict {
-    pub fn get(&self, key: *mut pyo3::ffi::PyObject,) -> Option<Value> {
+    /// Returns value of the given key.
+    pub fn get_item(&self, key: *mut pyo3::ffi::PyObject,) -> Option<Value> {
         let item = py_object_get_item(self.py_object, key);
         if let Ok(item) = item {
             return Some(Value::new(item));
         }
         None
-    }
-
-    pub fn keys(&self) -> Vec<Value> {
-        // let keys = self.py_object.keys();
-        let result = Vec::new();
-        // for key in keys {
-        //     result.push(Value::new(key))
-        // }
-        result
-    }
-}
-
-impl Debug for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let val = match &self.object_type {
-            ObjectType::Str => self.as_str().unwrap().to_string(),
-            ObjectType::Int => format!("{}", self.as_int().unwrap()),
-            ObjectType::Bool => format!("{}", self.as_bool().unwrap()),
-            ObjectType::Float => format!("{}", self.as_float().unwrap()),
-            ObjectType::List => format!("{:?}", self.as_array().unwrap()),
-            ObjectType::Dict => format!("{:?}", self.as_dict().unwrap()),
-            _ => "Invalid value".to_string(),
-        };
-        f.debug_struct("Value")
-            .field("object_type", &self.object_type)
-            .field("val", &val)
-            .finish()
-    }
-}
-
-impl Debug for Array {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut val = Vec::new();
-        for i in 0..self.len() {
-            let item = self.get(i).unwrap();
-            val.push(format!("{:?}", item));
-        }
-        f.debug_struct("PyArray").field("val", &val).finish()
-    }
-}
-
-impl Debug for Dict {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PyArray").finish()
-        // f.debug_map().entries(
-        //     self.keys().iter().map(|key| (format!("{:?}", key), format!("{:?}", self.get(key.py_object).unwrap())))
-        // ).finish()
     }
 }

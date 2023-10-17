@@ -124,16 +124,25 @@ class EntityType(BaseType):
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-"""
-/*
-@dataclasses.dataclass
-class TypedDictType(Type):
-    name: str
-    fields: Sequence[Any]
-    # fields: Sequence[EntityField]
-    omit_none: bool = False
-    generics: Sequence[tuple[TypeVar, Any]] = tuple()
-    doc: Optional[str] = None
 
-*/
-"""
+class TypedDictType(BaseType):
+    name: str
+    fields: Sequence[EntityField]
+    omit_none: bool
+    generics: Sequence[tuple[TypeVar, Any]]
+    doc: str | None
+
+    def __init__(
+            self,
+            name: str,
+            fields: Sequence[EntityField],
+            omit_none: bool = False,
+            generics: Sequence[tuple[TypeVar, Any]] | None = None,
+            doc: str | None = None,
+            custom_encoder: CustomEncoder[Any, Any] | None = None,
+    ): ...
+
+class ArrayType(BaseType):
+    item_type: BaseType
+    
+    def __init__(self, item_type: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...

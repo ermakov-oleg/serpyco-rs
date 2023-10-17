@@ -20,6 +20,7 @@ from ._serpyco_rs import (
     UUIDType,
     ValidationError,
     TypedDictType,
+    ArrayType,
 )
 
 

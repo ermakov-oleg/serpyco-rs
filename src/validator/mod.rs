@@ -7,4 +7,4 @@ pub mod validators;
 
 pub use context::{Context, InstancePath};
 pub use errors::raise_error;
-pub use value::Value;
+pub use value::{Value, Array};

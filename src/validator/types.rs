@@ -314,7 +314,7 @@ impl DefaultValue {
         }
     }
 
-    fn __eq__(&self, other: &Self, py: Python<'_>) -> bool {
+    fn __eq__(&self, other: &Self) -> bool {
         self == other
     }
 
@@ -413,7 +413,7 @@ impl EntityType {
         )
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
+    fn __repr__(&self) -> String {
         let fields = self.fields.iter().map(|f| f.__repr__()).collect::<Vec<String>>().join(", ");
         format!(
             "<EntityType: cls={:?}, name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
@@ -481,7 +481,7 @@ impl TypedDictType {
         )
     }
 
-    fn __repr__(&self, py: Python<'_>) -> String {
+    fn __repr__(&self) -> String {
         let fields = self.fields.iter().map(|f| f.__repr__()).collect::<Vec<String>>().join(", ");
         format!(
             "<TypedDictType: name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
@@ -558,5 +558,47 @@ impl EntityField {
 
     fn __repr__(&self) -> String {
         format!("<EntityField: name={:?}, dict_key={:?}, field_type={:?}, required={:?}, is_discriminator_field={:?}, default={:?}, default_factory={:?}, doc={:?}>", self.name.to_string(), self.dict_key.to_string(), self.field_type.to_string(), self.required, self.is_discriminator_field, self.default, self.default_factory, self.doc.to_string())
+    }
+}
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct ArrayType {
+    #[pyo3(get)]
+    pub item_type: Py<PyAny>,
+}
+
+#[pymethods]
+impl ArrayType {
+    #[new]
+    #[pyo3(signature = (item_type, custom_encoder=None))]
+    fn new(
+        item_type: &PyAny,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        (
+            ArrayType {
+                item_type: item_type.into(),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(
+            // todo: check all __eq__, it can contain base.__eq__
+            base.__eq__(base_other, py)?
+                && py_eq!(self_.item_type, other.item_type, py)
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<ArrayType: item_type={:?}>",
+            self.item_type.to_string(),
+        )
     }
 }

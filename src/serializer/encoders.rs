@@ -19,8 +19,9 @@ use crate::python::{
     py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
+use crate::python::Type::Array;
 use crate::validator::types::{DecimalType, FloatType, IntegerType, StringType};
-use crate::validator::{Context, Value as PyValue, InstancePath};
+use crate::validator::{Context, Value as PyValue, InstancePath, Array as PyArray};
 use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_type, missing_required_property};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
@@ -245,6 +246,7 @@ impl Encoder for DictionaryEncoder {
 #[derive(Debug, Clone)]
 pub struct ArrayEncoder {
     pub encoder: Box<TEncoder>,
+    pub ctx: Context,
 }
 
 impl Encoder for ArrayEncoder {
@@ -266,15 +268,20 @@ impl Encoder for ArrayEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let len = py_len(value)?;
-        let list = ffi!(PyList_New(len));
-        for i in 0..len {
-            let item = ffi!(PyList_GetItem(value, i)); // rc not changed
-            let val = self.encoder.load(item, instance_path)?;
-            // new obj or RC +1
-            ffi!(PyList_SetItem(list, i, val)); // rc not changed
+        let py_value = PyValue::new(value);
+        if let Some(val) = py_value.as_array() {
+            let len = val.len();
+            let mut array = PyArray::new_with_capacity(len);
+            for i in 0..len {
+                let item = val.get_item(i);
+                let instance_path = instance_path.push(i);
+                let val = self.encoder.load(item.as_ptr(), &instance_path)?;
+                array.set(i, val)
+            }
+            Ok(array.as_ptr())
+        } else {
+            invalid_type!("array", py_value, instance_path)
         }
-        Ok(list)
     }
 }
 
@@ -328,7 +335,7 @@ impl Encoder for EntityEncoder {
             let obj = create_new_object(self.cls.as_ptr())?;
 
             for field in &self.fields {
-                let val = match dict.get(field.dict_key.as_ptr()) {
+                let val = match dict.get_item(field.dict_key.as_ptr()) {
 
                     Some(val) => {
                         let instance_path = instance_path.push(field.dict_key_rs.clone());

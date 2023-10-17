@@ -2,7 +2,6 @@ use pyo3::ffi::PyObject;
 use pyo3::types::PyModule;
 use pyo3::Python;
 use pyo3::{AsPyPointer, Py, PyAny, PyResult};
-use std::any::Any;
 use std::os::raw::c_char;
 use std::sync::Once;
 
@@ -11,7 +10,6 @@ use super::py::py_object_get_attr;
 pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ENUM_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut OPTIONAL_TYPE: *mut PyObject = 0 as *mut PyObject;
-pub static mut ARRAY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -47,9 +45,9 @@ pub enum Type<Base = Option<BaseType>> {
     Date(DateType, Base),
     Entity(EntityType, Base, usize),
     TypedDict(TypedDictType, Base, usize),
+    Array(ArrayType, Base),
     Enum(Py<PyAny>),
     Optional(Py<PyAny>),
-    Array(Py<PyAny>),
     Dictionary(Py<PyAny>),
     Tuple(Py<PyAny>),
     UnionType(Py<PyAny>),
@@ -57,7 +55,7 @@ pub enum Type<Base = Option<BaseType>> {
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, FloatType, IntegerType, StringType, TimeType, TypedDictType, UUIDType};
+use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, FloatType, IntegerType, StringType, TimeType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -95,8 +93,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::TypedDict(t, base_type, python_object_id))
     } else if check_type!(type_info, OPTIONAL_TYPE) {
         Ok(Type::Optional(type_info.into()))
-    } else if check_type!(type_info, ARRAY_TYPE) {
-        Ok(Type::Array(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<ArrayType>() {
+        Ok(Type::Array(t, base_type))
     } else if check_type!(type_info, DICTIONARY_TYPE) {
         Ok(Type::Dictionary(type_info.into()))
     } else if check_type!(type_info, TUPLE_TYPE) {
@@ -126,7 +124,6 @@ pub fn init(py: Python<'_>) {
         BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
         ENUM_TYPE = get_attr_ptr!(describe, "EnumType");
         OPTIONAL_TYPE = get_attr_ptr!(describe, "OptionalType");
-        ARRAY_TYPE = get_attr_ptr!(describe, "ArrayType");
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");

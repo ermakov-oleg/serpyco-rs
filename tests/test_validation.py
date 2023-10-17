@@ -211,3 +211,13 @@ def test_typed_dict_validation__missing_field__whith_instance_path():
 
     s = Serializer(Bar)
     _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo')])
+
+
+def test_list_validation__invalid_type():
+    s = Serializer(list[int])
+    _check_errors(s, 'foo', [ErrorItem(message='"foo" is not of type "array"', instance_path='')])
+
+
+def test_list_validation__invalid_item_type():
+    s = Serializer(list[int])
+    _check_errors(s, [2, 3, 'foo'], [ErrorItem(message='"foo" is not of type "integer"', instance_path='2')])

@@ -29,6 +29,7 @@ fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<types::TypedDictType>()?;
     m.add_class::<types::EntityField>()?;
     m.add_class::<types::DefaultValue>()?;
+    m.add_class::<types::ArrayType>()?;
 
     // Errors
     m.add("ValidationError", py.get_type::<errors::ValidationError>())?;

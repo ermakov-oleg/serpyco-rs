@@ -185,7 +185,6 @@ def test_describe__dataclass__supported():
                 name='l',
                 field_type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
-                    is_sequence=False,
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -197,7 +196,6 @@ def test_describe__dataclass__supported():
                 name='m',
                 field_type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
-                    is_sequence=True,
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -265,7 +263,7 @@ def test_describe_dataclass__list_type__works_without_type_parameters():
         x: list
 
     assert describe_type(SomeEntity).fields[0].field_type == ArrayType(
-        item_type=AnyType(custom_encoder=None), is_sequence=False, custom_encoder=None
+        item_type=AnyType(custom_encoder=None), custom_encoder=None
     )
 
 
@@ -305,7 +303,7 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
 
     result: EntityType = describe_type(SomeEntity)
     assert result.fields[0].field_type == ArrayType(
-        item_type=AnyType(custom_encoder=None), is_sequence=False, custom_encoder=None
+        item_type=AnyType(custom_encoder=None), custom_encoder=None
     )
     assert result.generics == ((T, Any),)
 
@@ -322,7 +320,7 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
 
     result: EntityType = describe_type(SomeEntity[int])
     assert result.fields[0].field_type == ArrayType(
-        item_type=IntegerType(custom_encoder=None), is_sequence=False, custom_encoder=None
+        item_type=IntegerType(custom_encoder=None), custom_encoder=None
     )
     assert result.fields[1].field_type == EntityType(
         cls=SomeOtherEntity,
@@ -565,7 +563,6 @@ def test_describe__dataclass_field_format__parsed():
                 name='inner_entity',
                 dict_key='innerEntity',
                 field_type=ArrayType(
-                    is_sequence=False,
                     custom_encoder=None,
                     item_type=EntityType(
                         name=ANY,

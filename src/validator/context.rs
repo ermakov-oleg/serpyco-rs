@@ -29,7 +29,7 @@ pub enum PathChunk {
     /// Property name within a JSON object.
     Property(Box<str>),
     /// Index within a JSON array.
-    Index(usize),
+    Index(isize),
     /// JSON Schema keyword.
     Keyword(&'static str),
 }
@@ -133,9 +133,9 @@ impl From<&'static str> for PathChunk {
         PathChunk::Keyword(value)
     }
 }
-impl From<usize> for PathChunk {
+impl From<isize> for PathChunk {
     #[inline]
-    fn from(value: usize) -> Self {
+    fn from(value: isize) -> Self {
         PathChunk::Index(value)
     }
 }

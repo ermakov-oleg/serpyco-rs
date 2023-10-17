@@ -142,11 +142,10 @@ pub fn get_encoder(
                 }),
             )?
         }
-        Type::Array(type_info) => {
-            let item_type = get_object_type(type_info.getattr(py, "item_type")?.as_ref(py))?;
-            let encoder = get_encoder(py, item_type, encoder_state, ctx)?;
-
-            old_wrap_with_custom_encoder(py, type_info, Box::new(ArrayEncoder { encoder }))?
+        Type::Array(type_info, base_type) => {
+            let item_type = get_object_type(type_info.item_type.as_ref(py))?;
+            let encoder = get_encoder(py, item_type, encoder_state, ctx.clone())?;
+            wrap_with_custom_encoder(py, base_type, Box::new(ArrayEncoder { encoder, ctx }))?
         }
         Type::Tuple(type_info) => {
             let mut encoders = vec![];

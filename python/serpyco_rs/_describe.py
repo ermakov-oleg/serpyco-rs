@@ -25,7 +25,6 @@ from typing_extensions import NotRequired, Required, assert_never, get_args, is_
 
 from ._describe_types import (
     AnyType,
-    ArrayType,
     BytesType,
     DictionaryType,
     EnumType,
@@ -49,6 +48,7 @@ from ._impl import (
     FloatType,
     IntegerType,
     StringType,
+    ArrayType,
     TimeType,
     UUIDType,
     TypedDictType,
@@ -226,7 +226,6 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
         if t in {Sequence, list}:
             return ArrayType(
                 item_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType(custom_encoder=None)),
-                is_sequence=t is Sequence,
                 custom_encoder=custom_encoder,
             )
 

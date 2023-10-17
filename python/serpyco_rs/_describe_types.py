@@ -34,12 +34,6 @@ class OptionalType(Type):
 
 
 @dataclasses.dataclass
-class ArrayType(Type):
-    item_type: Type
-    is_sequence: bool
-
-
-@dataclasses.dataclass
 class DictionaryType(Type):
     key_type: Type
     value_type: Type
