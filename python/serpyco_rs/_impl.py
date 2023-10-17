@@ -22,6 +22,7 @@ from ._serpyco_rs import (
     TypedDictType,
     ArrayType,
     EnumType,
+    OptionalType,
 )
 
 

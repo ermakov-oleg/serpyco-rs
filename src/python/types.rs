@@ -9,7 +9,6 @@ use super::py::py_object_get_attr;
 
 pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
 
-pub static mut OPTIONAL_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -47,7 +46,7 @@ pub enum Type<Base = Option<BaseType>> {
     TypedDict(TypedDictType, Base, usize),
     Array(ArrayType, Base),
     Enum(EnumType, Base),
-    Optional(Py<PyAny>),
+    Optional(OptionalType, Base),
     Dictionary(Py<PyAny>),
     Tuple(Py<PyAny>),
     UnionType(Py<PyAny>),
@@ -55,7 +54,7 @@ pub enum Type<Base = Option<BaseType>> {
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, EnumType, FloatType, IntegerType, StringType, TimeType, TypedDictType, UUIDType};
+use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -91,8 +90,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     } else if let Ok(t) = type_info.extract::<TypedDictType>() {
         let python_object_id = type_info.as_ptr() as *const _ as usize;
         Ok(Type::TypedDict(t, base_type, python_object_id))
-    } else if check_type!(type_info, OPTIONAL_TYPE) {
-        Ok(Type::Optional(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<OptionalType>() {
+        Ok(Type::Optional(t, base_type))
     } else if let Ok(t) = type_info.extract::<ArrayType>() {
         Ok(Type::Array(t, base_type))
     } else if check_type!(type_info, DICTIONARY_TYPE) {
@@ -122,7 +121,6 @@ pub fn init(py: Python<'_>) {
         };
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
         BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
-        OPTIONAL_TYPE = get_attr_ptr!(describe, "OptionalType");
         DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");

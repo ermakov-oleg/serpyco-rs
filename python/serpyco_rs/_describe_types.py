@@ -1,10 +1,8 @@
 import dataclasses
 from collections.abc import Mapping, Sequence
-from enum import Enum, IntEnum
 from typing import (
     Any,
     Optional,
-    Union,
 )
 
 
@@ -21,11 +19,6 @@ class BytesType(Type):
 @dataclasses.dataclass
 class LiteralType(Type):
     args: Sequence[str]
-
-
-@dataclasses.dataclass
-class OptionalType(Type):
-    inner: Type
 
 
 @dataclasses.dataclass

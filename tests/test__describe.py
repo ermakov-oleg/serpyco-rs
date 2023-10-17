@@ -151,7 +151,7 @@ def test_describe__dataclass__supported():
             ),
             EntityField(
                 name='j',
-                field_type=EnumType(cls=SomeEnum, custom_encoder=None),
+                field_type=EnumType(cls=SomeEnum, items=[i.value for i in SomeEnum], custom_encoder=None),
                 doc=None,
                 default=NOT_SET,
                 default_factory=NOT_SET,

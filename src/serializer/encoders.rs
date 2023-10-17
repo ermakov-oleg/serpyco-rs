@@ -497,12 +497,14 @@ impl Encoder for EnumEncoder {
 #[derive(Debug, Clone)]
 pub struct OptionalEncoder {
     pub(crate) encoder: Box<TEncoder>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for OptionalEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        if is_none(value) {
+        let py_value = PyValue::new(value);
+        if py_value.is_none() {
             Ok(get_none())
         } else {
             self.encoder.dump(value)
@@ -511,7 +513,8 @@ impl Encoder for OptionalEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        if is_none(value) {
+        let py_value = PyValue::new(value);
+        if py_value.is_none() {
             Ok(get_none())
         } else {
             self.encoder.load(value, instance_path)

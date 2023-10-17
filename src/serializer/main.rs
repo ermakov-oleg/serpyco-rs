@@ -119,10 +119,10 @@ pub fn get_encoder(
         Type::Bytes(type_info) | Type::Any(type_info) | Type::LiteralType(type_info) => {
             old_wrap_with_custom_encoder(py, type_info, Box::new(NoopEncoder))?
         }
-        Type::Optional(type_info) => {
-            let inner = get_object_type(type_info.getattr(py, "inner")?.as_ref(py))?;
-            let encoder = get_encoder(py, inner, encoder_state, ctx)?;
-            old_wrap_with_custom_encoder(py, type_info, Box::new(OptionalEncoder { encoder }))?
+        Type::Optional(type_info, base_type) => {
+            let inner = get_object_type(type_info.inner.as_ref(py))?;
+            let encoder = get_encoder(py, inner, encoder_state, ctx.clone())?;
+            wrap_with_custom_encoder(py, base_type, Box::new(OptionalEncoder { encoder, ctx }))?
         }
         Type::Dictionary(type_info) => {
             let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;

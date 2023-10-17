@@ -691,3 +691,43 @@ impl<'a> From<&'a Vec<EnumItem>> for EnumItems<'a> {
     }
 }
 
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct OptionalType {
+    #[pyo3(get)]
+    pub inner: Py<PyAny>,
+}
+
+#[pymethods]
+impl OptionalType {
+    #[new]
+    #[pyo3(signature = (inner, custom_encoder=None))]
+    fn new(
+        inner: &PyAny,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        (
+            OptionalType {
+                inner: inner.into(),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(
+            base.__eq__(base_other, py)?
+                && py_eq!(self_.inner, other.inner, py)
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<OptionalType: inner={:?}>",
+            self.inner.to_string(),
+        )
+    }
+}

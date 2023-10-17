@@ -28,7 +28,6 @@ from ._describe_types import (
     BytesType,
     DictionaryType,
     LiteralType,
-    OptionalType,
     RecursionHolder,
     TupleType,
     UnionType,
@@ -52,6 +51,7 @@ from ._impl import (
     UUIDType,
     TypedDictType,
     EnumType,
+    OptionalType,
 )
 from ._utils import to_camelcase
 from .metadata import (

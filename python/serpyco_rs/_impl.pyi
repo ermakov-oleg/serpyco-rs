@@ -154,3 +154,10 @@ class EnumType(BaseType):
     items: list[Any]
 
     def __init__(self, cls: type[Enum | IntEnum], items: list[Any], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+
+
+class OptionalType(BaseType):
+    inner: BaseType
+
+    def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+
