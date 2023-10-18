@@ -253,7 +253,7 @@ impl Encoder for DictionaryEncoder {
             let mut result_dict = PyDict::new_empty();
             for i in dict.iter()? {
                 let (k, v) = i?;
-                let instance_path = instance_path.push(k.to_string()?);
+                let instance_path = instance_path.push(&k);
                 let key = self.key_encoder.load(k.as_ptr(), &instance_path)?;
                 let value = self.value_encoder.load(v.as_ptr(), &instance_path)?;
                 result_dict.set(key, value);

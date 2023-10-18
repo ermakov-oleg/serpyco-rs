@@ -1,3 +1,5 @@
+use crate::validator::Value;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
     // pub try_cast: bool,
@@ -9,19 +11,19 @@ impl Context {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PathChunk {
+#[derive(Clone, Debug)]
+pub enum PathChunk<'a> {
     /// Property name within a JSON object.
     Property(Box<str>),
     /// Index within a JSON array.
     Index(isize),
-    /// JSON Schema keyword.
-    Keyword(&'static str),
+    /// Python value
+    PropertyPyValue(&'a Value),
 }
 
 #[derive(Debug, Clone)]
 pub struct InstancePath<'a> {
-    pub(crate) chunk: Option<PathChunk>,
+    pub(crate) chunk: Option<PathChunk<'a>>,
     pub(crate) parent: Option<&'a InstancePath<'a>>,
 }
 
@@ -34,7 +36,7 @@ impl<'a> InstancePath<'a> {
     }
 
     #[inline]
-    pub(crate) fn push(&'a self, chunk: impl Into<PathChunk>) -> Self {
+    pub(crate) fn push(&'a self, chunk: impl Into<PathChunk<'a>>) -> Self {
         InstancePath {
             chunk: Some(chunk.into()),
             parent: Some(self),
@@ -59,21 +61,23 @@ impl<'a> InstancePath<'a> {
     }
 }
 
-impl From<String> for PathChunk {
+impl<'a> From<String> for PathChunk<'a> {
     #[inline]
     fn from(value: String) -> Self {
         PathChunk::Property(value.into_boxed_str())
     }
 }
-impl From<&'static str> for PathChunk {
-    #[inline]
-    fn from(value: &'static str) -> Self {
-        PathChunk::Keyword(value)
-    }
-}
-impl From<isize> for PathChunk {
+
+impl<'a> From<isize> for PathChunk<'a> {
     #[inline]
     fn from(value: isize) -> Self {
         PathChunk::Index(value)
+    }
+}
+
+impl<'a> From<&'a Value> for PathChunk<'a> {
+    #[inline]
+    fn from(value: &'a Value) -> Self {
+        PathChunk::PropertyPyValue(value)
     }
 }

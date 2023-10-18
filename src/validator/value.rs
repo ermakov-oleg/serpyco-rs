@@ -14,6 +14,7 @@ use super::py_types::get_object_type_from_object;
 
 /// Represents a Python value.
 /// This is a wrapper around a PyObject pointer.
+#[derive(Debug, Clone)]
 pub struct Value {
     py_object: *mut pyo3::ffi::PyObject,
     pub object_type: ObjectType,
