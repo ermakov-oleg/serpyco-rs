@@ -26,7 +26,7 @@ jsonschema = { version = "0.17", default_features = false, features = ["draft202
 uuid = "1"
 
 [build-dependencies]
-pyo3-build-config = { version = "0.19", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.20", features = ["resolve-config"] }
 
 [profile.release]
 codegen-units = 1

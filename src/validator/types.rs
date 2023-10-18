@@ -731,3 +731,56 @@ impl OptionalType {
         )
     }
 }
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct DictionaryType {
+    #[pyo3(get)]
+    pub key_type: Py<PyAny>,
+    #[pyo3(get)]
+    pub value_type: Py<PyAny>,
+    #[pyo3(get)]
+    pub omit_none: bool,
+}
+
+#[pymethods]
+impl DictionaryType {
+    #[new]
+    #[pyo3(signature = (key_type, value_type, omit_none=false, custom_encoder=None))]
+    fn new(
+        key_type: &PyAny,
+        value_type: &PyAny,
+        omit_none: bool,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        (
+            DictionaryType {
+                key_type: key_type.into(),
+                value_type: value_type.into(),
+                omit_none,
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(
+            base.__eq__(base_other, py)?
+                && py_eq!(self_.key_type, other.key_type, py)
+                && py_eq!(self_.value_type, other.value_type, py)
+                && self_.omit_none == other.omit_none
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<DictionaryType: key_type={:?}, value_type={:?}, omit_none={:?}>",
+            self.key_type.to_string(),
+            self.value_type.to_string(),
+            self.omit_none,
+        )
+    }
+}

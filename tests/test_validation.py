@@ -170,7 +170,7 @@ def test_dataclass_validation__missing_field():
     _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='')])
 
 
-def test_dataclass_validation__missing_field__whith_instance_path():
+def test_dataclass_validation__missing_field__with_instance_path():
     @dataclass
     class Foo:
         a: int
@@ -203,7 +203,7 @@ def test_typed_dict_validation__missing_field():
     _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='')])
 
 
-def test_typed_dict_validation__missing_field__whith_instance_path():
+def test_typed_dict_validation__missing_field__with_instance_path():
     class Foo(TypedDict):
         a: int
 
@@ -231,3 +231,21 @@ def test_enum_validation__invalid_type():
 
     s = Serializer(A)
     _check_errors(s, 'bar', [ErrorItem(message='"bar" is not one of [1,"foo"]', instance_path='')])
+
+
+def test_dict_validation__invalid_type():
+    s = Serializer(dict[str, int])
+    _check_errors(s, 'foo', [ErrorItem(message='"foo" is not of type "object"', instance_path='')])
+
+
+def test_dict_validation__invalid_value_type():
+    s = Serializer(dict[str, int])
+    _check_errors(s, {'foo': 1, 'bar': '2'}, [ErrorItem(message='"2" is not of type "integer"', instance_path='bar')])
+
+
+def test_dict_validation__invalid_key_type():
+    s = Serializer(dict[str, int])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load({1: 1}, validate=False)
+
+    assert e.value.errors == [ErrorItem(message='1 is not of type "string"', instance_path='1')]

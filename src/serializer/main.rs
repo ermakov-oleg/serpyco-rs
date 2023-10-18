@@ -124,21 +124,21 @@ pub fn get_encoder(
             let encoder = get_encoder(py, inner, encoder_state, ctx.clone())?;
             wrap_with_custom_encoder(py, base_type, Box::new(OptionalEncoder { encoder, ctx }))?
         }
-        Type::Dictionary(type_info) => {
-            let key_type = get_object_type(type_info.getattr(py, "key_type")?.as_ref(py))?;
-            let value_type = get_object_type(type_info.getattr(py, "value_type")?.as_ref(py))?;
-            let omit_none = type_info.getattr(py, "omit_none")?.is_true(py)?;
+        Type::Dictionary(type_info, base_type) => {
+            let key_type = get_object_type(type_info.key_type.as_ref(py))?;
+            let value_type = get_object_type(type_info.value_type.as_ref(py))?;
 
             let key_encoder = get_encoder(py, key_type, encoder_state, ctx.clone())?;
-            let value_encoder = get_encoder(py, value_type, encoder_state, ctx)?;
+            let value_encoder = get_encoder(py, value_type, encoder_state, ctx.clone())?;
 
-            old_wrap_with_custom_encoder(
+            wrap_with_custom_encoder(
                 py,
-                type_info,
+                base_type,
                 Box::new(DictionaryEncoder {
                     key_encoder,
                     value_encoder,
-                    omit_none,
+                    omit_none: type_info.omit_none,
+                    ctx,
                 }),
             )?
         }

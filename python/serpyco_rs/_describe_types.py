@@ -22,14 +22,6 @@ class LiteralType(Type):
 
 
 @dataclasses.dataclass
-class DictionaryType(Type):
-    key_type: Type
-    value_type: Type
-    is_mapping: bool
-    omit_none: bool = False
-
-
-@dataclasses.dataclass
 class TupleType(Type):
     item_types: Sequence[Type]
 

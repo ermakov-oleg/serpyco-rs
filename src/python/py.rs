@@ -219,7 +219,7 @@ impl Iterator for PyObjectIterator {
 }
 
 #[inline]
-fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
+pub(crate) fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
     NonNull::new(ptr).map(|p| p.as_ptr())
 }
 

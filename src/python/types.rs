@@ -9,7 +9,6 @@ use super::py::py_object_get_attr;
 
 pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
 
-pub static mut DICTIONARY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut RECURSION_HOLDER_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -47,14 +46,14 @@ pub enum Type<Base = Option<BaseType>> {
     Array(ArrayType, Base),
     Enum(EnumType, Base),
     Optional(OptionalType, Base),
-    Dictionary(Py<PyAny>),
+    Dictionary(DictionaryType, Base),
     Tuple(Py<PyAny>),
     UnionType(Py<PyAny>),
     LiteralType(Py<PyAny>),
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TypedDictType, UUIDType};
+use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -94,8 +93,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::Optional(t, base_type))
     } else if let Ok(t) = type_info.extract::<ArrayType>() {
         Ok(Type::Array(t, base_type))
-    } else if check_type!(type_info, DICTIONARY_TYPE) {
-        Ok(Type::Dictionary(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<DictionaryType>() {
+        Ok(Type::Dictionary(t, base_type))
     } else if check_type!(type_info, TUPLE_TYPE) {
         Ok(Type::Tuple(type_info.into()))
     } else if check_type!(type_info, ANY_TYPE) {
@@ -121,7 +120,6 @@ pub fn init(py: Python<'_>) {
         };
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
         BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
-        DICTIONARY_TYPE = get_attr_ptr!(describe, "DictionaryType");
         TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
         UNION_TYPE = get_attr_ptr!(describe, "UnionType");

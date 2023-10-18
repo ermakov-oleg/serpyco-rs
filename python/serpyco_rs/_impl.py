@@ -23,6 +23,7 @@ from ._serpyco_rs import (
     ArrayType,
     EnumType,
     OptionalType,
+    DictionaryType,
 )
 
 

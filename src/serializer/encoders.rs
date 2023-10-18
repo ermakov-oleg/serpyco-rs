@@ -19,16 +19,12 @@ use crate::python::{
     py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
-use crate::python::Type::Array;
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::{Context, Value as PyValue, InstancePath, Array as PyArray};
+use crate::validator::{Context, Value as PyValue, InstancePath, Array as PyArray, Dict as PyDict};
 use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_enum_item, invalid_type, missing_required_property};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
-// Todo:
-//  * add context to all encoders
-//  * added object path to ValidationError
 
 pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
@@ -199,6 +195,7 @@ pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,
     pub(crate) value_encoder: Box<TEncoder>,
     pub(crate) omit_none: bool,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for DictionaryEncoder {
@@ -224,22 +221,20 @@ impl Encoder for DictionaryEncoder {
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let dict_ptr = ffi!(PyDict_New());
-
-        for i in iter_over_dict_items(value)? {
-            // items RC +1
-            let item = i?;
-            let key = self.key_encoder.load(py_tuple_get_item(item, 0)?, instance_path)?; // new obj or RC +1
-            let value = self.value_encoder.load(py_tuple_get_item(item, 1)?, instance_path)?;
-            // new obj or RC +1
-            ffi!(PyDict_SetItem(dict_ptr, key, value));
-            // key and val or RC +1
-            ffi!(Py_DECREF(key));
-            ffi!(Py_DECREF(value));
-            ffi!(Py_DECREF(item));
+        let py_value = PyValue::new(value);
+        if let Some(dict) = py_value.as_dict() {
+            let mut result_dict = PyDict::new_empty();
+            for i in dict.iter()? {
+                let (k, v) = i?;
+                let instance_path = instance_path.push(k.to_string()?);
+                let key = self.key_encoder.load(k.as_ptr(), &instance_path)?;
+                let value = self.value_encoder.load(v.as_ptr(), &instance_path)?;
+                result_dict.set(key, value);
+            }
+            Ok(result_dict.as_ptr())
+        } else {
+            invalid_type!("object", py_value, instance_path)
         }
-
-        Ok(dict_ptr)
     }
 }
 

@@ -161,3 +161,16 @@ class OptionalType(BaseType):
 
     def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
+
+class DictionaryType(BaseType):
+    key_type: BaseType
+    value_type: BaseType
+    omit_none: bool
+    
+    def __init__(
+        self,
+        key_type: BaseType,
+        value_type: BaseType,
+        omit_none: bool = False,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+    ): ...

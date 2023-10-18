@@ -26,7 +26,6 @@ from typing_extensions import NotRequired, Required, assert_never, get_args, is_
 from ._describe_types import (
     AnyType,
     BytesType,
-    DictionaryType,
     LiteralType,
     RecursionHolder,
     TupleType,
@@ -52,6 +51,7 @@ from ._impl import (
     TypedDictType,
     EnumType,
     OptionalType,
+    DictionaryType,
 )
 from ._utils import to_camelcase
 from .metadata import (
@@ -233,7 +233,6 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
             return DictionaryType(
                 key_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType(custom_encoder=None)),
                 value_type=(describe_type(annotation_wrapper(args[1]), meta) if args else AnyType(custom_encoder=None)),
-                is_mapping=t is Mapping,
                 omit_none=none_format.omit,
                 custom_encoder=custom_encoder,
             )
