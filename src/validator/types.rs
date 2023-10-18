@@ -1,9 +1,9 @@
 use std::fmt;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyNone, PyTuple};
+use pyo3::types::{PyNone, PyTuple,};
 
-use super::value::Value;
+use super::value::{Value, Sequence};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -616,7 +616,7 @@ impl EnumType {
         let mut enum_items = vec![];
         let py_items = Value::new(items.as_ptr());
         if let Some(array) = py_items.as_array() {
-            for i in 0..array.len() {
+            for i in 0..array.len().expect("array length") {
                 let item = array.get_item(i);
                 if let Some(str) = item.as_str() {
                     enum_items.push(EnumItem::String(str.to_string()));
@@ -757,5 +757,51 @@ impl DictionaryType {
             self.value_type.to_string(),
             self.omit_none,
         )
+    }
+}
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct TupleType {
+    #[pyo3(get)]
+    pub item_types: Vec<Py<PyAny>>,
+}
+
+#[pymethods]
+impl TupleType {
+    #[new]
+    #[pyo3(signature = (item_types, custom_encoder=None))]
+    fn new(item_types: Vec<&PyAny>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (
+            TupleType {
+                item_types: item_types.into_iter().map(|x| x.into()).collect(),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)? &&
+               self_.item_types.len() == other.item_types.len()
+               && self_.item_types
+                .iter()
+                .zip(other.item_types.iter())
+                .all(
+                    |(a, b)|  a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)
+                )
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        let item_types = self
+            .item_types
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<String>>()
+            .join(", ");
+        format!("<TupleType: item_types={:?}>", item_types)
     }
 }

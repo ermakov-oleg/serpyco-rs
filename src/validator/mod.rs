@@ -7,4 +7,4 @@ mod value;
 
 pub use context::{Context, InstancePath};
 pub use errors::raise_error;
-pub use value::{Array, Dict, Value};
+pub use value::{Array, Dict, Value, Sequence, MutableSequence, Tuple};

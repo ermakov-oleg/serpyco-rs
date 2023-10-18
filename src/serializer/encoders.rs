@@ -20,11 +20,8 @@ use crate::python::{
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::validators::{
-    check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_enum_item,
-    invalid_type, missing_required_property,
-};
-use crate::validator::{Array as PyArray, Context, Dict as PyDict, InstancePath, Value as PyValue};
+use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_sequence_size, check_upper_bound, invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property};
+use crate::validator::{Array as PyArray, Context, Dict as PyDict, InstancePath, Value as PyValue, Sequence, MutableSequence, Tuple as PyTuple};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
@@ -133,7 +130,7 @@ impl Encoder for DecimalEncoder {
         if let Some(val) = val {
             check_lower_bound(val, self.type_info.min, instance_path)?;
             check_upper_bound(val, self.type_info.max, instance_path)?;
-            let result = to_decimal(value).unwrap(); // todo: handle error
+            let result = to_decimal(value).expect("decimal");
             Ok(result)
         } else {
             invalid_type!("decimal", py_val, instance_path)
@@ -249,32 +246,26 @@ pub struct ArrayEncoder {
 impl Encoder for ArrayEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let len = py_len(value)?;
-
-        let list = ffi!(PyList_New(len));
-
-        for i in 0..len {
-            let item = ffi!(PyList_GetItem(value, i)); // rc not changed
-            let val = self.encoder.dump(item)?;
-            // new obj or RC +1
-            ffi!(PyList_SetItem(list, i, val)); // rc not changed
+        let py_val = PyValue::new(value);
+        match py_val.as_array() {
+            Some(seq) => {
+                let array: PyArray = seq.map_into(&|_, item| self.encoder.dump(item))?;
+                Ok(array.as_ptr())
+            }
+            None => {
+                invalid_type_dump!("array", py_val)
+            }
         }
-
-        Ok(list)
     }
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         if let Some(val) = py_value.as_array() {
-            let len = val.len();
-            let mut array = PyArray::new_with_capacity(len);
-            for i in 0..len {
-                let item = val.get_item(i);
+            let array: PyArray = val.map_into(&|i, item| {
                 let instance_path = instance_path.push(i);
-                let val = self.encoder.load(item.as_ptr(), &instance_path)?;
-                array.set(i, val)
-            }
+                self.encoder.load(item, &instance_path)
+            })?;
             Ok(array.as_ptr())
         } else {
             invalid_type!("array", py_value, instance_path)
@@ -526,48 +517,41 @@ impl Encoder for OptionalEncoder {
 #[derive(Debug, Clone)]
 pub struct TupleEncoder {
     pub(crate) encoders: Vec<Box<TEncoder>>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for TupleEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let len = py_len(value)?;
-        if len != self.encoders.len() as isize {
-            return Err(ValidationError::new_err(
-                "Invalid number of items for tuple",
-            ));
+        let py_value = PyValue::new(value);
+        match py_value.as_sequence() {
+            Some(seq) => {
+                check_sequence_size(&seq, self.encoders.len() as isize, None)?;
+                let array: PyArray = seq.map_into(&|i, item| {
+                    self.encoders[i as usize].dump(item)
+                })?;
+                Ok(array.as_ptr())
+            }
+            None => {
+                invalid_type_dump!("sequence", py_value)
+            }
         }
-        let list = ffi!(PyList_New(len));
-        for i in 0..len {
-            let item = ffi!(PySequence_GetItem(value, i)); // RC +1
-            let val = self.encoders[i as usize].dump(item)?;
-            // new obj or RC +1
-            ffi!(PyList_SetItem(list, i, val));
-            // RC not changed
-            ffi!(Py_DECREF(item));
-        }
-        Ok(list)
     }
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let len = py_len(value)?;
-        if len != self.encoders.len() as isize {
-            return Err(ValidationError::new_err(
-                "Invalid number of items for tuple",
-            ));
+        let py_value = PyValue::new(value);
+        match py_value.as_sequence() {
+            None => { invalid_type!("sequence", py_value, instance_path) }
+            Some(val) => {
+                check_sequence_size(&val, self.encoders.len() as isize, Some(instance_path))?;
+                let tuple: PyTuple = val.map_into(&|i, item| {
+                    let instance_path = instance_path.push(i);
+                    self.encoders[i as usize].load(item, &instance_path)
+                })?;
+                Ok(tuple.as_ptr())
+            }
         }
-
-        let tuple = ffi!(PyTuple_New(len));
-        for i in 0..len {
-            let item = ffi!(PySequence_GetItem(value, i)); // RC +1
-            let val = self.encoders[i as usize].load(item, instance_path)?;
-            // new obj or RC +1
-            ffi!(PyTuple_SetItem(tuple, i, val));
-            // RC not changed
-            ffi!(Py_DECREF(item));
-        }
-        Ok(tuple)
     }
 }
 

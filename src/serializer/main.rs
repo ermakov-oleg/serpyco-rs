@@ -149,15 +149,15 @@ pub fn get_encoder(
             let encoder = get_encoder(py, item_type, encoder_state, ctx.clone())?;
             wrap_with_custom_encoder(py, base_type, Box::new(ArrayEncoder { encoder, ctx }))?
         }
-        Type::Tuple(type_info) => {
+        Type::Tuple(type_info, base_type) => {
             let mut encoders = vec![];
-            for item_type in type_info.getattr(py, "item_types")?.as_ref(py).iter()? {
-                let item_type = item_type?;
+            for item_type in type_info.item_types {
+                let item_type = item_type.as_ref(py);
                 let encoder =
                     get_encoder(py, get_object_type(item_type)?, encoder_state, ctx.clone())?;
                 encoders.push(encoder);
             }
-            old_wrap_with_custom_encoder(py, type_info, Box::new(TupleEncoder { encoders }))?
+            wrap_with_custom_encoder(py, base_type, Box::new(TupleEncoder { encoders, ctx }))?
         }
         Type::UnionType(type_info) => {
             let dump_discriminator_raw = type_info.getattr(py, "dump_discriminator")?;

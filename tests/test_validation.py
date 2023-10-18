@@ -248,3 +248,30 @@ def test_dict_validation__invalid_key_type():
         s.load({1: 1}, validate=False)
 
     assert e.value.errors == [ErrorItem(message='1 is not of type "string"', instance_path='1')]
+
+
+def test_tuple_validation__invalid_type():
+    s = Serializer(tuple[int, str])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load('foo', validate=False)
+
+    assert e.value.errors == [ErrorItem(message='"foo" is not of type "sequence"', instance_path='')]
+
+
+def test_tuple_validation__invalid_item_type():
+    s = Serializer(tuple[int, str])
+    _check_errors(s, [1, 2], [ErrorItem(message='2 is not of type "string"', instance_path='1')])
+
+
+def test_tuple_validation__invalid_length():
+    s = Serializer(tuple[int, str])
+
+    with pytest.raises(SchemaValidationError) as e:
+        s.load([1], validate=False)
+
+    assert e.value.errors == [ErrorItem(message='[1] has less than 2 items', instance_path='')]
+
+    with pytest.raises(SchemaValidationError) as e:
+        s.load([1, 'foo', 3], validate=False)
+
+    assert e.value.errors == [ErrorItem(message="[1, 'foo', 3] has more than 2 items", instance_path='')]

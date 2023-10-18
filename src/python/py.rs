@@ -41,7 +41,7 @@ pub(crate) fn get_value_attr(value: *mut ffi::PyObject) -> PyResult<*mut ffi::Py
 }
 
 #[inline]
-pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<Py_ssize_t> {
+pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<isize> {
     let v = ffi!(PyObject_Size(obj));
     if v == -1 {
         Err(Python::with_gil(PyErr::fetch))

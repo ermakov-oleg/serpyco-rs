@@ -33,6 +33,7 @@ fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<types::EnumType>()?;
     m.add_class::<types::OptionalType>()?;
     m.add_class::<types::DictionaryType>()?;
+    m.add_class::<types::TupleType>()?;
 
     // Errors
     m.add("ValidationError", py.get_type::<errors::ValidationError>())?;

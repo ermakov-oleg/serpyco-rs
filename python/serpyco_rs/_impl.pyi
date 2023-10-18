@@ -172,3 +172,9 @@ class DictionaryType(BaseType):
         omit_none: bool = False,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
+
+
+class TupleType(BaseType):
+    item_types: list[BaseType]
+    
+    def __init__(self, item_types: list[BaseType], custom_encoder: CustomEncoder[Any, Any] | None = None): ...

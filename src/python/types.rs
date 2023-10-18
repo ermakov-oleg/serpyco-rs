@@ -9,7 +9,6 @@ use super::py::py_object_get_attr;
 
 pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
 
-pub static mut TUPLE_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut RECURSION_HOLDER_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut UNION_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -47,23 +46,19 @@ pub enum Type<Base = Option<BaseType>> {
     Enum(EnumType, Base),
     Optional(OptionalType, Base),
     Dictionary(DictionaryType, Base),
-    Tuple(Py<PyAny>),
+    Tuple(TupleType, Base),
     UnionType(Py<PyAny>),
     LiteralType(Py<PyAny>),
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{
-    ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, DictionaryType,
-    EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType,
-    TypedDictType, UUIDType,
-};
+use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
     if let Err(e) = &base_type {
         // todo: Raise error, after all types are implemented
-        println!("base_type: {:?}", e);
+        // println!("base_type: {:?}", e);
     }
     let base_type = base_type.ok();
 
@@ -99,8 +94,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::Array(t, base_type))
     } else if let Ok(t) = type_info.extract::<DictionaryType>() {
         Ok(Type::Dictionary(t, base_type))
-    } else if check_type!(type_info, TUPLE_TYPE) {
-        Ok(Type::Tuple(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<TupleType>() {
+        Ok(Type::Tuple(t, base_type))
     } else if check_type!(type_info, ANY_TYPE) {
         Ok(Type::Any(type_info.into()))
     } else if check_type!(type_info, RECURSION_HOLDER_TYPE) {
@@ -124,7 +119,6 @@ pub fn init(py: Python<'_>) {
         };
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
         BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
-        TUPLE_TYPE = get_attr_ptr!(describe, "TupleType");
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
         UNION_TYPE = get_attr_ptr!(describe, "UnionType");
         LITERAL_TYPE = get_attr_ptr!(describe, "LiteralType");

@@ -28,7 +28,6 @@ from ._describe_types import (
     BytesType,
     LiteralType,
     RecursionHolder,
-    TupleType,
     UnionType,
 )
 from ._impl import (
@@ -52,6 +51,7 @@ from ._impl import (
     TimeType,
     TypedDictType,
     UUIDType,
+    TupleType,
 )
 from ._utils import to_camelcase
 from .metadata import (

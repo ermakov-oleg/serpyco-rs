@@ -24,6 +24,7 @@ from ._serpyco_rs import (
     TypedDictType,
     UUIDType,
     ValidationError,
+    TupleType,
 )
 
 

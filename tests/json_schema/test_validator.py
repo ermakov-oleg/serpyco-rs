@@ -232,6 +232,8 @@ def test_validate__validation_error(cls, value, check):
     # Some formats differ between jsonschema and serpyco_rs
     error = exc_info_new.value.errors[0]
     error.message = error.message.replace('None', 'null')
+    error.message = error.message.replace("['1', 1, True, 0]", '["1",1,true,0]')
+    error.message = error.message.replace("['1']", '["1"]')
     check(error)
 
 

@@ -1,5 +1,6 @@
+use std::cmp::Ordering;
 use crate::validator::types::EnumItems;
-use crate::validator::{raise_error, InstancePath, Value};
+use crate::validator::{raise_error, InstancePath, Value, Sequence};
 use pyo3::{PyErr, PyResult};
 use std::fmt::Display;
 
@@ -73,6 +74,28 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
     .unwrap_err()
 }
 
+pub fn check_sequence_size(val: &SequenceImpl, size: isize, instance_path: Option<&InstancePath>) -> PyResult<()> {
+    let len = val.len()?;
+    match len.cmp(&size) {
+        Ordering::Equal => Ok(()),
+        Ordering::Less => {
+            let instance_path = instance_path.map(|i| i.clone()).unwrap_or(InstancePath::new());
+            raise_error(
+                format!(r#"{} has less than {} items"#, val, size),
+                &instance_path,
+            )
+        },
+        Ordering::Greater => {
+            let instance_path = instance_path.map(|i| i.clone()).unwrap_or(InstancePath::new());
+            raise_error(
+                format!(r#"{} has more than {} items"#, val, size),
+                &instance_path,
+            )
+        },
+    }
+}
+
+
 pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) -> PyResult<()> {
     let error = match value.as_str() {
         Some(val) => format!(r#""{}" is not of type "{}""#, val, type_),
@@ -85,6 +108,15 @@ pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) ->
 macro_rules! invalid_type {
     ($type_: expr, $value: expr, $path: expr) => {{
         crate::validator::validators::_invalid_type($type_, $value, $path)?;
+        unreachable!(); // todo: Discard the use of unreachable
+    }};
+}
+
+
+macro_rules! invalid_type_dump {
+    ($type_: expr, $value: expr) => {{
+        let instance_path = InstancePath::new();
+        crate::validator::validators::_invalid_type($type_, $value, &instance_path)?;
         unreachable!(); // todo: Discard the use of unreachable
     }};
 }
@@ -111,3 +143,5 @@ macro_rules! invalid_enum_item {
 
 pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
+pub(crate) use invalid_type_dump;
+use crate::validator::value::SequenceImpl;

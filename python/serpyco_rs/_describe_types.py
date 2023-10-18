@@ -22,11 +22,6 @@ class LiteralType(Type):
 
 
 @dataclasses.dataclass
-class TupleType(Type):
-    item_types: Sequence[Type]
-
-
-@dataclasses.dataclass
 class UnionType(Type):
     item_types: Mapping[str, Type]
     dump_discriminator: str
