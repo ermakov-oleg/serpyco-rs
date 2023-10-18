@@ -95,6 +95,22 @@ pub fn check_sequence_size(val: &SequenceImpl, size: isize, instance_path: Optio
     }
 }
 
+pub fn no_encoder_for_discriminator(
+    key: &str,
+    discriminators: &[String],
+    instance_path: &InstancePath,
+) -> PyErr {
+    let items = discriminators
+        .iter()
+        .map(|s| format!(r#""{}""#, s))
+        .collect::<Vec<_>>()
+        .join(", ");
+    raise_error(
+        format!(r#""{}" is not one of [{}] discriminator values"#, key, items),
+        instance_path,
+    )
+    .unwrap_err()
+}
 
 pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) -> PyResult<()> {
     let error = match value.as_str() {

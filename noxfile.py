@@ -31,7 +31,7 @@ def lint(session):
     session.cd('python/serpyco_rs')
     paths = ['.', '../../tests', '../../bench']
     session.run('black', *(['--check', '--diff', *paths] if _is_ci() else paths))
-    session.run('ruff', '.')
+    session.run('ruff', '.', *([] if _is_ci() else ['--fix']))
 
 
 @nox.session(python=False)

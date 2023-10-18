@@ -20,7 +20,7 @@ use crate::python::{
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_sequence_size, check_upper_bound, invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property};
+use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_sequence_size, check_upper_bound, invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property, no_encoder_for_discriminator};
 use crate::validator::{Array as PyArray, Context, Dict as PyDict, InstancePath, Value as PyValue, Sequence, MutableSequence, Tuple as PyTuple};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
@@ -586,6 +586,8 @@ pub struct UnionEncoder {
     pub(crate) dump_discriminator: Py<PyString>,
     pub(crate) load_discriminator: Py<PyString>,
     pub(crate) load_discriminator_rs: String,
+    pub(crate) keys: Vec<String>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for UnionEncoder {
@@ -596,25 +598,38 @@ impl Encoder for UnionEncoder {
         let encoder = self
             .encoders
             .get(key)
-            .ok_or(ValidationError::new_err(format!(
-                "No encoder for '{key}' discriminator"
-            )))?;
+            .ok_or_else(||{
+                let instance_path = InstancePath::new();
+                no_encoder_for_discriminator(
+                    key,
+                    &self.keys,
+                    &instance_path
+                )
+            }
+            )?;
         ffi!(Py_DECREF(discriminator));
         encoder.dump(value)
     }
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let discriminator = py_object_get_item(value, self.load_discriminator.as_ptr())?; // val RC +1
-        let key = py_str_to_str(discriminator)?;
-        let encoder = self
-            .encoders
-            .get(key)
-            .ok_or(ValidationError::new_err(format!(
-                "No encoder for '{key}' discriminator"
-            )))?;
-        ffi!(Py_DECREF(discriminator));
-        encoder.load(value, instance_path)
+        let py_value = PyValue::new(value);
+        match py_value.as_dict() {
+            None => invalid_type!("object", py_value, instance_path),
+            Some(dict) => {
+                let discriminator = py_object_get_item(dict.as_ptr(), self.load_discriminator.as_ptr())?; // val RC +1
+                let key = py_str_to_str(discriminator)?;
+                let encoder = self
+                    .encoders
+                    .get(key)
+                    .ok_or_else(||{
+                        let instance_path = instance_path.push(self.load_discriminator_rs.clone());
+                        no_encoder_for_discriminator(key, &self.keys, &instance_path)
+                    })?;
+                ffi!(Py_DECREF(discriminator));
+                encoder.load(value, instance_path)
+            }
+        }
     }
 }
 

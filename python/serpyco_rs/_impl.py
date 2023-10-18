@@ -1,9 +1,11 @@
 from typing import Generic, TypeVar
 
 from ._serpyco_rs import (
+    AnyType,
     ArrayType,
     BaseType,
     BooleanType,
+    BytesType,
     CustomEncoder as _CustomEncoder,
     DateTimeType,
     DateType,
@@ -21,12 +23,11 @@ from ._serpyco_rs import (
     Serializer,
     StringType,
     TimeType,
+    TupleType,
     TypedDictType,
+    UnionType,
     UUIDType,
     ValidationError,
-    TupleType,
-    BytesType,
-    AnyType,
 )
 
 

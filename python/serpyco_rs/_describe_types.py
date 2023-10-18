@@ -17,13 +17,6 @@ class LiteralType(Type):
 
 
 @dataclasses.dataclass
-class UnionType(Type):
-    item_types: Mapping[str, Type]
-    dump_discriminator: str
-    load_discriminator: str
-
-
-@dataclasses.dataclass
 class RecursionHolder(Type):
     # todo: Drop
     name: str

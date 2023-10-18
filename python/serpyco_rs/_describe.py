@@ -26,13 +26,14 @@ from typing_extensions import NotRequired, Required, assert_never, get_args, is_
 from ._describe_types import (
     LiteralType,
     RecursionHolder,
-    UnionType,
 )
 from ._impl import (
     NOT_SET,
+    AnyType,
     ArrayType,
     BaseType,
     BooleanType,
+    BytesType,
     CustomEncoder,
     DateTimeType,
     DateType,
@@ -47,11 +48,10 @@ from ._impl import (
     OptionalType,
     StringType,
     TimeType,
-    TypedDictType,
-    UUIDType,
     TupleType,
-    BytesType,
-    AnyType,
+    TypedDictType,
+    UnionType,
+    UUIDType,
 )
 from ._utils import to_camelcase
 from .metadata import (

@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, TypedDict, Literal
 
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
 from serpyco_rs._impl import ErrorItem
-from serpyco_rs.metadata import CustomEncoder, Max, MaxLength, Min, MinLength
+from serpyco_rs.metadata import CustomEncoder, Max, MaxLength, Min, MinLength, Discriminator
 
 
 def _check_errors(s: Serializer, value: Any, expected_errors: list[ErrorItem]):
@@ -283,3 +283,33 @@ def test_bytes_validation__invalid_type():
         s.load('foo', validate=False)
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "bytes"', instance_path='')]
+
+
+@dataclass
+class A:
+    type: Literal['A']
+    a: int
+
+
+@dataclass
+class B:
+    type: Literal['B']
+    b: str
+
+
+def test_tagged_union_validation__invalid_type():
+    s = Serializer(Annotated[A | B, Discriminator('type')])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load('foo', validate=False)
+
+    assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
+
+
+def test_tagged_union_validation__invalid_discriminator():
+    s = Serializer(Annotated[A | B, Discriminator('type')])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load({'type': 'C'}, validate=False)
+
+    assert e.value.errors == [
+        ErrorItem(message='"C" is not one of ["A", "B"] discriminator values', instance_path='type')
+    ]

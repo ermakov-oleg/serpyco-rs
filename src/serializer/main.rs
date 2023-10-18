@@ -164,32 +164,34 @@ pub fn get_encoder(
             }
             wrap_with_custom_encoder(py, base_type, Box::new(TupleEncoder { encoders, ctx }))?
         }
-        Type::UnionType(type_info) => {
-            let dump_discriminator_raw = type_info.getattr(py, "dump_discriminator")?;
-            let dump_discriminator: &PyString = dump_discriminator_raw.as_ref(py).downcast()?;
+        Type::UnionType(type_info, base_type) => {
+            let dump_discriminator: &PyString = type_info.dump_discriminator.as_ref(py).downcast()?;
 
-            let load_discriminator_raw = type_info.getattr(py, "load_discriminator")?;
-            let load_discriminator: &PyString = load_discriminator_raw.as_ref(py).downcast()?;
+            let load_discriminator: &PyString = type_info.load_discriminator.as_ref(py).downcast()?;
 
-            let item_types_raw = type_info.getattr(py, "item_types")?;
-            let item_types: &PyDict = item_types_raw.as_ref(py).downcast()?;
+            let item_types: &PyDict = type_info.item_types.as_ref(py).downcast()?;
 
             let mut encoders = HashMap::new();
+            let mut keys = vec![];
 
             for (key, value) in item_types.iter() {
                 let key: &PyString = key.downcast()?;
                 let encoder = get_encoder(py, get_object_type(value)?, encoder_state, ctx.clone())?;
-                encoders.insert(key.to_string_lossy().into(), encoder);
+                let rs_key: String = key.to_string_lossy().into();
+                keys.push(rs_key.clone());
+                encoders.insert(rs_key, encoder);
             }
 
-            old_wrap_with_custom_encoder(
+            wrap_with_custom_encoder(
                 py,
-                type_info,
+                base_type,
                 Box::new(UnionEncoder {
                     encoders,
                     dump_discriminator: dump_discriminator.into(),
                     load_discriminator: load_discriminator.into(),
                     load_discriminator_rs: load_discriminator.to_string_lossy().into(),
+                    ctx,
+                    keys,
                 }),
             )?
         }

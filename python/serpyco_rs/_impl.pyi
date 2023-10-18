@@ -173,19 +173,26 @@ class DictionaryType(BaseType):
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-
 class TupleType(BaseType):
     item_types: list[BaseType]
 
     def __init__(self, item_types: list[BaseType], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
-
 class BytesType(BaseType):
-
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
-
 
 class AnyType(BaseType):
-    
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
+class UnionType(BaseType):
+    item_types: dict[str, BaseType]
+    dump_discriminator: str
+    load_discriminator: str
+
+    def __init__(
+        self,
+        item_types: dict[str, BaseType],
+        dump_discriminator: str,
+        load_discriminator: str,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+    ): ...

@@ -398,10 +398,10 @@ impl EntityType {
             && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
             && self_
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+            .fields
+            .iter()
+            .zip(other.fields.iter())
+            .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
             && self_.omit_none == other.omit_none
             && py_eq!(self_.generics, other.generics, py)
             && py_eq!(self_.doc, other.doc, py))
@@ -473,10 +473,10 @@ impl TypedDictType {
             && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
             && self_
-                .fields
-                .iter()
-                .zip(other.fields.iter())
-                .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+            .fields
+            .iter()
+            .zip(other.fields.iter())
+            .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
             && self_.omit_none == other.omit_none
             && py_eq!(self_.generics, other.generics, py)
             && py_eq!(self_.doc, other.doc, py))
@@ -785,13 +785,13 @@ impl TupleType {
         let base = self_.as_ref();
         let base_other = other.as_ref();
         Ok(base.__eq__(base_other, py)? &&
-               self_.item_types.len() == other.item_types.len()
-               && self_.item_types
-                .iter()
-                .zip(other.item_types.iter())
-                .all(
-                    |(a, b)|  a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)
-                )
+            self_.item_types.len() == other.item_types.len()
+            && self_.item_types
+            .iter()
+            .zip(other.item_types.iter())
+            .all(
+                |(a, b)|  a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)
+            )
         )
     }
 
@@ -848,5 +848,57 @@ impl AnyType {
 
     fn __repr__(&self) -> String {
         "<AnyType>".to_string()
+    }
+}
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct UnionType {
+    #[pyo3(get)]
+    pub item_types: Py<PyAny>,
+    #[pyo3(get)]
+    pub dump_discriminator: Py<PyAny>,
+    #[pyo3(get)]
+    pub load_discriminator: Py<PyAny>,
+}
+
+#[pymethods]
+impl UnionType {
+    #[new]
+    #[pyo3(signature = (item_types, dump_discriminator, load_discriminator, custom_encoder=None))]
+    fn new(
+        item_types: &PyAny,
+        dump_discriminator: &PyAny,
+        load_discriminator: &PyAny,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        (
+            UnionType {
+                item_types: item_types.into(),
+                dump_discriminator: dump_discriminator.into(),
+                load_discriminator: load_discriminator.into(),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.item_types, other.item_types, py)
+            && py_eq!(self_.dump_discriminator, other.dump_discriminator, py)
+            && py_eq!(self_.load_discriminator, other.load_discriminator, py)
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<UnionType: item_types={:?}, dump_discriminator={:?}, load_discriminator={:?}>",
+            self.item_types.to_string(),
+            self.dump_discriminator.to_string(),
+            self.load_discriminator.to_string(),
+        )
     }
 }
