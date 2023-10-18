@@ -512,6 +512,39 @@ impl Encoder for EnumEncoder {
 }
 
 #[derive(Debug, Clone)]
+pub struct LiteralEncoder {
+    pub(crate) enum_items: Vec<EnumItem>,
+    pub(crate) ctx: Context,
+}
+
+impl Encoder for LiteralEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        ffi!(Py_INCREF(value));
+        Ok(value)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+        let py_val = PyValue::new(value);
+        let item = if let Some(val) = py_val.as_str() {
+            EnumItem::String(val.to_string())
+        } else if let Some(val) = py_val.as_int() {
+            EnumItem::Int(val)
+        } else {
+            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+        };
+
+        if self.enum_items.contains(&item) {
+            ffi!(Py_INCREF(value));
+            Ok(value)
+        } else {
+            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct OptionalEncoder {
     pub(crate) encoder: Box<TEncoder>,
     pub(crate) ctx: Context,

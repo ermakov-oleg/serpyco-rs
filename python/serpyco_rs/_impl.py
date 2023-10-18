@@ -18,6 +18,7 @@ from ._serpyco_rs import (
     ErrorItem,
     FloatType,
     IntegerType,
+    LiteralType,
     OptionalType,
     SchemaValidationError,
     Serializer,

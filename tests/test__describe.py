@@ -588,7 +588,7 @@ def test_describe__dataclass_field_format__parsed():
 
 
 def test_describe__literal():
-    assert describe_type(Literal['foo', 'bar']) == LiteralType(args=('foo', 'bar'), custom_encoder=None)
+    assert describe_type(Literal['foo', 'bar']) == LiteralType(args=['foo', 'bar'], custom_encoder=None)
 
 
 def test_describe__tagged_union():
@@ -627,7 +627,7 @@ def test_describe__tagged_union():
                                 EntityField(
                                     name='filed_type',
                                     dict_key='filedType',
-                                    field_type=LiteralType(args=('foo',), custom_encoder=None),
+                                    field_type=LiteralType(args=['foo'], custom_encoder=None),
                                     is_discriminator_field=True,
                                 ),
                             ],
@@ -646,7 +646,7 @@ def test_describe__tagged_union():
                                 EntityField(
                                     name='filed_type',
                                     dict_key='filedType',
-                                    field_type=LiteralType(args=('bar',), custom_encoder=None),
+                                    field_type=LiteralType(args=['bar'], custom_encoder=None),
                                     is_discriminator_field=True,
                                 ),
                             ],

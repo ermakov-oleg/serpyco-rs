@@ -313,3 +313,11 @@ def test_tagged_union_validation__invalid_discriminator():
     assert e.value.errors == [
         ErrorItem(message='"C" is not one of ["A", "B"] discriminator values', instance_path='type')
     ]
+
+
+def test_literal_validation__invalid_value():
+    s = Serializer(Literal['foo', 'bar'])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load(1, validate=False)
+
+    assert e.value.errors == [ErrorItem(message='1 is not one of ["foo","bar"]', instance_path='')]

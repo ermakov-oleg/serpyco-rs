@@ -24,7 +24,6 @@ from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
 from ._describe_types import (
-    LiteralType,
     RecursionHolder,
 )
 from ._impl import (
@@ -45,6 +44,7 @@ from ._impl import (
     EnumType,
     FloatType,
     IntegerType,
+    LiteralType,
     OptionalType,
     StringType,
     TimeType,
@@ -264,7 +264,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
 
     if _is_literal_type(t):
         if args and all(isinstance(arg, str) for arg in args):
-            return LiteralType(args=args, custom_encoder=custom_encoder)
+            return LiteralType(args=list(args), custom_encoder=custom_encoder)
         raise RuntimeError('Supported only Literal[str, ...]')
 
     if t in {Union}:

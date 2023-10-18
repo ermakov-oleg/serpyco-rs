@@ -9,7 +9,6 @@ use super::py::py_object_get_attr;
 
 
 pub static mut RECURSION_HOLDER_TYPE: *mut PyObject = 0 as *mut PyObject;
-pub static mut LITERAL_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut ISOFORMAT_STR: *mut PyObject = 0 as *mut PyObject;
 pub static mut DATE_STR: *mut PyObject = 0 as *mut PyObject;
@@ -45,11 +44,11 @@ pub enum Type<Base = Option<BaseType>> {
     Dictionary(DictionaryType, Base),
     Tuple(TupleType, Base),
     UnionType(UnionType, Base),
-    LiteralType(Py<PyAny>),
+    LiteralType(LiteralType, Base),
     RecursionHolder(Py<PyAny>),
     Any(AnyType, Base),
 }
-use crate::validator::types::{AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UnionType, UUIDType};
+use crate::validator::types::{AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, LiteralType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UnionType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -99,8 +98,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::RecursionHolder(type_info.into()))
     } else if let Ok(t) = type_info.extract::<UnionType>() {
         Ok(Type::UnionType(t, base_type))
-    } else if check_type!(type_info, LITERAL_TYPE) {
-        Ok(Type::LiteralType(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<LiteralType>() {
+        Ok(Type::LiteralType(t, base_type))
     } else if let Ok(t) = type_info.extract::<BytesType>() {
         Ok(Type::Bytes(t, base_type))
     } else {
@@ -116,7 +115,6 @@ pub fn init(py: Python<'_>) {
         };
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
-        LITERAL_TYPE = get_attr_ptr!(describe, "LiteralType");
 
         let uuid = PyModule::import(py, "uuid").unwrap();
         UUID_PY_TYPE = get_attr_ptr!(uuid, "UUID");

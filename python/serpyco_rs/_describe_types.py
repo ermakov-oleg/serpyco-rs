@@ -12,11 +12,6 @@ class Type:
 
 
 @dataclasses.dataclass
-class LiteralType(Type):
-    args: Sequence[str]
-
-
-@dataclasses.dataclass
 class RecursionHolder(Type):
     # todo: Drop
     name: str

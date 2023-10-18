@@ -902,3 +902,53 @@ impl UnionType {
         )
     }
 }
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct LiteralType {
+    #[pyo3(get)]
+    pub args: Py<PyAny>,
+    pub enum_items: Vec<EnumItem>,
+}
+
+#[pymethods]
+impl LiteralType {
+    #[new]
+    #[pyo3(signature = (args, custom_encoder=None))]
+    fn new(args: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        let mut enum_items = vec![];
+        let py_items = Value::new(args.as_ptr());
+        if let Some(array) = py_items.as_array() {
+            for i in 0..array.len().expect("array length") {
+                let item = array.get_item(i);
+                if let Some(str) = item.as_str() {
+                    enum_items.push(EnumItem::String(str.to_string()));
+                } else if let Some(int) = item.as_int() {
+                    enum_items.push(EnumItem::Int(int));
+                }
+            }
+        }
+        (
+            LiteralType {
+                args: args.into(),
+                enum_items,
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.args, other.args, py))
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<LiteralType: items={:?}>",
+            self.args.to_string(),
+        )
+    }
+}

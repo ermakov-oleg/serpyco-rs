@@ -196,3 +196,8 @@ class UnionType(BaseType):
         load_discriminator: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
+
+class LiteralType(BaseType):
+    args: list[str]
+
+    def __init__(self, args: list[str], custom_encoder: CustomEncoder[Any, Any] | None = None): ...

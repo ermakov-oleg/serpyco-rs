@@ -8,7 +8,7 @@ use pyo3::{PyAny, PyResult};
 
 use crate::jsonschema;
 use crate::python::{get_object_type, Type};
-use crate::serializer::encoders::{BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, StringEncoder, TypedDictEncoder};
+use crate::serializer::encoders::{BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, StringEncoder, TypedDictEncoder};
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
 
@@ -123,9 +123,14 @@ pub fn get_encoder(
         Type::Any(_, base_type) => {
             wrap_with_custom_encoder(py, base_type, Box::new(NoopEncoder))?
         }
-        Type::LiteralType(type_info) => {
-            old_wrap_with_custom_encoder(py, type_info, Box::new(NoopEncoder))?
-        }
+        Type::LiteralType(type_info, base_type) => wrap_with_custom_encoder(
+            py,
+            base_type,
+            Box::new(LiteralEncoder {
+                enum_items: type_info.enum_items,
+                ctx,
+            }),
+        )?,
         Type::Optional(type_info, base_type) => {
             let inner = get_object_type(type_info.inner.as_ref(py))?;
             let encoder = get_encoder(py, inner, encoder_state, ctx.clone())?;
