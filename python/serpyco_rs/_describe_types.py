@@ -24,11 +24,6 @@ class UnionType(Type):
 
 
 @dataclasses.dataclass
-class AnyType(Type):
-    pass
-
-
-@dataclasses.dataclass
 class RecursionHolder(Type):
     # todo: Drop
     name: str

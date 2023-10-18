@@ -26,6 +26,7 @@ from ._serpyco_rs import (
     ValidationError,
     TupleType,
     BytesType,
+    AnyType,
 )
 
 

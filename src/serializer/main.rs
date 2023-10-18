@@ -120,7 +120,10 @@ pub fn get_encoder(
             let encoder = BytesEncoder { ctx };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
-        Type::Any(type_info) | Type::LiteralType(type_info) => {
+        Type::Any(_, base_type) => {
+            wrap_with_custom_encoder(py, base_type, Box::new(NoopEncoder))?
+        }
+        Type::LiteralType(type_info) => {
             old_wrap_with_custom_encoder(py, type_info, Box::new(NoopEncoder))?
         }
         Type::Optional(type_info, base_type) => {

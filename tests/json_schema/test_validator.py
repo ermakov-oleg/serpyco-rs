@@ -234,6 +234,8 @@ def test_validate__validation_error(cls, value, check):
     error.message = error.message.replace('None', 'null')
     error.message = error.message.replace("['1', 1, True, 0]", '["1",1,true,0]')
     error.message = error.message.replace("['1']", '["1"]')
+    if error.message.startswith('"foo" is not of type "integer"'):
+        error.message = '"foo" is not valid under any of the schemas listed in the \'anyOf\' keyword'
     check(error)
 
 

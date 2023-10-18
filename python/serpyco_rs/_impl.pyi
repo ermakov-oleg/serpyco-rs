@@ -184,3 +184,8 @@ class BytesType(BaseType):
 
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
+
+class AnyType(BaseType):
+    
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+

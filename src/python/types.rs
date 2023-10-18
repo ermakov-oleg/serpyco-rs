@@ -8,7 +8,6 @@ use std::sync::Once;
 use super::py::py_object_get_attr;
 
 
-pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut RECURSION_HOLDER_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut UNION_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut LITERAL_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -49,9 +48,9 @@ pub enum Type<Base = Option<BaseType>> {
     UnionType(Py<PyAny>),
     LiteralType(Py<PyAny>),
     RecursionHolder(Py<PyAny>),
-    Any(Py<PyAny>),
+    Any(AnyType, Base),
 }
-use crate::validator::types::{ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UUIDType};
+use crate::validator::types::{AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -95,8 +94,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::Dictionary(t, base_type))
     } else if let Ok(t) = type_info.extract::<TupleType>() {
         Ok(Type::Tuple(t, base_type))
-    } else if check_type!(type_info, ANY_TYPE) {
-        Ok(Type::Any(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<AnyType>() {
+        Ok(Type::Any(t, base_type))
     } else if check_type!(type_info, RECURSION_HOLDER_TYPE) {
         Ok(Type::RecursionHolder(type_info.into()))
     } else if check_type!(type_info, UNION_TYPE) {
@@ -120,7 +119,6 @@ pub fn init(py: Python<'_>) {
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
         UNION_TYPE = get_attr_ptr!(describe, "UnionType");
         LITERAL_TYPE = get_attr_ptr!(describe, "LiteralType");
-        ANY_TYPE = get_attr_ptr!(describe, "AnyType");
 
         let uuid = PyModule::import(py, "uuid").unwrap();
         UUID_PY_TYPE = get_attr_ptr!(uuid, "UUID");

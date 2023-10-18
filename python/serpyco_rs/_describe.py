@@ -24,7 +24,6 @@ from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
 from ._describe_types import (
-    AnyType,
     LiteralType,
     RecursionHolder,
     UnionType,
@@ -52,6 +51,7 @@ from ._impl import (
     UUIDType,
     TupleType,
     BytesType,
+    AnyType,
 )
 from ._utils import to_camelcase
 from .metadata import (
