@@ -60,7 +60,6 @@ def bench(session):
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
         '--verbose',
-        '--memray',
         '--native',
         '--benchmark-min-time=0.5',
         '--benchmark-max-time=1',
