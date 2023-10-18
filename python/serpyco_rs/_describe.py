@@ -23,9 +23,6 @@ from uuid import UUID
 from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
-from ._describe_types import (
-    RecursionHolder,
-)
 from ._impl import (
     NOT_SET,
     AnyType,
@@ -52,7 +49,9 @@ from ._impl import (
     TypedDictType,
     UnionType,
     UUIDType,
+    RecursionHolder,
 )
+from ._meta import Meta, MetaStateKey
 from ._utils import to_camelcase
 from .metadata import (
     Alias,
@@ -88,45 +87,7 @@ _NoneType = type(None)
 _T = TypeVar('_T')
 
 
-@dataclasses.dataclass(frozen=True, unsafe_hash=True)
-class _MetaStateKey:
-    cls: type
-    field_format: FiledFormat
-    none_format: NoneFormat
-    none_as_default_for_optional: NoneAsDefaultForOptional
-    generics: Sequence[tuple[TypeVar, Any]]
-
-
-@dataclasses.dataclass
-class _Meta:
-    globals: dict[str, Any]
-    state: dict[_MetaStateKey, Optional[BaseType]]
-    discriminator_field: Optional[str] = None
-
-    def add_to_state(self, key: _MetaStateKey, value: Optional[BaseType]) -> None:
-        self.state[key] = value
-
-    def get_from_state(self, key: _MetaStateKey) -> Optional[BaseType]:
-        return self.state.get(key)
-
-    def has_in_state(self, key: _MetaStateKey) -> bool:
-        return key in self.state
-
-
-@dataclasses.dataclass
-class _RecursionHolder(BaseType):
-    # todo: Should be used
-    name: str
-    state_key: _MetaStateKey
-    meta: _Meta
-
-    def get_type(self) -> BaseType:
-        if type_ := self.meta.get_from_state(self.state_key):
-            return type_
-        raise RuntimeError('Recursive type not resolved')
-
-
-def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
+def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
@@ -148,7 +109,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
         args = (Any,) * len(parameters)
 
     if not meta:
-        meta = _Meta(globals=_get_globals(t), state={})
+        meta = Meta(globals=_get_globals(t), state={})
 
     t = _evaluate_forwardref(t, meta)
 
@@ -159,7 +120,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
     custom_encoder = _find_metadata(metadata, CustomEncoder)
     annotation_wrapper = _wrap_annotated([filed_format, none_format, none_as_default_for_optional])
 
-    meta_key = _MetaStateKey(
+    meta_key = MetaStateKey(
         cls=t,
         field_format=filed_format,
         none_format=none_format,
@@ -170,8 +131,8 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
     if meta.has_in_state(meta_key):
         return RecursionHolder(
             name=_generate_name(t, filed_format, none_format, none_as_default_for_optional, generics),
-            meta=meta,
             state_key=meta_key,
+            meta=meta,
             custom_encoder=None,
         )
 
@@ -313,7 +274,7 @@ def _describe_entity(
     cls_none_format: NoneFormat,
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
-    meta: _Meta,
+    meta: Meta,
 ) -> Union[EntityType, TypedDictType]:
     docs = get_attributes_doc(t)
     try:
@@ -496,7 +457,7 @@ def _get_globals(t: Any) -> dict[str, Any]:
     return {}
 
 
-def _evaluate_forwardref(t: type[_T], meta: _Meta) -> type[_T]:
+def _evaluate_forwardref(t: type[_T], meta: Meta) -> type[_T]:
     if not isinstance(t, ForwardRef):
         return t
 

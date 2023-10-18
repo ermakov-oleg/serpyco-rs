@@ -1,6 +1,7 @@
 from typing import Any, Generic, TypeVar, Callable
 from collections.abc import Sequence
 from enum import Enum, IntEnum
+from ._meta import Meta, MetaStateKey
 
 _T = TypeVar('_T')
 _I = TypeVar('_I')
@@ -201,3 +202,12 @@ class LiteralType(BaseType):
     args: list[str]
 
     def __init__(self, args: list[str], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+
+
+class RecursionHolder(BaseType):
+    name: str
+    state_key: MetaStateKey
+    meta: Meta
+    
+    def __init__(self, name: str, state_key: MetaStateKey, meta: Meta, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def get_type(self) -> BaseType: ...

@@ -51,8 +51,8 @@ def test_describe__recursive_type__parsed():
                             field_type=OptionalType(
                                 inner=RecursionHolder(
                                     name=ANY,
-                                    meta=ANY,
                                     state_key=ANY,
+                                    meta=ANY,
                                     custom_encoder=None,
                                 ),
                                 custom_encoder=None,

@@ -29,6 +29,7 @@ from ._serpyco_rs import (
     UnionType,
     UUIDType,
     ValidationError,
+    RecursionHolder,
 )
 
 

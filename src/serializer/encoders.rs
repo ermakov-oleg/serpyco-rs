@@ -749,6 +749,7 @@ pub enum Encoders {
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
     pub(crate) inner: Arc<AtomicRefCell<Option<Encoders>>>,
+    pub(crate) ctx: Context,
 }
 
 impl Encoder for LazyEncoder {

@@ -1,4 +1,5 @@
 use std::fmt;
+use pyo3::exceptions::PyRuntimeError;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyNone, PyTuple,};
@@ -949,6 +950,57 @@ impl LiteralType {
         format!(
             "<LiteralType: items={:?}>",
             self.args.to_string(),
+        )
+    }
+}
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct RecursionHolder {
+    #[pyo3(get)]
+    pub name: Py<PyAny>,
+    pub state_key: Py<PyAny>,
+    pub meta: Py<PyAny>,
+}
+
+#[pymethods]
+impl RecursionHolder {
+    #[new]
+    #[pyo3(signature = (name, state_key, meta, custom_encoder=None))]
+    fn new(name: &PyAny, state_key: &PyAny, meta: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (
+            RecursionHolder {
+                name: name.into(),
+                state_key: state_key.into(),
+                meta: meta.into(),
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    pub fn get_type<'a>(&'a self, py: Python<'a>) -> PyResult<&'a PyAny> {
+        match self.meta.as_ref(py).get_item(&self.state_key) {
+            Ok(type_) => Ok(type_),
+            Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!("Recursive type not resolved: {}", e))),
+        }
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.name, other.name, py)
+            && py_eq!(self_.state_key, other.state_key, py)
+            && py_eq!(self_.meta, other.meta, py)
+        )
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<RecursionHolder: name={:?}, state_key={:?}>",
+            self.name.to_string(),
+            self.state_key.to_string(),
         )
     }
 }

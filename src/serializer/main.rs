@@ -227,19 +227,20 @@ pub fn get_encoder(
                 .replace(Encoders::TypedDict(encoder.clone()));
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
-        Type::RecursionHolder(type_info) => {
-            let inner_type = type_info.call_method0(py, "get_type")?;
+        Type::RecursionHolder(type_info, base_type) => {
+            let inner_type = type_info.get_type(py)?;
             let python_object_id = inner_type.as_ptr() as *const _ as usize;
             let encoder = encoder_state.entry(python_object_id).or_default();
-            old_wrap_with_custom_encoder(
+            wrap_with_custom_encoder(
                 py,
-                type_info,
+                base_type,
                 Box::new(LazyEncoder {
                     inner: encoder.clone(),
+                    ctx,
                 }),
+
             )?
         }
-
         Type::Enum(type_info, base_type) => wrap_with_custom_encoder(
             py,
             base_type,
@@ -254,25 +255,11 @@ pub fn get_encoder(
     Ok(encoder)
 }
 
-/// todo: Drop
-fn old_wrap_with_custom_encoder(
-    py: Python<'_>,
-    type_info: Py<PyAny>,
-    original_encoder: Box<TEncoder>,
-) -> PyResult<Box<TEncoder>> {
-    return Ok(original_encoder);
-}
-
 fn wrap_with_custom_encoder(
     py: Python<'_>,
-    base_type: Option<BaseType>, // todo: Option<BaseType> -> BaseType
+    base_type: BaseType,
     original_encoder: Box<TEncoder>,
 ) -> PyResult<Box<TEncoder>> {
-    if base_type.is_none() {
-        // todo: Drop
-        return Ok(original_encoder);
-    }
-    let base_type = base_type.unwrap();
 
     if let Some(custom_encoder_py) = base_type.custom_encoder {
         let custom_encoder = custom_encoder_py.extract::<types::CustomEncoder>(py)?;
