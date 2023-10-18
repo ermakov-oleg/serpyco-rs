@@ -33,6 +33,7 @@ from ._describe_types import (
 )
 from ._impl import (
     NOT_SET,
+    ArrayType,
     BaseType,
     BooleanType,
     CustomEncoder,
@@ -40,18 +41,17 @@ from ._impl import (
     DateType,
     DecimalType,
     DefaultValue,
+    DictionaryType,
     EntityField,
     EntityType,
+    EnumType,
     FloatType,
     IntegerType,
-    StringType,
-    ArrayType,
-    TimeType,
-    UUIDType,
-    TypedDictType,
-    EnumType,
     OptionalType,
-    DictionaryType,
+    StringType,
+    TimeType,
+    TypedDictType,
+    UUIDType,
 )
 from ._utils import to_camelcase
 from .metadata import (
@@ -209,8 +209,8 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
             min_meta = _find_metadata(metadata, Min)
             max_meta = _find_metadata(metadata, Max)
             return DecimalType(
-                min=cast(Decimal, min_meta.value) if min_meta else None,
-                max=cast(Decimal, max_meta.value) if max_meta else None,
+                min=min_meta.value if min_meta else None,
+                max=max_meta.value if max_meta else None,
                 custom_encoder=custom_encoder,
             )
 
@@ -246,11 +246,7 @@ def describe_type(t: Any, meta: Optional[_Meta] = None) -> BaseType:
             )
 
         if issubclass(t, (Enum, IntEnum)):
-            return EnumType(
-                cls=t,
-                items=[item.value for item in t],
-                custom_encoder=custom_encoder
-            )
+            return EnumType(cls=t, items=[item.value for item in t], custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
             meta.add_to_state(meta_key, None)

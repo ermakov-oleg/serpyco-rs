@@ -2,23 +2,25 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
-use pyo3::{PyAny, PyResult};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
+use pyo3::{PyAny, PyResult};
 
 use crate::jsonschema;
 use crate::python::{get_object_type, Type};
-use crate::serializer::encoders::{BooleanEncoder, FloatEncoder, IntEncoder, StringEncoder, TypedDictEncoder};
-use crate::validator::{Context, InstancePath, types};
-use crate::validator::types::{BaseType, EntityField};
-
-use super::encoders::{
-    CustomEncoder, DateEncoder, DateTimeEncoder, Encoders, LazyEncoder, TEncoder, TimeEncoder,
-    UnionEncoder,
+use crate::serializer::encoders::{
+    BooleanEncoder, FloatEncoder, IntEncoder, StringEncoder, TypedDictEncoder,
 };
+use crate::validator::types::{BaseType, EntityField};
+use crate::validator::{types, Context, InstancePath};
+
 use super::encoders::{
     ArrayEncoder, DecimalEncoder, DictionaryEncoder, EntityEncoder, EnumEncoder, Field,
     NoopEncoder, OptionalEncoder, TupleEncoder, UUIDEncoder,
+};
+use super::encoders::{
+    CustomEncoder, DateEncoder, DateTimeEncoder, Encoders, LazyEncoder, TEncoder, TimeEncoder,
+    UnionEncoder,
 };
 
 type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
@@ -203,7 +205,11 @@ pub fn get_encoder(
         Type::TypedDict(type_info, base_type, python_object_id) => {
             let fields = iterate_on_fields(py, type_info.fields, encoder_state, ctx.clone())?;
 
-            let encoder = TypedDictEncoder { fields, omit_none: type_info.omit_none, ctx };
+            let encoder = TypedDictEncoder {
+                fields,
+                omit_none: type_info.omit_none,
+                ctx,
+            };
             let val = encoder_state.entry(python_object_id).or_default();
             AtomicRefCell::<Option<Encoders>>::borrow_mut(val)
                 .replace(Encoders::TypedDict(encoder.clone()));
@@ -222,23 +228,21 @@ pub fn get_encoder(
             )?
         }
 
-        Type::Enum(type_info, base_type) => {
-            wrap_with_custom_encoder(
-                py,
-                base_type,
-                Box::new(EnumEncoder {
-                    enum_type: type_info.cls,
-                    enum_items: type_info.enum_items,
-                    ctx
-                }),
-            )?
-        }
+        Type::Enum(type_info, base_type) => wrap_with_custom_encoder(
+            py,
+            base_type,
+            Box::new(EnumEncoder {
+                enum_type: type_info.cls,
+                enum_items: type_info.enum_items,
+                ctx,
+            }),
+        )?,
     };
 
     Ok(encoder)
 }
 
-/// Drop
+/// todo: Drop
 fn old_wrap_with_custom_encoder(
     py: Python<'_>,
     type_info: Py<PyAny>,
@@ -275,12 +279,6 @@ fn wrap_with_custom_encoder(
     }
 }
 
-fn to_optional(py: Python<'_>, value: PyObject) -> Option<PyObject> {
-    match value.is_none(py) {
-        true => None,
-        false => Some(value),
-    }
-}
 
 fn iterate_on_fields(
     py: Python<'_>,

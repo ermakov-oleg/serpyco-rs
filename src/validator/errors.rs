@@ -3,8 +3,8 @@ use pyo3::{IntoPy, Py, PyErr, PyResult, Python};
 
 use crate::errors::ErrorItem;
 use crate::errors::SchemaValidationError;
-use crate::validator::context::{JSONPointer, PathChunk};
-use crate::validator::{InstancePath};
+use crate::validator::context::PathChunk;
+use crate::validator::InstancePath;
 
 pub fn raise_error(error: String, instance_path: &InstancePath) -> PyResult<()> {
     Python::with_gil(|py| {
@@ -20,15 +20,19 @@ pub fn raise_error(error: String, instance_path: &InstancePath) -> PyResult<()> 
     })
 }
 
-fn into_err_item(py: Python<'_>, error: String, instance_path: &InstancePath) -> PyResult<Py<ErrorItem>> {
+fn into_err_item(
+    py: Python<'_>,
+    error: String,
+    instance_path: &InstancePath,
+) -> PyResult<Py<ErrorItem>> {
     let message = error.to_string();
-    let instance_path = into_path(&instance_path.into());
+    let instance_path = into_path(instance_path);
     Py::new(py, ErrorItem::new(message, instance_path))
 }
 
-fn into_path(pointer: &JSONPointer) -> String {
+fn into_path(pointer: &InstancePath) -> String {
     let mut path = vec![];
-    for chunk in pointer.iter() {
+    for chunk in pointer.to_vec() {
         match chunk {
             PathChunk::Property(property) => {
                 path.push(property.to_string());

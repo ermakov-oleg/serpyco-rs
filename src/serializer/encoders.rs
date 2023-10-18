@@ -6,7 +6,7 @@ use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::PyString;
-use pyo3::{AsPyPointer, Py, PyAny, PyResult};
+use pyo3::{Py, PyAny, PyResult};
 use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
@@ -20,11 +20,13 @@ use crate::python::{
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::{Context, Value as PyValue, InstancePath, Array as PyArray, Dict as PyDict};
-use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_enum_item, invalid_type, missing_required_property};
+use crate::validator::validators::{
+    check_lower_bound, check_max_length, check_min_length, check_upper_bound, invalid_enum_item,
+    invalid_type, missing_required_property,
+};
+use crate::validator::{Array as PyArray, Context, Dict as PyDict, InstancePath, Value as PyValue};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
-
 
 pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
@@ -44,7 +46,7 @@ impl Encoder for NoopEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+    fn load(&self, value: *mut PyObject, _instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
     }
@@ -181,7 +183,7 @@ impl Encoder for BooleanEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
-        if let Some(_) = py_val.as_bool() {
+        if py_val.as_bool().is_some() {
             ffi!(Py_INCREF(value));
             Ok(value)
         } else {
@@ -331,11 +333,10 @@ impl Encoder for EntityEncoder {
 
             for field in &self.fields {
                 let val = match dict.get_item(field.dict_key.as_ptr()) {
-
                     Some(val) => {
                         let instance_path = instance_path.push(field.dict_key_rs.clone());
                         field.encoder.load(val.as_ptr(), &instance_path)?
-                    },
+                    }
                     None => match (&field.default, &field.default_factory) {
                         (Some(val), _) => {
                             let val = val.as_ptr();
@@ -344,7 +345,10 @@ impl Encoder for EntityEncoder {
                         }
                         (_, Some(val)) => call_object!(val.as_ptr())?,
                         (None, _) => {
-                            return Err(missing_required_property(&field.dict_key_rs, instance_path));
+                            return Err(missing_required_property(
+                                &field.dict_key_rs,
+                                instance_path,
+                            ));
                         }
                     },
                 };
@@ -353,11 +357,10 @@ impl Encoder for EntityEncoder {
                 ffi!(Py_DECREF(val));
             }
             Ok(obj)
-        }
-        else {
+        } else {
             invalid_type!("object", py_value, instance_path)
         }
-}
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -410,14 +413,17 @@ impl Encoder for TypedDictEncoder {
         if let Some(dict) = py_value.as_dict() {
             let dict_ptr = ffi!(PyDict_New());
             for field in &self.fields {
-                let val = match py_object_get_item(value, field.dict_key.as_ptr()) {
-                    Ok(val) => {
+                let val = match dict.get_item(field.dict_key.as_ptr()) {
+                    Some(val) => {
                         let instance_path = instance_path.push(field.dict_key_rs.clone());
-                        field.encoder.load(val, &instance_path)? // new obj or RC +1
-                    },
-                    Err(e) => {
+                        field.encoder.load(val.as_ptr(), &instance_path)? // new obj or RC +1
+                    }
+                    None => {
                         if field.required {
-                            return Err(missing_required_property(&field.dict_key_rs, instance_path));
+                            return Err(missing_required_property(
+                                &field.dict_key_rs,
+                                instance_path,
+                            ));
                         } else {
                             continue;
                         }

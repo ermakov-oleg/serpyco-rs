@@ -1,6 +1,7 @@
 from typing import Generic, TypeVar
 
 from ._serpyco_rs import (
+    ArrayType,
     BaseType,
     BooleanType,
     CustomEncoder as _CustomEncoder,
@@ -8,22 +9,21 @@ from ._serpyco_rs import (
     DateType,
     DecimalType,
     DefaultValue as _DefaultValue,
+    DictionaryType,
     EntityField,
     EntityType,
+    EnumType,
     ErrorItem,
     FloatType,
     IntegerType,
+    OptionalType,
     SchemaValidationError,
     Serializer,
     StringType,
     TimeType,
+    TypedDictType,
     UUIDType,
     ValidationError,
-    TypedDictType,
-    ArrayType,
-    EnumType,
-    OptionalType,
-    DictionaryType,
 )
 
 

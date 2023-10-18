@@ -1,11 +1,12 @@
-use std::fmt::Debug;
-
 use pyo3::{PyErr, PyResult, Python};
 
 use crate::jsonschema::ser::ObjectType;
-use crate::python::{from_ptr_or_err, from_ptr_or_opt, obj_to_str, py_object_get_item, py_str_to_str, py_tuple_get_item};
 use crate::python::macros::{call_method, ffi};
 use crate::python::types::ITEMS_STR;
+use crate::python::{
+    from_ptr_or_err, from_ptr_or_opt, obj_to_str, py_object_get_item, py_str_to_str,
+    py_tuple_get_item,
+};
 
 use super::py_types::get_object_type_from_object;
 
@@ -109,7 +110,6 @@ impl Value {
     }
 }
 
-
 /// Represents a Python array.
 /// This is a wrapper around a PyObject pointer.
 pub struct Array {
@@ -117,27 +117,21 @@ pub struct Array {
 }
 
 impl Array {
-
     /// Creates a new array from the given PyObject.
     #[inline]
     pub fn new(py_object: *mut pyo3::ffi::PyObject) -> Self {
-        Array {
-            py_object,
-        }
+        Array { py_object }
     }
 
     /// Creates a new empty array with the given capacity.
     #[inline]
     pub fn new_with_capacity(capacity: isize) -> Self {
         let py_object = ffi!(PyList_New(capacity));
-        Array {
-            py_object,
-        }
+        Array { py_object }
     }
 }
 
 impl Array {
-
     /// Returns the pointer to the underlying PyObject.
     #[inline]
     pub fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
@@ -154,7 +148,7 @@ impl Array {
     /// Will panic if the index is out of bounds.
     #[inline]
     pub fn get_item(&self, index: isize) -> Value {
-        let item = ffi!(PyList_GET_ITEM(self.py_object, index));  // rc not changed
+        let item = ffi!(PyList_GET_ITEM(self.py_object, index)); // rc not changed
         Value::new(item)
     }
 
@@ -164,7 +158,6 @@ impl Array {
         ffi!(PyList_SetItem(self.py_object, index, value));
     }
 }
-
 
 /// Represents a Python dict.
 /// This is a wrapper around a PyObject pointer.
@@ -185,7 +178,6 @@ impl Dict {
 }
 
 impl Dict {
-
     /// Returns the pointer to the underlying PyObject.
     #[inline]
     pub fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
@@ -194,7 +186,7 @@ impl Dict {
 
     /// Returns value of the given key.
     #[inline]
-    pub fn get_item(&self, key: *mut pyo3::ffi::PyObject,) -> Option<Value> {
+    pub fn get_item(&self, key: *mut pyo3::ffi::PyObject) -> Option<Value> {
         let item = py_object_get_item(self.py_object, key);
         if let Ok(item) = item {
             return Some(Value::new(item));
@@ -219,7 +211,6 @@ impl Dict {
     }
 }
 
-
 pub struct PyObjectIterator(*mut pyo3::ffi::PyObject);
 
 impl Iterator for PyObjectIterator {
@@ -239,7 +230,7 @@ impl Iterator for PyObjectIterator {
                 };
                 ffi!(Py_DECREF(item));
                 Some(Ok((key, value)))
-            },
+            }
             None => Python::with_gil(|py| PyErr::take(py).map(Err)),
         }
     }

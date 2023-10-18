@@ -6,7 +6,7 @@ use crate::python::py_str_to_str;
 use jsonschema::{Draft, JSONSchema};
 use pyo3::types::PyList;
 use pyo3::types::PyType;
-use pyo3::{AsPyPointer, IntoPy, Py, PyAny, PyErr, PyResult, Python};
+use pyo3::{IntoPy, Py, PyAny, PyErr, PyResult, Python};
 use serde_json::Value;
 
 pub(crate) fn compile(schema: &PyAny, pass_through_bytes: bool) -> PyResult<JSONSchema> {

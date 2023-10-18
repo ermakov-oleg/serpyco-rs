@@ -53,7 +53,11 @@ pub enum Type<Base = Option<BaseType>> {
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TypedDictType, UUIDType};
+use crate::validator::types::{
+    ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, DictionaryType,
+    EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType,
+    TypedDictType, UUIDType,
+};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();

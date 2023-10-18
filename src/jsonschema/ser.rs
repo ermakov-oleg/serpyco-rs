@@ -7,7 +7,6 @@ use pyo3::{
     },
     prelude::*,
     types::PyAny,
-    AsPyPointer,
 };
 use serde::{
     ser::{self, Serialize, SerializeMap, SerializeSeq},

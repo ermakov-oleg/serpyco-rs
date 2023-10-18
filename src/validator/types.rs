@@ -1,5 +1,4 @@
 use std::fmt;
-use std::fmt::Display;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyNone, PyTuple};
@@ -11,7 +10,6 @@ macro_rules! py_eq {
         $obj1.as_ref($py).eq($obj2.as_ref($py))?
     };
 }
-
 
 #[pyclass(frozen, module = "serde_json", subclass)]
 #[derive(Debug, Clone)]
@@ -54,6 +52,7 @@ pub struct CustomEncoder {
 #[pymethods]
 impl CustomEncoder {
     #[new]
+    #[pyo3(signature = (serialize=None, deserialize=None))]
     fn new(serialize: Option<&PyAny>, deserialize: Option<&PyAny>) -> PyResult<Self> {
         Ok(CustomEncoder {
             serialize: serialize.map(|x| x.into()),
@@ -282,7 +281,6 @@ impl DateType {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub enum DefaultValueEnum {
     None,
@@ -311,7 +309,7 @@ impl DefaultValue {
     fn __repr__(&self, py: Python<'_>) -> String {
         match &self.0 {
             DefaultValueEnum::None => "Rust None".to_string(),
-            DefaultValueEnum::Value(value) => format!("{}", value.as_ref(py).repr().unwrap())
+            DefaultValueEnum::Value(value) => format!("{}", value.as_ref(py).repr().unwrap()),
         }
     }
 
@@ -322,17 +320,14 @@ impl DefaultValue {
     fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
         match &self.0 {
             DefaultValueEnum::None => Ok(0),
-            DefaultValueEnum::Value(value) => {
-                value.as_ref(py).hash()
-            }
+            DefaultValueEnum::Value(value) => value.as_ref(py).hash(),
         }
     }
 }
 
-
-impl Into<Option<Py<PyAny>>> for DefaultValue {
-    fn into(self) -> Option<Py<PyAny>> {
-        match self.0 {
+impl From<DefaultValue> for Option<Py<PyAny>> {
+    fn from(val: DefaultValue) -> Self {
+        match val.0 {
             DefaultValueEnum::None => None,
             DefaultValueEnum::Value(value) => Some(value),
         }
@@ -344,16 +339,12 @@ impl PartialEq<Self> for DefaultValue {
         match (&self.0, &other.0) {
             (DefaultValueEnum::None, DefaultValueEnum::None) => true,
             (DefaultValueEnum::Value(a), DefaultValueEnum::Value(b)) => {
-                Python::with_gil(|py| {
-                    a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)
-                })
-            },
+                Python::with_gil(|py| a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false))
+            }
             _ => false,
         }
     }
 }
-
-
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -402,20 +393,27 @@ impl EntityType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(
-                base.__eq__(base_other, py)?
-                && py_eq!(self_.cls, other.cls, py)
-                && py_eq!(self_.name, other.name, py)
-                && self_.fields.len() == other.fields.len()
-                && self_.fields.iter().zip(other.fields.iter()).all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
-                && self_.omit_none == other.omit_none
-                && py_eq!(self_.generics, other.generics, py)
-                && py_eq!(self_.doc, other.doc, py)
-        )
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.cls, other.cls, py)
+            && py_eq!(self_.name, other.name, py)
+            && self_.fields.len() == other.fields.len()
+            && self_
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+            && self_.omit_none == other.omit_none
+            && py_eq!(self_.generics, other.generics, py)
+            && py_eq!(self_.doc, other.doc, py))
     }
 
     fn __repr__(&self) -> String {
-        let fields = self.fields.iter().map(|f| f.__repr__()).collect::<Vec<String>>().join(", ");
+        let fields = self
+            .fields
+            .iter()
+            .map(|f| f.__repr__())
+            .collect::<Vec<String>>()
+            .join(", ");
         format!(
             "<EntityType: cls={:?}, name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
             self.cls.to_string(),
@@ -471,19 +469,26 @@ impl TypedDictType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(
-            base.__eq__(base_other, py)?
-                && py_eq!(self_.name, other.name, py)
-                && self_.fields.len() == other.fields.len()
-                && self_.fields.iter().zip(other.fields.iter()).all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
-                && self_.omit_none == other.omit_none
-                && py_eq!(self_.generics, other.generics, py)
-                && py_eq!(self_.doc, other.doc, py)
-        )
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.name, other.name, py)
+            && self_.fields.len() == other.fields.len()
+            && self_
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+            && self_.omit_none == other.omit_none
+            && py_eq!(self_.generics, other.generics, py)
+            && py_eq!(self_.doc, other.doc, py))
     }
 
     fn __repr__(&self) -> String {
-        let fields = self.fields.iter().map(|f| f.__repr__()).collect::<Vec<String>>().join(", ");
+        let fields = self
+            .fields
+            .iter()
+            .map(|f| f.__repr__())
+            .collect::<Vec<String>>()
+            .join(", ");
         format!(
             "<TypedDictType: name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
             self.name.to_string(),
@@ -494,7 +499,6 @@ impl TypedDictType {
         )
     }
 }
-
 
 #[pyclass(frozen, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -545,23 +549,20 @@ impl EntityField {
     }
 
     fn __eq__(&self, other: &Self, py: Python<'_>) -> PyResult<bool> {
-        Ok(
-            py_eq!(self.name, other.name, py)
+        Ok(py_eq!(self.name, other.name, py)
             && py_eq!(self.dict_key, other.dict_key, py)
             && py_eq!(self.field_type, other.field_type, py)
             && self.required == other.required
             && self.is_discriminator_field == other.is_discriminator_field
             && self.default == other.default
             && self.default_factory == other.default_factory
-            && py_eq!(self.doc, other.doc, py)
-        )
+            && py_eq!(self.doc, other.doc, py))
     }
 
     fn __repr__(&self) -> String {
         format!("<EntityField: name={:?}, dict_key={:?}, field_type={:?}, required={:?}, is_discriminator_field={:?}, default={:?}, default_factory={:?}, doc={:?}>", self.name.to_string(), self.dict_key.to_string(), self.field_type.to_string(), self.required, self.is_discriminator_field, self.default, self.default_factory, self.doc.to_string())
     }
 }
-
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -574,10 +575,7 @@ pub struct ArrayType {
 impl ArrayType {
     #[new]
     #[pyo3(signature = (item_type, custom_encoder=None))]
-    fn new(
-        item_type: &PyAny,
-        custom_encoder: Option<&PyAny>,
-    ) -> (Self, BaseType) {
+    fn new(item_type: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
         (
             ArrayType {
                 item_type: item_type.into(),
@@ -591,16 +589,12 @@ impl ArrayType {
         let base_other = other.as_ref();
         Ok(
             // todo: check all __eq__, it can contain base.__eq__
-            base.__eq__(base_other, py)?
-                && py_eq!(self_.item_type, other.item_type, py)
+            base.__eq__(base_other, py)? && py_eq!(self_.item_type, other.item_type, py),
         )
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "<ArrayType: item_type={:?}>",
-            self.item_type.to_string(),
-        )
+        format!("<ArrayType: item_type={:?}>", self.item_type.to_string(),)
     }
 }
 
@@ -618,11 +612,7 @@ pub struct EnumType {
 impl EnumType {
     #[new]
     #[pyo3(signature = (cls, items, custom_encoder=None))]
-    fn new(
-        cls: &PyAny,
-        items: &PyAny,
-        custom_encoder: Option<&PyAny>,
-    ) -> (Self, BaseType) {
+    fn new(cls: &PyAny, items: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
         let mut enum_items = vec![];
         let py_items = Value::new(items.as_ptr());
         if let Some(array) = py_items.as_array() {
@@ -648,11 +638,9 @@ impl EnumType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(
-            base.__eq__(base_other, py)?
-                && py_eq!(self_.cls, other.cls, py)
-                && py_eq!(self_.items, other.items, py)
-        )
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.cls, other.cls, py)
+            && py_eq!(self_.items, other.items, py))
     }
 
     fn __repr__(&self) -> String {
@@ -691,7 +679,6 @@ impl<'a> From<&'a Vec<EnumItem>> for EnumItems<'a> {
     }
 }
 
-
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
 pub struct OptionalType {
@@ -703,10 +690,7 @@ pub struct OptionalType {
 impl OptionalType {
     #[new]
     #[pyo3(signature = (inner, custom_encoder=None))]
-    fn new(
-        inner: &PyAny,
-        custom_encoder: Option<&PyAny>,
-    ) -> (Self, BaseType) {
+    fn new(inner: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
         (
             OptionalType {
                 inner: inner.into(),
@@ -718,20 +702,13 @@ impl OptionalType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(
-            base.__eq__(base_other, py)?
-                && py_eq!(self_.inner, other.inner, py)
-        )
+        Ok(base.__eq__(base_other, py)? && py_eq!(self_.inner, other.inner, py))
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "<OptionalType: inner={:?}>",
-            self.inner.to_string(),
-        )
+        format!("<OptionalType: inner={:?}>", self.inner.to_string(),)
     }
 }
-
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -767,12 +744,10 @@ impl DictionaryType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(
-            base.__eq__(base_other, py)?
-                && py_eq!(self_.key_type, other.key_type, py)
-                && py_eq!(self_.value_type, other.value_type, py)
-                && self_.omit_none == other.omit_none
-        )
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.key_type, other.key_type, py)
+            && py_eq!(self_.value_type, other.value_type, py)
+            && self_.omit_none == other.omit_none)
     }
 
     fn __repr__(&self) -> String {

@@ -299,9 +299,7 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
         x: list[T]
 
     result: EntityType = describe_type(SomeEntity)
-    assert result.fields[0].field_type == ArrayType(
-        item_type=AnyType(custom_encoder=None), custom_encoder=None
-    )
+    assert result.fields[0].field_type == ArrayType(item_type=AnyType(custom_encoder=None), custom_encoder=None)
     assert result.generics == ((T, Any),)
 
 
@@ -316,9 +314,7 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
         y: SomeOtherEntity[T]
 
     result: EntityType = describe_type(SomeEntity[int])
-    assert result.fields[0].field_type == ArrayType(
-        item_type=IntegerType(custom_encoder=None), custom_encoder=None
-    )
+    assert result.fields[0].field_type == ArrayType(item_type=IntegerType(custom_encoder=None), custom_encoder=None)
     assert result.fields[1].field_type == EntityType(
         cls=SomeOtherEntity,
         name=ANY,

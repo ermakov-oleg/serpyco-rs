@@ -2,8 +2,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Annotated, Any, TypedDict
 from enum import Enum
+from typing import Annotated, Any, TypedDict
 
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
@@ -184,7 +184,6 @@ def test_dataclass_validation__missing_field__with_instance_path():
 
 
 def test_typed_dict_validation__invalid_type():
-
     class A(TypedDict):
         a: int
 

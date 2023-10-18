@@ -27,7 +27,7 @@ class CustomEncoder(Generic[_I, _O]):
     serialize: Callable[[_I], _O] | None
     deserialize: Callable[[_O], _I] | None
 
-    def __init__(self, serialize: Callable[[_I], _O] | None, deserialize: Callable[[_O], _I] | None): ...
+    def __init__(self, serialize: Callable[[_I], _O] | None = None, deserialize: Callable[[_O], _I] | None = None): ...
 
 class BaseType:
     custom_encoder: CustomEncoder[Any, Any] | None
@@ -125,7 +125,6 @@ class EntityType(BaseType):
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-
 class TypedDictType(BaseType):
     name: str
     fields: Sequence[EntityField]
@@ -134,13 +133,13 @@ class TypedDictType(BaseType):
     doc: str | None
 
     def __init__(
-            self,
-            name: str,
-            fields: Sequence[EntityField],
-            omit_none: bool = False,
-            generics: Sequence[tuple[TypeVar, Any]] | None = None,
-            doc: str | None = None,
-            custom_encoder: CustomEncoder[Any, Any] | None = None,
+        self,
+        name: str,
+        fields: Sequence[EntityField],
+        omit_none: bool = False,
+        generics: Sequence[tuple[TypeVar, Any]] | None = None,
+        doc: str | None = None,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
 class ArrayType(BaseType):
@@ -148,25 +147,24 @@ class ArrayType(BaseType):
 
     def __init__(self, item_type: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
-
 class EnumType(BaseType):
     cls: type[Enum | IntEnum]
     items: list[Any]
 
-    def __init__(self, cls: type[Enum | IntEnum], items: list[Any], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
-
+    def __init__(
+        self, cls: type[Enum | IntEnum], items: list[Any], custom_encoder: CustomEncoder[Any, Any] | None = None
+    ): ...
 
 class OptionalType(BaseType):
     inner: BaseType
 
     def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
-
 class DictionaryType(BaseType):
     key_type: BaseType
     value_type: BaseType
     omit_none: bool
-    
+
     def __init__(
         self,
         key_type: BaseType,

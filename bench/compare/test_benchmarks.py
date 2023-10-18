@@ -9,7 +9,7 @@ serializers = {
     'serpyco_rs': serpyco_rs,
     'serpyco': serpyco,
     'pydantic': pydantic,
-    # 'marshmallow': marshmallow,
+    'marshmallow': marshmallow,
     'mashumaro': mashumaro,
 }
 
@@ -23,25 +23,6 @@ def test_dump(benchmark, lib):
     benchmark.extra_info['lib'] = lib
     benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
     benchmark(serializer.dump, serializer.test_object)
-
-
-@pytest.mark.parametrize('lib', serializers.keys())
-def test_dump_1(lib):
-    serializer = serializers[lib]
-    serializer.dump(serializer.test_object)  # warmup
-
-    for _i in range(10000):
-        serializer.dump(serializer.test_object)
-
-
-@pytest.mark.parametrize('lib', serializers.keys())
-def test_load_1(lib):
-    serializer = serializers[lib]
-    test_dict = json.dumps(serializer.dump(serializer.test_object))
-    # serializer.load(test_dict, validate=True)  # warmup
-
-    for _i in range(100):
-        serializer.load_json(test_dict, validate=True)
 
 
 @pytest.mark.parametrize('lib', serializers.keys())

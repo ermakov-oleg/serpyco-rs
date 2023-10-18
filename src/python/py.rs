@@ -1,12 +1,11 @@
 use super::macros::{call_method, ffi};
 use super::types::{
-    DATE_STR, DECIMAL_PY_TYPE, FALSE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE,
-    PY_OBJECT__NEW__, TRUE, UUID_PY_TYPE, VALUE_STR,
+    DATE_STR, DECIMAL_PY_TYPE, FALSE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, PY_OBJECT__NEW__,
+    TRUE, UUID_PY_TYPE, VALUE_STR,
 };
 use crate::python::macros::use_immortal;
-use pyo3::{ffi, AsPyPointer, PyAny, PyErr, PyResult, Python};
+use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
-use serde_json::Number;
 use std::os::raw::c_int;
 use std::ptr::NonNull;
 
@@ -146,32 +145,6 @@ pub(crate) fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
         }
     };
     Ok(unsafe { std::str::from_utf8_unchecked(utf8_slice) })
-}
-
-#[inline(always)]
-fn parse_i64(val: i64) -> *mut ffi::PyObject {
-    ffi!(PyLong_FromLongLong(val))
-}
-
-#[inline(always)]
-fn parse_u64(val: u64) -> *mut ffi::PyObject {
-    ffi!(PyLong_FromUnsignedLongLong(val))
-}
-
-#[inline(always)]
-fn parse_f64(val: f64) -> *mut ffi::PyObject {
-    ffi!(PyFloat_FromDouble(val))
-}
-
-#[inline(always)]
-pub(crate) fn parse_number(val: Number) -> *mut ffi::PyObject {
-    if val.is_f64() {
-        parse_f64(val.as_f64().unwrap())
-    } else if val.is_i64() {
-        parse_i64(val.as_i64().unwrap())
-    } else {
-        parse_u64(val.as_u64().unwrap())
-    }
 }
 
 #[inline]

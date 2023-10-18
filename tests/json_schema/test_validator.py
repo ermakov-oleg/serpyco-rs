@@ -9,11 +9,10 @@ from typing import Annotated, Any, Callable, Literal, Optional, Union
 from unittest import mock
 
 import pytest
-from typing_extensions import NotRequired, Required, TypedDict
-
 from serpyco_rs import Serializer
 from serpyco_rs.exceptions import ErrorItem, SchemaValidationError, ValidationError
 from serpyco_rs.metadata import Discriminator, Max, MaxLength, Min, MinLength
+from typing_extensions import NotRequired, Required, TypedDict
 
 
 class EnumTest(Enum):
