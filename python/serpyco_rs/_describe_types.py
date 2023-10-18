@@ -12,11 +12,6 @@ class Type:
 
 
 @dataclasses.dataclass
-class BytesType(Type):
-    pass
-
-
-@dataclasses.dataclass
 class LiteralType(Type):
     args: Sequence[str]
 

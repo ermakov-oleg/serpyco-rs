@@ -39,9 +39,5 @@ def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
     return Dataclass.from_dict(data)
 
 
-def load_json(data: str, validate: bool = True) -> Dataclass:
-    return Dataclass.from_json(data, decoder=orjson.loads)
-
-
 def dump(obj: Dataclass) -> dict[str, Any]:
     return obj.to_dict()

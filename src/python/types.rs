@@ -7,7 +7,6 @@ use std::sync::Once;
 
 use super::py::py_object_get_attr;
 
-pub static mut BYTES_TYPE: *mut PyObject = 0 as *mut PyObject;
 
 pub static mut ANY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut RECURSION_HOLDER_TYPE: *mut PyObject = 0 as *mut PyObject;
@@ -36,7 +35,7 @@ pub enum Type<Base = Option<BaseType>> {
     String(StringType, Base),
     Boolean(BooleanType, Base),
     Uuid(UUIDType, Base),
-    Bytes(Py<PyAny>),
+    Bytes(BytesType, Base),
     Time(TimeType, Base),
     DateTime(DateTimeType, Base),
     Date(DateType, Base),
@@ -52,7 +51,7 @@ pub enum Type<Base = Option<BaseType>> {
     RecursionHolder(Py<PyAny>),
     Any(Py<PyAny>),
 }
-use crate::validator::types::{ArrayType, BaseType, BooleanType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UUIDType};
+use crate::validator::types::{ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType, DictionaryType, EntityType, EnumType, FloatType, IntegerType, OptionalType, StringType, TimeType, TupleType, TypedDictType, UUIDType};
 
 pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     let base_type = type_info.extract::<BaseType>();
@@ -104,8 +103,8 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
         Ok(Type::UnionType(type_info.into()))
     } else if check_type!(type_info, LITERAL_TYPE) {
         Ok(Type::LiteralType(type_info.into()))
-    } else if check_type!(type_info, BYTES_TYPE) {
-        Ok(Type::Bytes(type_info.into()))
+    } else if let Ok(t) = type_info.extract::<BytesType>() {
+        Ok(Type::Bytes(t, base_type))
     } else {
         todo!("py Error 'Unsupported type' {type_info}")
     }
@@ -118,7 +117,6 @@ pub fn init(py: Python<'_>) {
             pyo3_ffi::PyDateTime_IMPORT()
         };
         let describe = PyModule::import(py, "serpyco_rs._describe_types").unwrap();
-        BYTES_TYPE = get_attr_ptr!(describe, "BytesType");
         RECURSION_HOLDER_TYPE = get_attr_ptr!(describe, "RecursionHolder");
         UNION_TYPE = get_attr_ptr!(describe, "UnionType");
         LITERAL_TYPE = get_attr_ptr!(describe, "LiteralType");

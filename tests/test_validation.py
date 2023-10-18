@@ -275,3 +275,11 @@ def test_tuple_validation__invalid_length():
         s.load([1, 'foo', 3], validate=False)
 
     assert e.value.errors == [ErrorItem(message="[1, 'foo', 3] has more than 2 items", instance_path='')]
+
+
+def test_bytes_validation__invalid_type():
+    s = Serializer(bytes, pass_through_bytes=True)
+    with pytest.raises(SchemaValidationError) as e:
+        s.load('foo', validate=False)
+
+    assert e.value.errors == [ErrorItem(message='"foo" is not of type "bytes"', instance_path='')]

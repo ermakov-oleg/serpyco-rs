@@ -805,3 +805,26 @@ impl TupleType {
         format!("<TupleType: item_types={:?}>", item_types)
     }
 }
+
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BytesType {}
+
+#[pymethods]
+impl BytesType {
+    #[new]
+    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+        (BytesType {}, BaseType::new(custom_encoder))
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
+    }
+
+    fn __repr__(&self) -> String {
+        "<BytesType>".to_string()
+    }
+}

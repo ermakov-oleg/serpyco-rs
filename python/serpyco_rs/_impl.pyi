@@ -176,5 +176,11 @@ class DictionaryType(BaseType):
 
 class TupleType(BaseType):
     item_types: list[BaseType]
-    
+
     def __init__(self, item_types: list[BaseType], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+
+
+class BytesType(BaseType):
+
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+

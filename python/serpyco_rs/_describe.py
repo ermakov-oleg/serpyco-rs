@@ -25,7 +25,6 @@ from typing_extensions import NotRequired, Required, assert_never, get_args, is_
 
 from ._describe_types import (
     AnyType,
-    BytesType,
     LiteralType,
     RecursionHolder,
     UnionType,
@@ -52,6 +51,7 @@ from ._impl import (
     TypedDictType,
     UUIDType,
     TupleType,
+    BytesType,
 )
 from ._utils import to_camelcase
 from .metadata import (

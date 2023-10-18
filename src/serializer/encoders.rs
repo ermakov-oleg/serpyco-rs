@@ -189,6 +189,31 @@ impl Encoder for BooleanEncoder {
     }
 }
 
+
+#[derive(Debug, Clone)]
+pub struct BytesEncoder {
+    pub(crate) ctx: Context,
+}
+
+impl Encoder for BytesEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        ffi!(Py_INCREF(value));
+        Ok(value)
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+        let py_value = PyValue::new(value);
+        if py_value.is_bytes() {
+            ffi!(Py_INCREF(value));
+            Ok(value)
+        } else {
+            invalid_type!("bytes", py_value, instance_path)
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,

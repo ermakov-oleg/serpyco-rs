@@ -40,6 +40,12 @@ impl Value {
         self.object_type == ObjectType::None
     }
 
+    /// Is Bytes value.
+    #[inline]
+    pub fn is_bytes(&self) -> bool {
+        self.object_type == ObjectType::Bytes
+    }
+
     /// Represents as Bool value.
     #[inline]
     pub fn as_bool(&self) -> Option<bool> {

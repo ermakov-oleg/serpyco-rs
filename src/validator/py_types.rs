@@ -25,6 +25,8 @@ pub fn get_object_type(object_type: *mut pyo3::ffi::PyTypeObject) -> ObjectType 
         ObjectType::List
     } else if object_type == unsafe { types::DICT_TYPE } {
         ObjectType::Dict
+    } else if object_type == unsafe { types::BYTES_TYPE } {
+        ObjectType::Bytes
     } else {
         ObjectType::Unknown(get_type_name(object_type).to_string())
     }
