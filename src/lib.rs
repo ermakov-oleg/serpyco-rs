@@ -1,5 +1,4 @@
 mod errors;
-mod jsonschema;
 mod python;
 mod serializer;
 mod validator;
@@ -10,7 +9,7 @@ use validator::types;
 #[pymodule]
 fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
     python::init(py);
-    jsonschema::init();
+    validator::init();
     m.add_class::<serializer::Serializer>()?;
 
     // Types

@@ -20,6 +20,7 @@ from ._serpyco_rs import (
     IntegerType,
     LiteralType,
     OptionalType,
+    RecursionHolder,
     SchemaValidationError,
     Serializer,
     StringType,
@@ -29,7 +30,6 @@ from ._serpyco_rs import (
     UnionType,
     UUIDType,
     ValidationError,
-    RecursionHolder,
 )
 
 

@@ -7,4 +7,5 @@ mod value;
 
 pub use context::{Context, InstancePath};
 pub use errors::raise_error;
-pub use value::{Array, Dict, Value, Sequence, MutableSequence, Tuple};
+pub use py_types::init;
+pub use value::{Array, Dict, MutableSequence, Sequence, Tuple, Value};

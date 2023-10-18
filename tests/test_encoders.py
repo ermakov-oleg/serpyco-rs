@@ -246,6 +246,6 @@ def test_typed_dict():
 
 
 def test_bytes():
-    serializer = Serializer(bytes, pass_through_bytes=True)
+    serializer = Serializer(bytes)
     assert serializer.dump(b'foo') == b'foo'
     assert serializer.load(b'foo') == b'foo'

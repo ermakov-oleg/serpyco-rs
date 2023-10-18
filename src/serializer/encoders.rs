@@ -11,17 +11,23 @@ use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::jsonschema::ser::ObjectType;
 use crate::python::macros::{call_object, ffi};
 use crate::python::{
     call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime,
-    is_none, iter_over_dict_items, obj_to_str, parse_date, parse_datetime, parse_time, py_len,
+    is_none, iter_over_dict_items, obj_to_str, parse_date, parse_datetime, parse_time,
     py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
     py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::validators::{check_lower_bound, check_max_length, check_min_length, check_sequence_size, check_upper_bound, invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property, no_encoder_for_discriminator};
-use crate::validator::{Array as PyArray, Context, Dict as PyDict, InstancePath, Value as PyValue, Sequence, MutableSequence, Tuple as PyTuple};
+use crate::validator::validators::{
+    check_lower_bound, check_max_length, check_min_length, check_sequence_size, check_upper_bound,
+    invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property,
+    no_encoder_for_discriminator,
+};
+use crate::validator::{
+    Array as PyArray, Context, Dict as PyDict, InstancePath, Sequence, Tuple as PyTuple,
+    Value as PyValue,
+};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
@@ -120,14 +126,7 @@ impl Encoder for DecimalEncoder {
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
 
-        let val = match &py_val.object_type {
-            ObjectType::Float => py_val.as_float(),
-            ObjectType::Int => py_val.as_int().map(|i| i as f64),
-            ObjectType::Str => py_val.as_str().and_then(|s| s.parse::<f64>().ok()),
-            _ => None,
-        };
-
-        if let Some(val) = val {
+        if let Some(val) = py_val.mayby_number_as_str() {
             check_lower_bound(val, self.type_info.min, instance_path)?;
             check_upper_bound(val, self.type_info.max, instance_path)?;
             let result = to_decimal(value).expect("decimal");
@@ -188,7 +187,6 @@ impl Encoder for BooleanEncoder {
         }
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct BytesEncoder {
@@ -585,9 +583,8 @@ impl Encoder for TupleEncoder {
         match py_value.as_sequence() {
             Some(seq) => {
                 check_sequence_size(&seq, self.encoders.len() as isize, None)?;
-                let array: PyArray = seq.map_into(&|i, item| {
-                    self.encoders[i as usize].dump(item)
-                })?;
+                let array: PyArray =
+                    seq.map_into(&|i, item| self.encoders[i as usize].dump(item))?;
                 Ok(array.as_ptr())
             }
             None => {
@@ -600,7 +597,9 @@ impl Encoder for TupleEncoder {
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         match py_value.as_sequence() {
-            None => { invalid_type!("sequence", py_value, instance_path) }
+            None => {
+                invalid_type!("sequence", py_value, instance_path)
+            }
             Some(val) => {
                 check_sequence_size(&val, self.encoders.len() as isize, Some(instance_path))?;
                 let tuple: PyTuple = val.map_into(&|i, item| {
@@ -628,18 +627,10 @@ impl Encoder for UnionEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         let discriminator = py_object_get_attr(value, self.dump_discriminator.as_ptr())?; // val RC +1
         let key = py_str_to_str(discriminator)?;
-        let encoder = self
-            .encoders
-            .get(key)
-            .ok_or_else(||{
-                let instance_path = InstancePath::new();
-                no_encoder_for_discriminator(
-                    key,
-                    &self.keys,
-                    &instance_path
-                )
-            }
-            )?;
+        let encoder = self.encoders.get(key).ok_or_else(|| {
+            let instance_path = InstancePath::new();
+            no_encoder_for_discriminator(key, &self.keys, &instance_path)
+        })?;
         ffi!(Py_DECREF(discriminator));
         encoder.dump(value)
     }
@@ -650,15 +641,13 @@ impl Encoder for UnionEncoder {
         match py_value.as_dict() {
             None => invalid_type!("object", py_value, instance_path),
             Some(dict) => {
-                let discriminator = py_object_get_item(dict.as_ptr(), self.load_discriminator.as_ptr())?; // val RC +1
+                let discriminator =
+                    py_object_get_item(dict.as_ptr(), self.load_discriminator.as_ptr())?; // val RC +1
                 let key = py_str_to_str(discriminator)?;
-                let encoder = self
-                    .encoders
-                    .get(key)
-                    .ok_or_else(||{
-                        let instance_path = instance_path.push(self.load_discriminator_rs.clone());
-                        no_encoder_for_discriminator(key, &self.keys, &instance_path)
-                    })?;
+                let encoder = self.encoders.get(key).ok_or_else(|| {
+                    let instance_path = instance_path.push(self.load_discriminator_rs.clone());
+                    no_encoder_for_discriminator(key, &self.keys, &instance_path)
+                })?;
                 ffi!(Py_DECREF(discriminator));
                 encoder.load(value, instance_path)
             }

@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from decimal import Decimal
 from enum import Enum
 from typing import TypeVar, Union
 
@@ -9,12 +8,12 @@ from ._impl import CustomEncoder
 
 @dataclass(frozen=True)
 class Min:
-    value: Union[int, float, Decimal]
+    value: Union[int, float]
 
 
 @dataclass(frozen=True)
 class Max:
-    value: Union[int, float, Decimal]
+    value: Union[int, float]
 
 
 @dataclass(frozen=True)

@@ -43,13 +43,13 @@ from ._impl import (
     IntegerType,
     LiteralType,
     OptionalType,
+    RecursionHolder,
     StringType,
     TimeType,
     TupleType,
     TypedDictType,
     UnionType,
     UUIDType,
-    RecursionHolder,
 )
 from ._meta import Meta, MetaStateKey
 from ._utils import to_camelcase
@@ -263,8 +263,8 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
 class _Field(Generic[_T]):
     name: str
     type: type[_T]
-    default: DefaultValue[_T] = NOT_SET
-    default_factory: DefaultValue[_T] = NOT_SET
+    default: DefaultValue[_T] | DefaultValue[None] = NOT_SET
+    default_factory: DefaultValue[Callable[[], _T]] | DefaultValue[None] = NOT_SET
 
 
 def _describe_entity(
@@ -376,8 +376,8 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                 ),
                 default_factory=(
                     DefaultValue.some(f.default.factory)
-                    if isinstance(f.default, attr.Factory)
-                    else NOT_SET  # type: ignore[arg-type]
+                    if isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
+                    else NOT_SET
                 ),
             )
             for f in attr.fields(t)

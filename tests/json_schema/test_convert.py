@@ -347,7 +347,7 @@ def test_to_json_schema__bytes():
     class Data:
         a: bytes
 
-    serializer = Serializer(Data, pass_through_bytes=True)
+    serializer = Serializer(Data)
     assert serializer.get_json_schema() == {
         '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones]',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',

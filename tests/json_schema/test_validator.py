@@ -148,7 +148,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
             10,
             _mk_e(m='10 is greater than the maximum of 1'),
         ),
-        (float, None, _mk_e(m='null is not of type "number"')),
+        (float, None, _mk_e(m='None is not of type "number"')),
         (
             Annotated[float, Min(1.1)],
             0.1,
@@ -168,7 +168,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
         (
             Optional[int],
             'foo',
-            _mk_e(m='"foo" is not valid under any of the schemas listed in the \'anyOf\' keyword'),
+            _mk_e(m='"foo" is not of type "integer"'),
         ),
         (EntityTest, {}, _mk_e(m='"key" is a required property')),
         (
@@ -184,12 +184,12 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
         (
             tuple[str, int, bool],
             ['1'],
-            _mk_e(m='["1"] has less than 3 items'),
+            _mk_e(m="['1'] has less than 3 items"),
         ),
         (
             tuple[str, int, bool],
             ['1', 1, True, 0],
-            _mk_e(m='["1",1,true,0] has more than 3 items'),
+            _mk_e(m="['1', 1, True, 0] has more than 3 items"),
         ),
         (
             tuple[str, bool],
@@ -202,19 +202,18 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
         (
             Annotated[Union[Foo, Bar], Discriminator('type')],
             {'type': 'buz'},
-            _mk_e(m='{"type":"buz"} is not valid under any of the schemas listed in the \'oneOf\' keyword'),
+            _mk_e(m='"buz" is not one of ["foo", "bar"] discriminator values'),
         ),
-        # todo: Revert after drop jsonschema
-        # (
-        #     Annotated[Union[Foo, Bar], Discriminator('type')],
-        #     {'type': 'foo', 'val': '123'},
-        #     _mk_e(ip=''),
-        # ),
-        # (
-        #     Annotated[Union[Foo, Bar], Discriminator('type')],
-        #     {'type': 'bar', 'val': 1},
-        #     _mk_e(ip=''),
-        # ),
+        (
+            Annotated[Union[Foo, Bar], Discriminator('type')],
+            {'type': 'foo', 'val': '123'},
+            _mk_e(ip='val', m='"123" is not of type "integer"'),
+        ),
+        (
+            Annotated[Union[Foo, Bar], Discriminator('type')],
+            {'type': 'bar', 'val': 1},
+            _mk_e(ip='val', m='1 is not of type "string"'),
+        ),
         (TypedDictTotalTrue, {}, _mk_e(m='"foo" is a required property')),
         (TypedDictTotalFalse, {}, _mk_e(m='"bar" is a required property')),
     ),
@@ -224,22 +223,8 @@ def test_validate__validation_error(cls, value, check):
     with pytest.raises(SchemaValidationError) as exc_info:
         serializer.load(value)
 
-    with pytest.raises(SchemaValidationError) as exc_info_new:
-        serializer.load(value, validate=False)
-
     assert len(exc_info.value.errors) == 1
-    assert len(exc_info_new.value.errors) == 1
     check(exc_info.value.errors[0])
-    # Some formats differ between jsonschema and serpyco_rs
-    error = exc_info_new.value.errors[0]
-    error.message = error.message.replace('None', 'null')
-    error.message = error.message.replace("['1', 1, True, 0]", '["1",1,true,0]')
-    error.message = error.message.replace("['1']", '["1"]')
-    if error.message.startswith('"foo" is not of type "integer"'):
-        error.message = '"foo" is not valid under any of the schemas listed in the \'anyOf\' keyword'
-    if 'discriminator values' in error.message:
-        return
-    check(error)
 
 
 def test_validate__error_format():
@@ -260,10 +245,6 @@ def test_validate__error_format():
         serializer.load(value)
 
     assert exc_info.value.errors == [
-        ErrorItem(
-            message='"baz" is a required property',
-            instance_path='bar',
-        ),
         ErrorItem(
             message='"1" is not of type "integer"',
             instance_path='foo',
@@ -293,12 +274,11 @@ def test_validation_error_message():
     error = exc_info.value
     error_item = error.errors[0]
 
-    assert str(error_item) == ("""2 is not of type "string" (instance_path='bar')""")
-    assert repr(error_item) == ("""ErrorItem(message='2 is not of type "string"', instance_path='bar')""")
+    assert str(error_item) == (""""1" is not of type "integer" (instance_path='foo')""")
+    assert repr(error_item) == ("""ErrorItem(message='"1" is not of type "integer"', instance_path='foo')""")
     assert str(error) == textwrap.dedent(
         """\
     Schema validation failed:
-    - 2 is not of type "string" (instance_path='bar')
     - "1" is not of type "integer" (instance_path='foo')
       """
     )
@@ -307,7 +287,6 @@ def test_validation_error_message():
     SchemaValidationError(
         message="Schema validation failed",
         errors=[
-            ErrorItem(message='2 is not of type "string"', instance_path='bar'),
             ErrorItem(message='"1" is not of type "integer"', instance_path='foo'),
         ]
     )"""

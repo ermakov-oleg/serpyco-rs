@@ -278,7 +278,7 @@ def test_tuple_validation__invalid_length():
 
 
 def test_bytes_validation__invalid_type():
-    s = Serializer(bytes, pass_through_bytes=True)
+    s = Serializer(bytes)
     with pytest.raises(SchemaValidationError) as e:
         s.load('foo', validate=False)
 

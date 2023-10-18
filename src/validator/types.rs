@@ -1,10 +1,10 @@
-use std::fmt;
 use pyo3::exceptions::PyRuntimeError;
+use std::fmt;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyNone, PyTuple,};
+use pyo3::types::{PyNone, PyTuple};
 
-use super::value::{Value, Sequence};
+use super::value::{Sequence, Value};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -399,10 +399,10 @@ impl EntityType {
             && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
             && self_
-            .fields
-            .iter()
-            .zip(other.fields.iter())
-            .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
             && self_.omit_none == other.omit_none
             && py_eq!(self_.generics, other.generics, py)
             && py_eq!(self_.doc, other.doc, py))
@@ -474,10 +474,10 @@ impl TypedDictType {
             && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
             && self_
-            .fields
-            .iter()
-            .zip(other.fields.iter())
-            .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
+                .fields
+                .iter()
+                .zip(other.fields.iter())
+                .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
             && self_.omit_none == other.omit_none
             && py_eq!(self_.generics, other.generics, py)
             && py_eq!(self_.doc, other.doc, py))
@@ -761,7 +761,6 @@ impl DictionaryType {
     }
 }
 
-
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
 pub struct TupleType {
@@ -785,15 +784,13 @@ impl TupleType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(base.__eq__(base_other, py)? &&
-            self_.item_types.len() == other.item_types.len()
-            && self_.item_types
-            .iter()
-            .zip(other.item_types.iter())
-            .all(
-                |(a, b)|  a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)
-            )
-        )
+        Ok(base.__eq__(base_other, py)?
+            && self_.item_types.len() == other.item_types.len()
+            && self_
+                .item_types
+                .iter()
+                .zip(other.item_types.iter())
+                .all(|(a, b)| a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)))
     }
 
     fn __repr__(&self) -> String {
@@ -806,7 +803,6 @@ impl TupleType {
         format!("<TupleType: item_types={:?}>", item_types)
     }
 }
-
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -852,7 +848,6 @@ impl AnyType {
     }
 }
 
-
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
 pub struct UnionType {
@@ -890,8 +885,7 @@ impl UnionType {
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.item_types, other.item_types, py)
             && py_eq!(self_.dump_discriminator, other.dump_discriminator, py)
-            && py_eq!(self_.load_discriminator, other.load_discriminator, py)
-        )
+            && py_eq!(self_.load_discriminator, other.load_discriminator, py))
     }
 
     fn __repr__(&self) -> String {
@@ -903,7 +897,6 @@ impl UnionType {
         )
     }
 }
-
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -942,18 +935,13 @@ impl LiteralType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(base.__eq__(base_other, py)?
-            && py_eq!(self_.args, other.args, py))
+        Ok(base.__eq__(base_other, py)? && py_eq!(self_.args, other.args, py))
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "<LiteralType: items={:?}>",
-            self.args.to_string(),
-        )
+        format!("<LiteralType: items={:?}>", self.args.to_string(),)
     }
 }
-
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
@@ -968,7 +956,12 @@ pub struct RecursionHolder {
 impl RecursionHolder {
     #[new]
     #[pyo3(signature = (name, state_key, meta, custom_encoder=None))]
-    fn new(name: &PyAny, state_key: &PyAny, meta: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        name: &PyAny,
+        state_key: &PyAny,
+        meta: &PyAny,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
         (
             RecursionHolder {
                 name: name.into(),
@@ -982,7 +975,10 @@ impl RecursionHolder {
     pub fn get_type<'a>(&'a self, py: Python<'a>) -> PyResult<&'a PyAny> {
         match self.meta.as_ref(py).get_item(&self.state_key) {
             Ok(type_) => Ok(type_),
-            Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!("Recursive type not resolved: {}", e))),
+            Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!(
+                "Recursive type not resolved: {}",
+                e
+            ))),
         }
     }
 
@@ -992,8 +988,7 @@ impl RecursionHolder {
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.name, other.name, py)
             && py_eq!(self_.state_key, other.state_key, py)
-            && py_eq!(self_.meta, other.meta, py)
-        )
+            && py_eq!(self_.meta, other.meta, py))
     }
 
     fn __repr__(&self) -> String {

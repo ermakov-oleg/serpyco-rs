@@ -6,9 +6,11 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyString};
 use pyo3::{PyAny, PyResult};
 
-use crate::jsonschema;
 use crate::python::{get_object_type, Type};
-use crate::serializer::encoders::{BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, StringEncoder, TypedDictEncoder};
+use crate::serializer::encoders::{
+    BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, StringEncoder,
+    TypedDictEncoder,
+};
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
 
@@ -27,23 +29,18 @@ type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
 #[derive(Debug)]
 pub struct Serializer {
     pub encoder: Box<TEncoder>,
-    schema: jsonschema::JSONSchema,
-    pass_through_bytes: bool,
 }
 
 #[pymethods]
 impl Serializer {
     #[new]
-    fn new(type_info: &PyAny, schema: &PyAny, pass_through_bytes: bool) -> PyResult<Self> {
+    fn new(type_info: &PyAny) -> PyResult<Self> {
         let obj_type = get_object_type(type_info)?;
         let mut encoder_state: HashMap<usize, EncoderStateValue> = HashMap::new();
-        let schema = jsonschema::compile(schema, pass_through_bytes)?;
         let ctx = Context::new();
 
         let serializer = Self {
             encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state, ctx)?,
-            schema,
-            pass_through_bytes,
         };
         Ok(serializer)
     }
@@ -60,9 +57,6 @@ impl Serializer {
 
     #[inline]
     pub fn load(&self, value: &PyAny, validate: bool) -> PyResult<Py<PyAny>> {
-        if validate {
-            jsonschema::validate_python(&self.schema, self.pass_through_bytes, value)?;
-        }
         let instance_path = InstancePath::new();
         unsafe {
             Ok(Py::from_owned_ptr(
@@ -120,10 +114,8 @@ pub fn get_encoder(
             let encoder = BytesEncoder { ctx };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
-        Type::Any(_, base_type) => {
-            wrap_with_custom_encoder(py, base_type, Box::new(NoopEncoder))?
-        }
-        Type::LiteralType(type_info, base_type) => wrap_with_custom_encoder(
+        Type::Any(_, base_type) => wrap_with_custom_encoder(py, base_type, Box::new(NoopEncoder))?,
+        Type::Literal(type_info, base_type) => wrap_with_custom_encoder(
             py,
             base_type,
             Box::new(LiteralEncoder {
@@ -169,10 +161,12 @@ pub fn get_encoder(
             }
             wrap_with_custom_encoder(py, base_type, Box::new(TupleEncoder { encoders, ctx }))?
         }
-        Type::UnionType(type_info, base_type) => {
-            let dump_discriminator: &PyString = type_info.dump_discriminator.as_ref(py).downcast()?;
+        Type::Union(type_info, base_type) => {
+            let dump_discriminator: &PyString =
+                type_info.dump_discriminator.as_ref(py).downcast()?;
 
-            let load_discriminator: &PyString = type_info.load_discriminator.as_ref(py).downcast()?;
+            let load_discriminator: &PyString =
+                type_info.load_discriminator.as_ref(py).downcast()?;
 
             let item_types: &PyDict = type_info.item_types.as_ref(py).downcast()?;
 
@@ -238,7 +232,6 @@ pub fn get_encoder(
                     inner: encoder.clone(),
                     ctx,
                 }),
-
             )?
         }
         Type::Enum(type_info, base_type) => wrap_with_custom_encoder(
@@ -260,7 +253,6 @@ fn wrap_with_custom_encoder(
     base_type: BaseType,
     original_encoder: Box<TEncoder>,
 ) -> PyResult<Box<TEncoder>> {
-
     if let Some(custom_encoder_py) = base_type.custom_encoder {
         let custom_encoder = custom_encoder_py.extract::<types::CustomEncoder>(py)?;
 
@@ -277,7 +269,6 @@ fn wrap_with_custom_encoder(
         Ok(original_encoder)
     }
 }
-
 
 fn iterate_on_fields(
     py: Python<'_>,

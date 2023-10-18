@@ -1,7 +1,7 @@
 use super::macros::{call_method, ffi};
 use super::types::{
-    DATE_STR, DECIMAL_PY_TYPE, FALSE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, PY_OBJECT__NEW__,
-    TRUE, UUID_PY_TYPE, VALUE_STR,
+    DATE_STR, DECIMAL_PY_TYPE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, PY_OBJECT__NEW__,
+    UUID_PY_TYPE, VALUE_STR,
 };
 use crate::python::macros::use_immortal;
 use pyo3::{ffi, PyErr, PyResult, Python};
@@ -24,15 +24,6 @@ pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObje
 #[inline]
 pub(crate) fn to_uuid(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     py_object_call1_make_tuple_or_err(unsafe { UUID_PY_TYPE }, value)
-}
-
-#[inline]
-pub(crate) fn to_bool(value: bool) -> *mut ffi::PyObject {
-    if value {
-        use_immortal!(TRUE)
-    } else {
-        use_immortal!(FALSE)
-    }
 }
 
 #[inline]

@@ -1,7 +1,7 @@
-use std::cmp::Ordering;
 use crate::validator::types::EnumItems;
-use crate::validator::{raise_error, InstancePath, Value, Sequence};
+use crate::validator::{raise_error, InstancePath, Sequence, Value};
 use pyo3::{PyErr, PyResult};
+use std::cmp::Ordering;
 use std::fmt::Display;
 
 pub fn check_lower_bound<T>(val: T, min: Option<T>, instance_path: &InstancePath) -> PyResult<()>
@@ -74,24 +74,28 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
     .unwrap_err()
 }
 
-pub fn check_sequence_size(val: &SequenceImpl, size: isize, instance_path: Option<&InstancePath>) -> PyResult<()> {
+pub fn check_sequence_size(
+    val: &SequenceImpl,
+    size: isize,
+    instance_path: Option<&InstancePath>,
+) -> PyResult<()> {
     let len = val.len()?;
     match len.cmp(&size) {
         Ordering::Equal => Ok(()),
         Ordering::Less => {
-            let instance_path = instance_path.map(|i| i.clone()).unwrap_or(InstancePath::new());
+            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
                 format!(r#"{} has less than {} items"#, val, size),
                 &instance_path,
             )
-        },
+        }
         Ordering::Greater => {
-            let instance_path = instance_path.map(|i| i.clone()).unwrap_or(InstancePath::new());
+            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
                 format!(r#"{} has more than {} items"#, val, size),
                 &instance_path,
             )
-        },
+        }
     }
 }
 
@@ -106,7 +110,10 @@ pub fn no_encoder_for_discriminator(
         .collect::<Vec<_>>()
         .join(", ");
     raise_error(
-        format!(r#""{}" is not one of [{}] discriminator values"#, key, items),
+        format!(
+            r#""{}" is not one of [{}] discriminator values"#,
+            key, items
+        ),
         instance_path,
     )
     .unwrap_err()
@@ -115,7 +122,7 @@ pub fn no_encoder_for_discriminator(
 pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) -> PyResult<()> {
     let error = match value.as_str() {
         Some(val) => format!(r#""{}" is not of type "{}""#, val, type_),
-        None => format!(r#"{} is not of type "{}""#, value.to_string()?, type_),
+        None => format!(r#"{} is not of type "{}""#, value, type_),
     };
     raise_error(error, instance_path)?;
     Ok(())
@@ -127,7 +134,6 @@ macro_rules! invalid_type {
         unreachable!(); // todo: Discard the use of unreachable
     }};
 }
-
 
 macro_rules! invalid_type_dump {
     ($type_: expr, $value: expr) => {{
@@ -144,7 +150,7 @@ pub fn _invalid_enum_item(
 ) -> PyResult<()> {
     let error = match value.as_str() {
         Some(val) => format!(r#""{}" is not one of {}"#, val, items),
-        None => format!(r#"{} is not one of {}"#, value.to_string()?, items),
+        None => format!(r#"{} is not one of {}"#, value, items),
     };
     raise_error(error, instance_path)?;
     Ok(())
@@ -157,7 +163,7 @@ macro_rules! invalid_enum_item {
     }};
 }
 
+use crate::validator::value::SequenceImpl;
 pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
 pub(crate) use invalid_type_dump;
-use crate::validator::value::SequenceImpl;

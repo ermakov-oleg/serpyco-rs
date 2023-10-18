@@ -18,11 +18,6 @@ speedate = "0.12.0"
 dyn-clone = "1.0"
 atomic_refcell = "0.1.12"
 
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-bytecount = { version = "^0.6.4", default_features = false, features = ["runtime-dispatch-simd"] }
-encoding_rs = { version = "0.8", default_features = false }
-jsonschema = { version = "0.17", default_features = false, features = ["draft202012"] }
 uuid = "1"
 
 [build-dependencies]

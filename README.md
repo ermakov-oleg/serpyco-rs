@@ -307,7 +307,7 @@ from serpyco_rs import Serializer
 class Foo:
     val: bytes
 
-ser = Serializer(Foo, pass_through_bytes=True)
+ser = Serializer(Foo)
 ser.load({'val': b'123'}) == Foo(val=b'123')
 ```
 

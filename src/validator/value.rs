@@ -1,11 +1,14 @@
-use std::fmt::{Display, Formatter};
 use pyo3::{PyErr, PyResult, Python};
 use pyo3_ffi::PyObject;
+use std::fmt::{Display, Formatter};
 
-use crate::jsonschema::ser::ObjectType;
+use super::py_types::ObjectType;
 use crate::python::macros::{call_method, ffi};
 use crate::python::types::ITEMS_STR;
-use crate::python::{from_ptr_or_err, from_ptr_or_opt, obj_to_str, py_len, py_object_get_item, py_str_to_str, py_tuple_get_item};
+use crate::python::{
+    from_ptr_or_err, from_ptr_or_opt, obj_to_str, py_len, py_object_get_item, py_str_to_str,
+    py_tuple_get_item,
+};
 
 use super::py_types::get_object_type_from_object;
 
@@ -108,7 +111,6 @@ impl Value {
     }
 
     /// Represents object as a string.
-    /// Todo: impl Display trait for Value
     #[inline]
     pub fn to_string(&self) -> PyResult<&'static str> {
         let result = obj_to_str(self.py_object)?;
@@ -124,8 +126,17 @@ impl Value {
             None
         }
     }
-}
 
+    #[inline]
+    pub fn mayby_number_as_str(&self) -> Option<f64> {
+        match self.object_type {
+            ObjectType::Float => self.as_float(),
+            ObjectType::Int => self.as_int().map(|i| i as f64),
+            ObjectType::Str => self.as_str().and_then(|s| s.parse::<f64>().ok()),
+            _ => None,
+        }
+    }
+}
 
 /// Represents a Python immutable sequence.
 pub trait Sequence {
@@ -137,9 +148,12 @@ pub trait Sequence {
     }
     /// Map the sequence to a new sequence with the given function.
     /// The function must return a new PyObject or increase the reference count of the given PyObject.
-    fn map_into<T>(&self, f: &dyn Fn(isize, *mut pyo3::ffi::PyObject) -> PyResult<*mut pyo3::ffi::PyObject>) -> PyResult<T>
-        where
-            T: MutableSequence;
+    fn map_into<T>(
+        &self,
+        f: &dyn Fn(isize, *mut pyo3::ffi::PyObject) -> PyResult<*mut pyo3::ffi::PyObject>,
+    ) -> PyResult<T>
+    where
+        T: MutableSequence;
 }
 
 /// Represents a Python mutable sequence.
@@ -155,7 +169,6 @@ pub trait MutableSequence {
 pub struct Array {
     py_object: *mut pyo3::ffi::PyObject,
 }
-
 
 impl Array {
     /// Creates a new array from the given PyObject.
@@ -173,7 +186,6 @@ impl Array {
     }
 }
 
-
 impl Sequence for Array {
     /// Returns the pointer to the underlying PyObject.
     #[inline]
@@ -186,7 +198,13 @@ impl Sequence for Array {
         Ok(ffi!(PyList_GET_SIZE(self.py_object))) // rc not changed
     }
 
-    fn map_into<T>(&self, f: &dyn Fn(isize, *mut PyObject) -> PyResult<*mut PyObject>) -> PyResult<T> where T: MutableSequence {
+    fn map_into<T>(
+        &self,
+        f: &dyn Fn(isize, *mut PyObject) -> PyResult<*mut PyObject>,
+    ) -> PyResult<T>
+    where
+        T: MutableSequence,
+    {
         let mut result = T::new_with_capacity(self.len()?);
         for i in 0..self.len()? {
             let item = ffi!(PyList_GET_ITEM(self.as_ptr(), i));
@@ -198,7 +216,6 @@ impl Sequence for Array {
 }
 
 impl MutableSequence for Array {
-
     /// Creates a new empty array with the given capacity.
     #[inline]
     fn new_with_capacity(capacity: isize) -> Self {
@@ -225,7 +242,13 @@ impl Sequence for SequenceImpl {
     }
 
     #[inline]
-    fn map_into<T>(&self, f: &dyn Fn(isize, *mut pyo3::ffi::PyObject) -> PyResult<*mut pyo3::ffi::PyObject>) -> PyResult<T> where T: MutableSequence {
+    fn map_into<T>(
+        &self,
+        f: &dyn Fn(isize, *mut pyo3::ffi::PyObject) -> PyResult<*mut pyo3::ffi::PyObject>,
+    ) -> PyResult<T>
+    where
+        T: MutableSequence,
+    {
         let mut result = T::new_with_capacity(self.len()?);
         for i in 0..self.len()? {
             let item = ffi!(PySequence_GetItem(self.as_ptr(), i)); // RC +1
@@ -245,7 +268,6 @@ impl SequenceImpl {
     }
 }
 
-
 /// Represents a Python tuple.
 /// This is a wrapper around a PyObject pointer.
 pub struct Tuple {
@@ -260,7 +282,6 @@ impl Tuple {
 }
 
 impl MutableSequence for Tuple {
-
     #[inline]
     fn new_with_capacity(capacity: isize) -> Self {
         let py_object = ffi!(PyTuple_New(capacity));
@@ -272,8 +293,6 @@ impl MutableSequence for Tuple {
         ffi!(PyTuple_SetItem(self.py_object, index, value));
     }
 }
-
-
 
 /// Represents a Python dict.
 /// This is a wrapper around a PyObject pointer.
@@ -367,13 +386,11 @@ impl Display for Tuple {
     }
 }
 
-
 impl Display for SequenceImpl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", _to_string(self.py_object))
     }
 }
-
 
 #[inline]
 pub fn _to_string(py_object: *mut pyo3::ffi::PyObject) -> &'static str {

@@ -1,8 +1,9 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TypeVar, Any, Sequence, Optional
+from typing import Any, Optional, TypeVar
 
 from serpyco_rs._impl import BaseType
-from serpyco_rs.metadata import FiledFormat, NoneFormat, NoneAsDefaultForOptional
+from serpyco_rs.metadata import FiledFormat, NoneAsDefaultForOptional, NoneFormat
 
 
 @dataclass(frozen=True, unsafe_hash=True)
@@ -23,7 +24,7 @@ class Meta:
     def add_to_state(self, key: MetaStateKey, value: Optional[BaseType]) -> None:
         self.state[key] = value
 
-    def __getitem__(self, item) -> Optional[BaseType]:
+    def __getitem__(self, item: MetaStateKey) -> Optional[BaseType]:
         return self.state.get(item)
 
     def has_in_state(self, key: MetaStateKey) -> bool:
