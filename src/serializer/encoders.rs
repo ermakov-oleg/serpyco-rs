@@ -20,9 +20,8 @@ use crate::python::{
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
-    check_lower_bound, check_max_length, check_min_length, check_sequence_size, check_upper_bound,
-    invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property,
-    no_encoder_for_discriminator,
+    check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
+    invalid_type_dump, missing_required_property, no_encoder_for_discriminator,
 };
 use crate::validator::{
     Array as PyArray, Context, Dict as PyDict, InstancePath, Sequence, Tuple as PyTuple,
@@ -71,9 +70,9 @@ impl Encoder for IntEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let val = PyValue::new(value);
-        if let Some(int_val) = val.as_int() {
-            check_lower_bound(int_val, self.type_info.min, instance_path)?;
-            check_upper_bound(int_val, self.type_info.max, instance_path)?;
+
+        if val.is_int() {
+            check_bounds(val, self.type_info.min, self.type_info.max, instance_path)?;
             ffi!(Py_INCREF(value));
             Ok(value)
         } else {
@@ -98,10 +97,13 @@ impl Encoder for FloatEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
-        let val = py_val.as_float().or(py_val.as_int().map(|i| i as f64));
-        if let Some(val) = val {
-            check_lower_bound(val, self.type_info.min, instance_path)?;
-            check_upper_bound(val, self.type_info.max, instance_path)?;
+        if py_val.is_number() {
+            check_bounds(
+                py_val,
+                self.type_info.min,
+                self.type_info.max,
+                instance_path,
+            )?;
             ffi!(Py_INCREF(value));
             Ok(value)
         } else {
@@ -127,8 +129,7 @@ impl Encoder for DecimalEncoder {
         let py_val = PyValue::new(value);
 
         if let Some(val) = py_val.maybe_number() {
-            check_lower_bound(val, self.type_info.min, instance_path)?;
-            check_upper_bound(val, self.type_info.max, instance_path)?;
+            check_bounds(val, self.type_info.min, self.type_info.max, instance_path)?;
             let result = to_decimal(value).expect("decimal");
             Ok(result)
         } else {
@@ -153,9 +154,13 @@ impl Encoder for StringEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let val = PyValue::new(value);
-        if let Some(str_val) = val.as_str() {
-            check_min_length(str_val, self.type_info.min_length, instance_path)?;
-            check_max_length(str_val, self.type_info.max_length, instance_path)?;
+        if val.is_string() {
+            check_length(
+                &val,
+                self.type_info.min_length,
+                self.type_info.max_length,
+                instance_path,
+            )?;
             ffi!(Py_INCREF(value));
             Ok(value)
         } else {

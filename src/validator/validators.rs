@@ -34,13 +34,32 @@ where
     Ok(())
 }
 
+pub fn check_bounds<T>(
+    val: impl Into<T>,
+    min: Option<T>,
+    max: Option<T>,
+    instance_path: &InstancePath,
+) -> PyResult<()>
+where
+    T: PartialOrd + Display + Copy,
+{
+    if min.is_none() && max.is_none() {
+        return Ok(());
+    }
+    let val = val.into();
+    check_lower_bound(val, min, instance_path)?;
+    check_upper_bound(val, max, instance_path)?;
+    Ok(())
+}
+
 pub fn check_min_length(
-    val: &str,
+    val: &Value,
+    len: usize,
     min: Option<usize>,
     instance_path: &InstancePath,
 ) -> PyResult<()> {
     if let Some(min) = min {
-        if val.len() <= min {
+        if len <= min {
             raise_error(
                 format!(r#""{}" is shorter than {} characters"#, val, min),
                 instance_path,
@@ -51,18 +70,34 @@ pub fn check_min_length(
 }
 
 pub fn check_max_length(
-    val: &str,
+    val: &Value,
+    len: usize,
     max: Option<usize>,
     instance_path: &InstancePath,
 ) -> PyResult<()> {
     if let Some(max) = max {
-        if val.len() > max {
+        if len > max {
             raise_error(
                 format!(r#""{}" is longer than {} characters"#, val, max),
                 instance_path,
             )?;
         }
     }
+    Ok(())
+}
+
+pub fn check_length<'a>(
+    val: &Value,
+    min: Option<usize>,
+    max: Option<usize>,
+    instance_path: &InstancePath,
+) -> PyResult<()> {
+    if min.is_none() && max.is_none() {
+        return Ok(());
+    }
+    let len = val.str_len()? as usize;
+    check_min_length(val, len, min, instance_path)?;
+    check_max_length(val, len, max, instance_path)?;
     Ok(())
 }
 

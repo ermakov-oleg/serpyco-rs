@@ -59,6 +59,24 @@ impl Value {
         }
     }
 
+    /// Checks if the value is a integer.
+    #[inline]
+    pub fn is_int(&self) -> bool {
+        self.object_type == ObjectType::Int
+    }
+
+    /// Checks if the value is a float or integer.
+    #[inline]
+    pub fn is_number(&self) -> bool {
+        self.object_type == ObjectType::Int || self.object_type == ObjectType::Float
+    }
+
+    /// Checks if the value is a string.
+    #[inline]
+    pub fn is_string(&self) -> bool {
+        self.object_type == ObjectType::Str
+    }
+
     /// Represents as Int value.
     #[inline]
     pub fn as_int(&self) -> Option<i64> {
@@ -87,6 +105,16 @@ impl Value {
             Some(slice)
         } else {
             None
+        }
+    }
+
+    pub fn str_len(&self) -> PyResult<isize> {
+        if self.object_type == ObjectType::Str {
+            py_len(self.py_object)
+        } else {
+            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                "Not a string",
+            ))
         }
     }
 
@@ -135,6 +163,23 @@ impl Value {
             ObjectType::Str => self.as_str().and_then(|s| s.parse::<f64>().ok()),
             _ => None,
         }
+    }
+}
+
+impl From<Value> for i64 {
+    #[inline]
+    fn from(value: Value) -> Self {
+        value.as_int().expect("Failed to convert Value to i64")
+    }
+}
+
+impl From<Value> for f64 {
+    #[inline]
+    fn from(value: Value) -> Self {
+        value
+            .as_float()
+            .or(value.as_int().map(|i| i as f64))
+            .expect("Failed to convert Value to f64")
     }
 }
 

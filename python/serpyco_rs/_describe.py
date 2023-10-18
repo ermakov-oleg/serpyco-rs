@@ -263,8 +263,8 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
 class _Field(Generic[_T]):
     name: str
     type: type[_T]
-    default: DefaultValue[_T] | DefaultValue[None] = NOT_SET
-    default_factory: DefaultValue[Callable[[], _T]] | DefaultValue[None] = NOT_SET
+    default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
+    default_factory: [DefaultValue[Callable[[], _T]],DefaultValue[None]] = NOT_SET
 
 
 def _describe_entity(

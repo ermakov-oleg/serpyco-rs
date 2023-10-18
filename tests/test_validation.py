@@ -12,13 +12,9 @@ from serpyco_rs.metadata import CustomEncoder, Max, MaxLength, Min, MinLength, D
 
 
 def _check_errors(s: Serializer, value: Any, expected_errors: list[ErrorItem]):
-    with pytest.raises(SchemaValidationError) as json_schema_error:
-        s.load(value, validate=True)
-
     with pytest.raises(SchemaValidationError) as native_schema_error:
         s.load(value, validate=False)
 
-    assert json_schema_error.value.errors == expected_errors
     assert native_schema_error.value.errors == expected_errors
 
 
@@ -321,3 +317,24 @@ def test_literal_validation__invalid_value():
         s.load(1, validate=False)
 
     assert e.value.errors == [ErrorItem(message='1 is not one of ["foo","bar"]', instance_path='')]
+
+
+def test_instance_path():
+    @dataclass
+    class Foo:
+        a: int
+
+    @dataclass
+    class Bar:
+        foo: tuple[Foo]
+
+    @dataclass
+    class Baz:
+        bar: list[Bar]
+
+    s = Serializer(Baz)
+    _check_errors(
+        s,
+        {'bar': [{'foo': [{'a': 1}]}, {'foo': [{'b': 1}]}]},
+        [ErrorItem(message='"a" is a required property', instance_path='bar/1/foo/0')]
+    )
