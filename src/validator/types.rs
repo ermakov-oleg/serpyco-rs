@@ -617,7 +617,7 @@ impl EnumType {
         let mut enum_items = vec![];
         let py_items = Value::new(items.as_ptr());
         if let Some(array) = py_items.as_array() {
-            for i in 0..array.len().expect("array length") {
+            for i in 0..array.len() {
                 let item = array.get_item(i);
                 if let Some(str) = item.as_str() {
                     enum_items.push(EnumItem::String(str.to_string()));
@@ -914,7 +914,7 @@ impl LiteralType {
         let mut enum_items = vec![];
         let py_items = Value::new(args.as_ptr());
         if let Some(array) = py_items.as_array() {
-            for i in 0..array.len().expect("array length") {
+            for i in 0..array.len() {
                 let item = array.get_item(i);
                 if let Some(str) = item.as_str() {
                     enum_items.push(EnumItem::String(str.to_string()));

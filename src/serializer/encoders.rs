@@ -126,7 +126,7 @@ impl Encoder for DecimalEncoder {
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
 
-        if let Some(val) = py_val.mayby_number_as_str() {
+        if let Some(val) = py_val.maybe_number() {
             check_lower_bound(val, self.type_info.min, instance_path)?;
             check_upper_bound(val, self.type_info.max, instance_path)?;
             let result = to_decimal(value).expect("decimal");

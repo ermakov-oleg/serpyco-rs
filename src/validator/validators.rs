@@ -79,7 +79,7 @@ pub fn check_sequence_size(
     size: isize,
     instance_path: Option<&InstancePath>,
 ) -> PyResult<()> {
-    let len = val.len()?;
+    let len = val.len();
     match len.cmp(&size) {
         Ordering::Equal => Ok(()),
         Ordering::Less => {

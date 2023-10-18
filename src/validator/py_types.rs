@@ -1,9 +1,8 @@
-use std::ffi::CStr;
-use std::{os::raw::c_char, sync::Once};
+use std::sync::Once;
 
 use pyo3::ffi::{
-    PyDict_New, PyFloat_FromDouble, PyList_New, PyLong_FromLongLong, PyObject, PyTypeObject,
-    PyUnicode_New, Py_None, Py_True,
+    PyDict_New, PyFloat_FromDouble, PyList_New, PyLong_FromLongLong, PyTypeObject, PyUnicode_New,
+    Py_None, Py_True,
 };
 use pyo3_ffi::PyBytes_FromStringAndSize;
 use pyo3_ffi::Py_TYPE;
@@ -18,9 +17,10 @@ pub enum ObjectType {
     List,
     Dict,
     Bytes,
-    Unknown(String),
+    Unknown,
 }
 
+#[inline]
 pub fn get_object_type_from_object(object: *mut pyo3::ffi::PyObject) -> ObjectType {
     unsafe {
         let object_type = Py_TYPE(object);
@@ -47,12 +47,8 @@ pub fn get_object_type(object_type: *mut pyo3::ffi::PyTypeObject) -> ObjectType 
     } else if object_type == unsafe { BYTES_TYPE } {
         ObjectType::Bytes
     } else {
-        ObjectType::Unknown(get_type_name(object_type).to_string())
+        ObjectType::Unknown
     }
-}
-
-pub fn get_type_name(object_type: *mut pyo3::ffi::PyTypeObject) -> std::borrow::Cow<'static, str> {
-    unsafe { CStr::from_ptr((*object_type).tp_name).to_string_lossy() }
 }
 
 pub static mut TRUE: *mut pyo3::ffi::PyObject = 0 as *mut pyo3::ffi::PyObject;
@@ -65,7 +61,6 @@ pub static mut FLOAT_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut LIST_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut DICT_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
 pub static mut BYTES_TYPE: *mut PyTypeObject = 0 as *mut PyTypeObject;
-pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -83,6 +78,5 @@ pub fn init() {
         INT_TYPE = Py_TYPE(PyLong_FromLongLong(0));
         FLOAT_TYPE = Py_TYPE(PyFloat_FromDouble(0.0));
         BYTES_TYPE = Py_TYPE(PyBytes_FromStringAndSize(std::ptr::null_mut(), 0_isize));
-        VALUE_STR = pyo3::ffi::PyUnicode_InternFromString("value\0".as_ptr().cast::<c_char>());
     });
 }

@@ -128,7 +128,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn mayby_number_as_str(&self) -> Option<f64> {
+    pub fn maybe_number(&self) -> Option<f64> {
         match self.object_type {
             ObjectType::Float => self.as_float(),
             ObjectType::Int => self.as_int().map(|i| i as f64),
@@ -143,9 +143,7 @@ pub trait Sequence {
     /// Returns the pointer to the underlying PyObject.
     fn as_ptr(&self) -> *mut pyo3::ffi::PyObject;
     /// Returns the length of the sequence.
-    fn len(&self) -> PyResult<isize> {
-        py_len(self.as_ptr())
-    }
+    fn len(&self) -> isize;
     /// Map the sequence to a new sequence with the given function.
     /// The function must return a new PyObject or increase the reference count of the given PyObject.
     fn map_into<T>(
@@ -168,13 +166,17 @@ pub trait MutableSequence {
 /// This is a wrapper around a PyObject pointer.
 pub struct Array {
     py_object: *mut pyo3::ffi::PyObject,
+    len: isize,
 }
 
 impl Array {
     /// Creates a new array from the given PyObject.
     #[inline]
     pub fn new(py_object: *mut pyo3::ffi::PyObject) -> Self {
-        Array { py_object }
+        Array {
+            py_object,
+            len: ffi!(PyList_GET_SIZE(py_object)),
+        }
     }
 
     /// Returns the value at the given index.
@@ -194,8 +196,8 @@ impl Sequence for Array {
     }
     /// Returns the length of the array.
     #[inline]
-    fn len(&self) -> PyResult<isize> {
-        Ok(ffi!(PyList_GET_SIZE(self.py_object))) // rc not changed
+    fn len(&self) -> isize {
+        self.len
     }
 
     fn map_into<T>(
@@ -205,8 +207,8 @@ impl Sequence for Array {
     where
         T: MutableSequence,
     {
-        let mut result = T::new_with_capacity(self.len()?);
-        for i in 0..self.len()? {
+        let mut result = T::new_with_capacity(self.len);
+        for i in 0..self.len {
             let item = ffi!(PyList_GET_ITEM(self.as_ptr(), i));
             let new_item = f(i, item)?;
             result.set(i, new_item);
@@ -220,7 +222,10 @@ impl MutableSequence for Array {
     #[inline]
     fn new_with_capacity(capacity: isize) -> Self {
         let py_object = ffi!(PyList_New(capacity));
-        Array { py_object }
+        Array {
+            py_object,
+            len: capacity,
+        }
     }
     /// Sets the value at the given index.
     #[inline]
@@ -233,12 +238,18 @@ impl MutableSequence for Array {
 /// This is a wrapper around a PyObject pointer.
 pub struct SequenceImpl {
     py_object: *mut pyo3::ffi::PyObject,
+    len: isize,
 }
 
 impl Sequence for SequenceImpl {
     #[inline]
     fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
         self.py_object
+    }
+
+    #[inline]
+    fn len(&self) -> isize {
+        self.len
     }
 
     #[inline]
@@ -249,8 +260,8 @@ impl Sequence for SequenceImpl {
     where
         T: MutableSequence,
     {
-        let mut result = T::new_with_capacity(self.len()?);
-        for i in 0..self.len()? {
+        let mut result = T::new_with_capacity(self.len);
+        for i in 0..self.len {
             let item = ffi!(PySequence_GetItem(self.as_ptr(), i)); // RC +1
             let new_item = f(i, item)?;
             result.set(i, new_item);
@@ -264,7 +275,10 @@ impl SequenceImpl {
     /// Creates a new sequence from the given PyObject.
     #[inline]
     pub fn new(py_object: *mut pyo3::ffi::PyObject) -> Self {
-        SequenceImpl { py_object }
+        SequenceImpl {
+            py_object,
+            len: py_len(py_object).expect("Failed to get sequence length"),
+        }
     }
 }
 
