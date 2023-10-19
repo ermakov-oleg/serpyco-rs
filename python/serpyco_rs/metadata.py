@@ -42,12 +42,12 @@ class Format(Enum):
 
 
 @dataclass(frozen=True)
-class FiledFormat:
+class FieldFormat:
     format: Format
 
 
-CamelCase: FiledFormat = FiledFormat(Format.camel_case)
-NoFormat: FiledFormat = FiledFormat(Format.no_format)
+CamelCase: FieldFormat = FieldFormat(Format.camel_case)
+NoFormat: FieldFormat = FieldFormat(Format.no_format)
 
 
 @dataclass(frozen=True)

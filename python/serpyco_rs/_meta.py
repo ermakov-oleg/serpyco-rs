@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from typing import Any, Optional, TypeVar
 
 from serpyco_rs._impl import BaseType
-from serpyco_rs.metadata import FiledFormat, NoneAsDefaultForOptional, NoneFormat
+from serpyco_rs.metadata import FieldFormat, NoneAsDefaultForOptional, NoneFormat
 
 
 @dataclass(frozen=True, unsafe_hash=True)
 class MetaStateKey:
     cls: type
-    field_format: FiledFormat
+    field_format: FieldFormat
     none_format: NoneFormat
     none_as_default_for_optional: NoneAsDefaultForOptional
     generics: Sequence[tuple[TypeVar, Any]]

@@ -56,7 +56,7 @@ from ._utils import to_camelcase
 from .metadata import (
     Alias,
     Discriminator,
-    FiledFormat,
+    FieldFormat,
     Format,
     KeepDefaultForOptional,
     KeepNone,
@@ -114,7 +114,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
     t = _evaluate_forwardref(t, meta)
 
     generics = tuple((k, v) for k, v in sorted(zip(parameters, args), key=lambda x: repr(x[0])))
-    filed_format = _find_metadata(metadata, FiledFormat, NoFormat)
+    filed_format = _find_metadata(metadata, FieldFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
     none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional, KeepDefaultForOptional)
     custom_encoder = _find_metadata(metadata, CustomEncoder)
@@ -270,7 +270,7 @@ class _Field(Generic[_T]):
 def _describe_entity(
     t: Any,
     generics: Sequence[tuple[TypeVar, Any]],
-    cls_filed_format: FiledFormat,
+    cls_filed_format: FieldFormat,
     cls_none_format: NoneFormat,
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
@@ -427,7 +427,7 @@ def _get_annotated_metadata(t: Any) -> tuple[Any, ...]:
     return ()
 
 
-def _apply_format(f: Optional[FiledFormat], value: str) -> str:
+def _apply_format(f: Optional[FieldFormat], value: str) -> str:
     if not f or f.format is Format.no_format:
         return value
     if f.format is Format.camel_case:
@@ -437,7 +437,7 @@ def _apply_format(f: Optional[FiledFormat], value: str) -> str:
 
 def _generate_name(
     cls: Any,
-    field_format: FiledFormat,
+    field_format: FieldFormat,
     none_format: NoneFormat,
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
     generics: Sequence[tuple[TypeVar, Any]],
