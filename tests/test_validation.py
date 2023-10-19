@@ -13,7 +13,7 @@ from serpyco_rs.metadata import CustomEncoder, Max, MaxLength, Min, MinLength, D
 
 def _check_errors(s: Serializer, value: Any, expected_errors: list[ErrorItem]):
     with pytest.raises(SchemaValidationError) as native_schema_error:
-        s.load(value, validate=False)
+        s.load(value)
 
     assert native_schema_error.value.errors == expected_errors
 
@@ -71,7 +71,7 @@ def test_float_validation(value, err):
     s = Serializer(Annotated[float, Min(10.0), Max(100.0)])
 
     with pytest.raises(SchemaValidationError) as e:
-        s.load(value, validate=False)
+        s.load(value)
 
     assert e.value.errors == [ErrorItem(message=err, instance_path='')]
 
@@ -79,7 +79,7 @@ def test_float_validation(value, err):
 def test_float_validation__invalid_type():
     s = Serializer(float)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('1.1', validate=False)
+        s.load('1.1')
 
     assert e.value.errors == [ErrorItem(message='"1.1" is not of type "number"', instance_path='')]
 
@@ -95,7 +95,7 @@ def test_decimal_validation(value, err):
     s = Serializer(Annotated[Decimal, Min(10), Max(100)])
 
     with pytest.raises(SchemaValidationError) as e:
-        s.load(value, validate=False)
+        s.load(value)
 
     assert e.value.errors == [ErrorItem(message=err, instance_path='')]
 
@@ -103,7 +103,7 @@ def test_decimal_validation(value, err):
 def test_decimal_validation__invalid_type():
     s = Serializer(Decimal)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "decimal"', instance_path='')]
 
@@ -116,7 +116,7 @@ def test_boolean_validation__invalid_type():
 def test_uuid_validation__invalid_type():
     s = Serializer(uuid.UUID)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "uuid"', instance_path='')]
 
@@ -124,7 +124,7 @@ def test_uuid_validation__invalid_type():
 def test_time_validation__invalid_type():
     s = Serializer(time)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "time"', instance_path='')]
 
@@ -132,7 +132,7 @@ def test_time_validation__invalid_type():
 def test_datetime_validation__invalid_type():
     s = Serializer(datetime)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "datetime"', instance_path='')]
 
@@ -140,7 +140,7 @@ def test_datetime_validation__invalid_type():
 def test_date_validation__invalid_type():
     s = Serializer(date)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "date"', instance_path='')]
 
@@ -152,7 +152,7 @@ def test_dataclass_validation__invalid_type():
 
     s = Serializer(A)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
 
@@ -185,7 +185,7 @@ def test_typed_dict_validation__invalid_type():
 
     s = Serializer(A)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
 
@@ -241,7 +241,7 @@ def test_dict_validation__invalid_value_type():
 def test_dict_validation__invalid_key_type():
     s = Serializer(dict[str, int])
     with pytest.raises(SchemaValidationError) as e:
-        s.load({1: 1}, validate=False)
+        s.load({1: 1})
 
     assert e.value.errors == [ErrorItem(message='1 is not of type "string"', instance_path='1')]
 
@@ -249,7 +249,7 @@ def test_dict_validation__invalid_key_type():
 def test_tuple_validation__invalid_type():
     s = Serializer(tuple[int, str])
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "sequence"', instance_path='')]
 
@@ -263,12 +263,12 @@ def test_tuple_validation__invalid_length():
     s = Serializer(tuple[int, str])
 
     with pytest.raises(SchemaValidationError) as e:
-        s.load([1], validate=False)
+        s.load([1])
 
     assert e.value.errors == [ErrorItem(message='[1] has less than 2 items', instance_path='')]
 
     with pytest.raises(SchemaValidationError) as e:
-        s.load([1, 'foo', 3], validate=False)
+        s.load([1, 'foo', 3])
 
     assert e.value.errors == [ErrorItem(message="[1, 'foo', 3] has more than 2 items", instance_path='')]
 
@@ -276,7 +276,7 @@ def test_tuple_validation__invalid_length():
 def test_bytes_validation__invalid_type():
     s = Serializer(bytes)
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "bytes"', instance_path='')]
 
@@ -296,7 +296,7 @@ class B:
 def test_tagged_union_validation__invalid_type():
     s = Serializer(Annotated[Union[A, B], Discriminator('type')])
     with pytest.raises(SchemaValidationError) as e:
-        s.load('foo', validate=False)
+        s.load('foo')
 
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
 
@@ -304,7 +304,7 @@ def test_tagged_union_validation__invalid_type():
 def test_tagged_union_validation__invalid_discriminator():
     s = Serializer(Annotated[Union[A, B], Discriminator('type')])
     with pytest.raises(SchemaValidationError) as e:
-        s.load({'type': 'C'}, validate=False)
+        s.load({'type': 'C'})
 
     assert e.value.errors == [
         ErrorItem(message='"C" is not one of ["A", "B"] discriminator values', instance_path='type')
@@ -314,7 +314,7 @@ def test_tagged_union_validation__invalid_discriminator():
 def test_literal_validation__invalid_value():
     s = Serializer(Literal['foo', 'bar'])
     with pytest.raises(SchemaValidationError) as e:
-        s.load(1, validate=False)
+        s.load(1)
 
     assert e.value.errors == [ErrorItem(message='1 is not one of ["foo","bar"]', instance_path='')]
 
