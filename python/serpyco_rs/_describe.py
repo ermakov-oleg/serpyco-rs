@@ -264,7 +264,7 @@ class _Field(Generic[_T]):
     name: str
     type: type[_T]
     default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
-    default_factory: [DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
+    default_factory: Union[DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
 
 
 def _describe_entity(
@@ -375,7 +375,7 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                     else NOT_SET
                 ),
                 default_factory=(
-                    DefaultValue.some(f.default.factory)
+                    DefaultValue.some(f.default.factory)  # pyright: ignore
                     if isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
                     else NOT_SET
                 ),
