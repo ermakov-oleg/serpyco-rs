@@ -84,7 +84,7 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 | marshmallow |                            1.05 |                   951.7 |                23.33 |
 
 
-#### load with validate
+#### load with 
 
 | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
 |-------------|---------------------------------|-------------------------|----------------------|
@@ -93,17 +93,6 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 | mashumaro   |                            0.23 |                  4377.7 |                 1.01 |
 | pydantic    |                            2.01 |                   497.3 |                 8.86 |
 | marshmallow |                            4.55 |                   219.9 |                20.03 |
-
-
-#### load (only serpyco and serpyco_rs supported load without validate)
-
-| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
-|-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.07 |                 13882.9 |                 1    |
-| serpyco     |                            0.08 |                 12424.5 |                 1.12 |
-| mashumaro   |                            0.23 |                  4382.9 |                 3.17 |
-| pydantic    |                            2.02 |                   494.4 |                28.09 |
-| marshmallow |                            4.59 |                   217.5 |                63.8  |
 
 
 ## Supported annotations

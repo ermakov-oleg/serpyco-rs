@@ -22,7 +22,7 @@ class Dataclass(BaseModel):
 test_object = make_test_object(Dataclass, Nested)
 
 
-def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
+def load(data: dict[str, Any]) -> Dataclass:
     return Dataclass(**data)
 
 

@@ -11,9 +11,9 @@ def test_dump(benchmark):
     benchmark(repeat(lambda: serializer.dump(serializer.test_object), count=100))
 
 
-def test_load_validate(benchmark):
+def test_load_(benchmark):
     test_dict = serializer.dump(serializer.test_object)
-    serializer.load(test_dict, validate=True)  # warmup
+    serializer.load(test_dict)  # warmup
 
-    benchmark.group = 'load full with validate'
-    benchmark(repeat(lambda: serializer.load(test_dict, validate=True), count=100))
+    benchmark.group = 'load full with '
+    benchmark(repeat(lambda: serializer.load(test_dict), count=100))

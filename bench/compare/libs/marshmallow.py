@@ -10,7 +10,7 @@ _schema = marshmallow_dataclass.class_schema(Dataclass)()
 test_object = test_object
 
 
-def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
+def load(data: dict[str, Any]) -> Dataclass:
     return _schema.load(data)
 
 

@@ -31,7 +31,7 @@ class Serializer(Generic[_T]):
     def dump(self, value: _T) -> Any:
         return self._encoder.dump(value)
 
-    def load(self, data: Any, validate: bool = True) -> _T:
+    def load(self, data: Any) -> _T:
         return self._encoder.load(data)
 
     def get_json_schema(self) -> dict[str, Any]:

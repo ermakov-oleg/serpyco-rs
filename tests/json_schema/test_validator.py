@@ -96,7 +96,6 @@ class TypedDictTotalFalse(TypedDict, total=False):
 )
 def test_validate(cls, value):
     Serializer(cls).load(value)
-    Serializer(cls).load(value, validate=False)
 
 
 if sys.version_info >= (3, 10):
@@ -111,7 +110,6 @@ if sys.version_info >= (3, 10):
     )
     def test_validate_new_union(cls, value):
         Serializer(cls).load(value)
-        Serializer(cls).load(value, validate=False)
 
 
 def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:

@@ -29,4 +29,4 @@ def test_serialize_with():
 def test_deserialize_with():
     serializer = Serializer(Annotated[datetime, deserialize_with(lambda x: x)])
     val = datetime.now()
-    assert serializer.load(val, validate=False) is val
+    assert serializer.load(val) is val
