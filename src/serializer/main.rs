@@ -56,7 +56,7 @@ impl Serializer {
     }
 
     #[inline]
-    pub fn load(&self, value: &PyAny, validate: bool) -> PyResult<Py<PyAny>> {
+    pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
         let instance_path = InstancePath::new();
         unsafe {
             Ok(Py::from_owned_ptr(

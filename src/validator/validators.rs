@@ -86,7 +86,7 @@ pub fn check_max_length(
     Ok(())
 }
 
-pub fn check_length<'a>(
+pub fn check_length(
     val: &Value,
     min: Option<usize>,
     max: Option<usize>,

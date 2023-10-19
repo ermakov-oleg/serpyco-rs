@@ -368,6 +368,7 @@ pub struct EntityType {
 impl EntityType {
     #[new]
     #[pyo3(signature = (cls, name, fields, omit_none=false, generics=None, doc=None, custom_encoder=None))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         cls: &PyAny,
         name: &PyAny,
@@ -526,6 +527,7 @@ pub struct EntityField {
 impl EntityField {
     #[new]
     #[pyo3(signature = (name, dict_key, field_type, required=true, is_discriminator_field=false, default=DefaultValue(DefaultValueEnum::None), default_factory=DefaultValue(DefaultValueEnum::None), doc=None))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         name: &PyAny,
         dict_key: &PyAny,

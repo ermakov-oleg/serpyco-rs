@@ -57,6 +57,7 @@ impl Encoder for NoopEncoder {
 #[derive(Debug, Clone)]
 pub struct IntEncoder {
     pub(crate) type_info: IntegerType,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -84,6 +85,7 @@ impl Encoder for IntEncoder {
 #[derive(Debug, Clone)]
 pub struct FloatEncoder {
     pub(crate) type_info: FloatType,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -115,6 +117,7 @@ impl Encoder for FloatEncoder {
 #[derive(Debug, Clone)]
 pub struct DecimalEncoder {
     pub(crate) type_info: DecimalType,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -141,6 +144,7 @@ impl Encoder for DecimalEncoder {
 #[derive(Debug, Clone)]
 pub struct StringEncoder {
     pub(crate) type_info: StringType,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -171,6 +175,7 @@ impl Encoder for StringEncoder {
 
 #[derive(Debug, Clone)]
 pub struct BooleanEncoder {
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -195,6 +200,7 @@ impl Encoder for BooleanEncoder {
 
 #[derive(Debug, Clone)]
 pub struct BytesEncoder {
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -222,6 +228,7 @@ pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,
     pub(crate) value_encoder: Box<TEncoder>,
     pub(crate) omit_none: bool,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -268,6 +275,7 @@ impl Encoder for DictionaryEncoder {
 #[derive(Debug, Clone)]
 pub struct ArrayEncoder {
     pub(crate) encoder: Box<TEncoder>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -306,6 +314,7 @@ pub struct EntityEncoder {
     pub(crate) cls: Py<PyAny>,
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -386,6 +395,7 @@ impl Encoder for EntityEncoder {
 pub struct TypedDictEncoder {
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -461,6 +471,7 @@ impl Encoder for TypedDictEncoder {
 
 #[derive(Debug, Clone)]
 pub struct UUIDEncoder {
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -486,6 +497,7 @@ impl Encoder for UUIDEncoder {
 pub struct EnumEncoder {
     pub(crate) enum_type: pyo3::PyObject,
     pub(crate) enum_items: Vec<EnumItem>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -517,6 +529,7 @@ impl Encoder for EnumEncoder {
 #[derive(Debug, Clone)]
 pub struct LiteralEncoder {
     pub(crate) enum_items: Vec<EnumItem>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -550,6 +563,7 @@ impl Encoder for LiteralEncoder {
 #[derive(Debug, Clone)]
 pub struct OptionalEncoder {
     pub(crate) encoder: Box<TEncoder>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -578,6 +592,7 @@ impl Encoder for OptionalEncoder {
 #[derive(Debug, Clone)]
 pub struct TupleEncoder {
     pub(crate) encoders: Vec<Box<TEncoder>>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -624,6 +639,7 @@ pub struct UnionEncoder {
     pub(crate) load_discriminator: Py<PyString>,
     pub(crate) load_discriminator_rs: String,
     pub(crate) keys: Vec<String>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -662,6 +678,7 @@ impl Encoder for UnionEncoder {
 
 #[derive(Debug, Clone)]
 pub struct TimeEncoder {
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -685,6 +702,7 @@ impl Encoder for TimeEncoder {
 
 #[derive(Debug, Clone)]
 pub struct DateTimeEncoder {
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -708,6 +726,7 @@ impl Encoder for DateTimeEncoder {
 
 #[derive(Debug, Clone)]
 pub struct DateEncoder {
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 
@@ -743,6 +762,7 @@ pub enum Encoders {
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
     pub(crate) inner: Arc<AtomicRefCell<Option<Encoders>>>,
+    #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
 

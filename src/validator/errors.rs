@@ -38,9 +38,7 @@ fn into_path(pointer: &InstancePath) -> String {
                 path.push(property.to_string());
             }
             PathChunk::Index(index) => path.push(index.to_string()),
-            PathChunk::PropertyPyValue(value) => path.push(
-                format!("{}", value)
-            ),
+            PathChunk::PropertyPyValue(value) => path.push(format!("{}", value)),
         };
     }
     path.join("/")
