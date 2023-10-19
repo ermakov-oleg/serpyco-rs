@@ -68,7 +68,7 @@ fn ensure_datetime_api() -> &'static pyo3_ffi::PyDateTime_CAPI {
 
 #[inline]
 fn py_timezone(offset: Option<i32>) -> PyResult<*mut PyObject> {
-    return match offset {
+    match offset {
         Some(offset) => {
             let api = ensure_datetime_api();
             unsafe {
@@ -78,7 +78,7 @@ fn py_timezone(offset: Option<i32>) -> PyResult<*mut PyObject> {
             }
         }
         None => Ok(unsafe { NONE_PY_TYPE }),
-    };
+    }
 }
 
 struct InnerParseError(ParseError);

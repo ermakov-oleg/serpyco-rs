@@ -26,18 +26,6 @@ def test_dump(benchmark, lib):
 
 
 @pytest.mark.parametrize('lib', serializers.keys())
-def test_load(benchmark, lib):
-    serializer = serializers[lib]
-    test_dict = serializer.dump(serializer.test_object)
-    serializer.load(test_dict, validate=False)  # warmup
-
-    benchmark.group = 'load'
-    benchmark.extra_info['lib'] = lib
-    benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
-    benchmark(serializer.load, test_dict, validate=False)
-
-
-@pytest.mark.parametrize('lib', serializers.keys())
 def test_load_validate(benchmark, lib):
     serializer = serializers[lib]
     test_dict = serializer.dump(serializer.test_object)
