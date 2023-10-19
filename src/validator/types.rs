@@ -85,8 +85,10 @@ impl IntegerType {
         (IntegerType { min, max }, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)? && self_.min == other.min && self_.max == other.max)
     }
 
     fn __repr__(&self) -> String {
@@ -110,8 +112,10 @@ impl FloatType {
         (FloatType { min, max }, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)? && self_.min == other.min && self_.max == other.max)
     }
 
     fn __repr__(&self) -> String {
@@ -135,8 +139,10 @@ impl DecimalType {
         (DecimalType { min, max }, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)? && self_.min == other.min && self_.max == other.max)
     }
 
     fn __repr__(&self) -> String {
@@ -170,8 +176,12 @@ impl StringType {
         )
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)?
+            && self_.min_length == other.min_length
+            && self_.max_length == other.max_length)
     }
 
     fn __repr__(&self) -> String {
@@ -193,8 +203,10 @@ impl BooleanType {
         (BooleanType {}, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
     }
 
     fn __repr__(&self) -> String {
@@ -213,8 +225,10 @@ impl UUIDType {
         (UUIDType {}, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
     }
 
     fn __repr__(&self) -> String {
@@ -233,8 +247,10 @@ impl TimeType {
         (TimeType {}, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
     }
 
     fn __repr__(&self) -> String {
@@ -253,8 +269,10 @@ impl DateTimeType {
         (DateTimeType {}, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
     }
 
     fn __repr__(&self) -> String {
@@ -273,8 +291,10 @@ impl DateType {
         (DateType {}, BaseType::new(custom_encoder))
     }
 
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
     }
 
     fn __repr__(&self) -> String {
@@ -590,10 +610,7 @@ impl ArrayType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(
-            // todo: check all __eq__, it can contain base.__eq__
-            base.__eq__(base_other, py)? && py_eq!(self_.item_type, other.item_type, py),
-        )
+        Ok(base.__eq__(base_other, py)? && py_eq!(self_.item_type, other.item_type, py))
     }
 
     fn __repr__(&self) -> String {

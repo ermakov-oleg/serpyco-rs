@@ -1,4 +1,3 @@
-import json
 from typing import Annotated, Any, Generic, TypeVar, cast
 
 from ._describe import describe_type

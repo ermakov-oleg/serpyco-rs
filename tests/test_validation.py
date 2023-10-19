@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, TypedDict, Literal
+from typing import Annotated, Any, TypedDict, Literal, Union
 
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
@@ -294,7 +294,7 @@ class B:
 
 
 def test_tagged_union_validation__invalid_type():
-    s = Serializer(Annotated[A | B, Discriminator('type')])
+    s = Serializer(Annotated[Union[A, B], Discriminator('type')])
     with pytest.raises(SchemaValidationError) as e:
         s.load('foo', validate=False)
 
@@ -302,7 +302,7 @@ def test_tagged_union_validation__invalid_type():
 
 
 def test_tagged_union_validation__invalid_discriminator():
-    s = Serializer(Annotated[A | B, Discriminator('type')])
+    s = Serializer(Annotated[Union[A, B], Discriminator('type')])
     with pytest.raises(SchemaValidationError) as e:
         s.load({'type': 'C'}, validate=False)
 
@@ -336,5 +336,5 @@ def test_instance_path():
     _check_errors(
         s,
         {'bar': [{'foo': [{'a': 1}]}, {'foo': [{'b': 1}]}]},
-        [ErrorItem(message='"a" is a required property', instance_path='bar/1/foo/0')]
+        [ErrorItem(message='"a" is a required property', instance_path='bar/1/foo/0')],
     )

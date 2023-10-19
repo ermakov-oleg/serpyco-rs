@@ -264,7 +264,7 @@ class _Field(Generic[_T]):
     name: str
     type: type[_T]
     default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
-    default_factory: [DefaultValue[Callable[[], _T]],DefaultValue[None]] = NOT_SET
+    default_factory: [DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
 
 
 def _describe_entity(
