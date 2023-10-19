@@ -106,8 +106,6 @@ jobs:
       - name: check types
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: nox -s type_check
-        env:
-          CI: true
 
   benchmark:
     needs: [ macos, linux ]

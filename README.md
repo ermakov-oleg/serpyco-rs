@@ -69,31 +69,57 @@ There is support for generic types from the standard typing module:
 * Literal[str, ...]
 * Tagged unions (restricted)
 
-## Benchmark
+## Benchmarks
 
-macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+<details>
+  <summary>Linux</summary>
+  
+  #### Load
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.16 |                  6318.1 |                 1    |
+  | mashumaro   |                            0.45 |                  2244.4 |                 2.81 |
+  | pydantic    |                            0.57 |                  1753.9 |                 3.56 |
+  | serpyco     |                            0.82 |                  1228.3 |                 5.17 |
+  | marshmallow |                            8.49 |                   117.4 |                53.35 |
+  
+  #### Dump
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.07 |                 13798   |                 1    |
+  | serpyco     |                            0.07 |                 13622   |                 1.02 |
+  | mashumaro   |                            0.1  |                 10219.5 |                 1.36 |
+  | pydantic    |                            0.22 |                  4615.5 |                 2.99 |
+  | marshmallow |                            2    |                   497   |                27.69 |
+</details>
 
-#### dump
 
-| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
-|-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
-| serpyco     |                            0.05 |                 21232.9 |                 1.06 |
-| mashumaro   |                            0.06 |                 15903.4 |                 1.42 |
-| pydantic    |                            0.16 |                  6262.6 |                 3.61 |
-| marshmallow |                            1.04 |                   962   |                23.5  |
+<details>
+  <summary>MacOS</summary>
+  macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+  
+  #### Load
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
+  | mashumaro   |                            0.2  |                  4968   |                 2    |
+  | pydantic    |                            0.34 |                  2866.7 |                 3.42 |
+  | serpyco     |                            0.69 |                  1444.1 |                 6.87 |
+  | marshmallow |                            4.14 |                   241.8 |                41.05 |
 
-
-#### load
-
-| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
-|-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
-| mashumaro   |                            0.2  |                  4968   |                 2    |
-| pydantic    |                            0.34 |                  2866.7 |                 3.42 |
-| serpyco     |                            0.69 |                  1444.1 |                 6.87 |
-| marshmallow |                            4.14 |                   241.8 |                41.05 |
-
+  #### Dump
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
+  | serpyco     |                            0.05 |                 21232.9 |                 1.06 |
+  | mashumaro   |                            0.06 |                 15903.4 |                 1.42 |
+  | pydantic    |                            0.16 |                  6262.6 |                 3.61 |
+  | marshmallow |                            1.04 |                   962   |                23.5  |
+</details>
 
 
 ## Supported annotations
@@ -102,7 +128,7 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 
 Currently available:
 * Alias
-* FiledFormat (CamelCase / NoFormat)
+* FieldFormat (CamelCase / NoFormat)
 * NoneFormat (OmitNone / KeepNone)
 * Discriminator
 * Min / Max
@@ -133,7 +159,7 @@ print(ser.dump(A(foo=1)))
 >> {'bar': 1}
 ```
 
-### FiledFormat
+### FieldFormat
 Used to have response bodies in camelCase while keeping your python code in snake_case.
 
 ```python
