@@ -69,41 +69,57 @@ There is support for generic types from the standard typing module:
 * Literal[str, ...]
 * Tagged unions (restricted)
 
-## Benchmark
+## Benchmarks
 
-macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+<details>
+  <summary>Linux</summary>
+  
+  #### Load
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.16 |                  6318.1 |                 1    |
+  | mashumaro   |                            0.45 |                  2244.4 |                 2.81 |
+  | pydantic    |                            0.57 |                  1753.9 |                 3.56 |
+  | serpyco     |                            0.82 |                  1228.3 |                 5.17 |
+  | marshmallow |                            8.49 |                   117.4 |                53.35 |
+  
+  #### Dump
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.07 |                 13798   |                 1    |
+  | serpyco     |                            0.07 |                 13622   |                 1.02 |
+  | mashumaro   |                            0.1  |                 10219.5 |                 1.36 |
+  | pydantic    |                            0.22 |                  4615.5 |                 2.99 |
+  | marshmallow |                            2    |                   497   |                27.69 |
+</details>
 
-#### dump
 
-| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
-|-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.05 |                 22188.2 |                 1    |
-| serpyco     |                            0.05 |                 20878.5 |                 1.06 |
-| mashumaro   |                            0.06 |                 15602.7 |                 1.42 |
-| pydantic    |                            2.66 |                   375.6 |                59    |
-| marshmallow |                            1.05 |                   951.7 |                23.33 |
+<details>
+  <summary>MacOS</summary>
+  macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+  
+  #### Load
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
+  | mashumaro   |                            0.2  |                  4968   |                 2    |
+  | pydantic    |                            0.34 |                  2866.7 |                 3.42 |
+  | serpyco     |                            0.69 |                  1444.1 |                 6.87 |
+  | marshmallow |                            4.14 |                   241.8 |                41.05 |
 
-
-#### load with validate
-
-| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
-|-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.23 |                  4400.1 |                 1    |
-| serpyco     |                            0.28 |                  3546.4 |                 1.24 |
-| mashumaro   |                            0.23 |                  4377.7 |                 1.01 |
-| pydantic    |                            2.01 |                   497.3 |                 8.86 |
-| marshmallow |                            4.55 |                   219.9 |                20.03 |
-
-
-#### load (only serpyco and serpyco_rs supported load without validate)
-
-| Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
-|-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.07 |                 13882.9 |                 1    |
-| serpyco     |                            0.08 |                 12424.5 |                 1.12 |
-| mashumaro   |                            0.23 |                  4382.9 |                 3.17 |
-| pydantic    |                            2.02 |                   494.4 |                28.09 |
-| marshmallow |                            4.59 |                   217.5 |                63.8  |
+  #### Dump
+  
+  | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
+  |-------------|---------------------------------|-------------------------|----------------------|
+  | serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
+  | serpyco     |                            0.05 |                 21232.9 |                 1.06 |
+  | mashumaro   |                            0.06 |                 15903.4 |                 1.42 |
+  | pydantic    |                            0.16 |                  6262.6 |                 3.61 |
+  | marshmallow |                            1.04 |                   962   |                23.5  |
+</details>
 
 
 ## Supported annotations
@@ -112,7 +128,7 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 
 Currently available:
 * Alias
-* FiledFormat (CamelCase / NoFormat)
+* FieldFormat (CamelCase / NoFormat)
 * NoneFormat (OmitNone / KeepNone)
 * Discriminator
 * Min / Max
@@ -143,7 +159,7 @@ print(ser.dump(A(foo=1)))
 >> {'bar': 1}
 ```
 
-### FiledFormat
+### FieldFormat
 Used to have response bodies in camelCase while keeping your python code in snake_case.
 
 ```python
@@ -230,7 +246,7 @@ from serpyco_rs.metadata import Min, Max
 ser = Serializer(Annotated[int, Min(1), Max(10)])
 
 ser.load(123)
->> SchemaValidationError: [ErrorItem(message='123 is greater than the maximum of 10', instance_path='', schema_path='maximum')]
+>> SchemaValidationError: [ErrorItem(message='123 is greater than the maximum of 10', instance_path='')]
 ```
 
 ### MinLength / MaxLength
@@ -244,7 +260,7 @@ from serpyco_rs.metadata import MinLength
 ser = Serializer(Annotated[str, MinLength(5)])
 
 ser.load("1234")
->> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='', schema_path='minLength')]
+>> SchemaValidationError: [ErrorItem(message='"1234" is shorter than 5 characters', instance_path='')]
 ```
 
 ### NoneAsDefaultForOptional
@@ -269,7 +285,7 @@ assert ser_force_default.load({'val': 1}) == Foo(val=1, val1=None, val2=None)
 
 # val1 field is required and nullable and val1 should be present in the dict
 ser.load({'val': 1})
->> SchemaValidationError: [ErrorItem(message='"val1" is a required property', instance_path='', schema_path='required')]
+>> SchemaValidationError: [ErrorItem(message='"val1" is a required property', instance_path='')]
 ```
 
 
@@ -307,31 +323,8 @@ from serpyco_rs import Serializer
 class Foo:
     val: bytes
 
-ser = Serializer(Foo, pass_through_bytes=True)
+ser = Serializer(Foo)
 ser.load({'val': b'123'}) == Foo(val=b'123')
-```
-
-
-### Load data from raw json
-
-`serpyco-rs` can load data from raw json string.
-
-Load data from raw json string is faster than `[or]json.loads` + `Serializer.load` about 20%+.
-This is possible because `serpyco-rs` uses `serde_json` to load data from a raw json string and avoids unnecessary conversion of python objects to serde_json::Value for validation process.
-
-```python
-from dataclasses import dataclass
-from serpyco_rs import Serializer
-
-@dataclass
-class A:
-    foo: int
-    bar: str
-    
-ser = Serializer(A)
-
-print(ser.load_json('{"foo": 1, "bar": "buz"}'))
->> A(foo=1, bar='buz')
 ```
 
 

@@ -35,12 +35,8 @@ class Dataclass(DataClassJSONMixin, DataClassDictMixin):
 test_object = make_test_object(Dataclass, Nested)
 
 
-def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
+def load(data: dict[str, Any]) -> Dataclass:
     return Dataclass.from_dict(data)
-
-
-def load_json(data: str, validate: bool = True) -> Dataclass:
-    return Dataclass.from_json(data, decoder=orjson.loads)
 
 
 def dump(obj: Dataclass) -> dict[str, Any]:

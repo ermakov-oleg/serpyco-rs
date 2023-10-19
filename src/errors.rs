@@ -76,13 +76,11 @@ impl SchemaValidationError {
     }
 }
 
-#[pyclass(frozen, module = "serpyco_rs")]
+#[pyclass(module = "serpyco_rs")]
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) struct ErrorItem {
-    #[pyo3(get)]
+    #[pyo3(get, set)]
     message: String,
-    #[pyo3(get)]
-    schema_path: String,
     #[pyo3(get)]
     instance_path: String,
 }
@@ -90,24 +88,20 @@ pub(crate) struct ErrorItem {
 #[pymethods]
 impl ErrorItem {
     #[new]
-    pub fn new(message: String, schema_path: String, instance_path: String) -> Self {
+    pub fn new(message: String, instance_path: String) -> Self {
         ErrorItem {
             message,
-            schema_path,
             instance_path,
         }
     }
 
     fn __str__(&self) -> String {
-        format!(
-            "{} (schema_path='{}', instance_path='{}')",
-            self.message, self.schema_path, self.instance_path
-        )
+        format!("{} (instance_path='{}')", self.message, self.instance_path)
     }
     fn __repr__(&self) -> String {
         format!(
-            "ErrorItem(message='{}', schema_path='{}', instance_path='{}')",
-            self.message, self.schema_path, self.instance_path
+            "ErrorItem(message='{}', instance_path='{}')",
+            self.message, self.instance_path
         )
     }
     fn __richcmp__(&self, other: &ErrorItem, op: CompareOp) -> bool {

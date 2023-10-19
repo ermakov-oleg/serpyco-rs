@@ -1,18 +1,19 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from decimal import Decimal
 from enum import Enum
-from typing import Generic, Optional, TypeVar, Union
+from typing import TypeVar, Union
+
+from ._impl import CustomEncoder
 
 
 @dataclass(frozen=True)
 class Min:
-    value: Union[int, float, Decimal]
+    value: Union[int, float]
 
 
 @dataclass(frozen=True)
 class Max:
-    value: Union[int, float, Decimal]
+    value: Union[int, float]
 
 
 @dataclass(frozen=True)
@@ -22,11 +23,6 @@ class MinLength:
 
 @dataclass(frozen=True)
 class MaxLength:
-    value: int
-
-
-@dataclass(frozen=True)
-class Places:
     value: int
 
 
@@ -46,12 +42,12 @@ class Format(Enum):
 
 
 @dataclass(frozen=True)
-class FiledFormat:
+class FieldFormat:
     format: Format
 
 
-CamelCase: FiledFormat = FiledFormat(Format.camel_case)
-NoFormat: FiledFormat = FiledFormat(Format.no_format)
+CamelCase: FieldFormat = FieldFormat(Format.camel_case)
+NoFormat: FieldFormat = FieldFormat(Format.no_format)
 
 
 @dataclass(frozen=True)
@@ -74,12 +70,6 @@ KeepDefaultForOptional: NoneAsDefaultForOptional = NoneAsDefaultForOptional(Fals
 
 _I = TypeVar('_I')
 _O = TypeVar('_O')
-
-
-@dataclass(frozen=True)
-class CustomEncoder(Generic[_I, _O]):
-    serialize: Optional[Callable[[_I], _O]] = None
-    deserialize: Optional[Callable[[_O], _I]] = None
 
 
 def serialize_with(func: Callable[[_I], _O]) -> CustomEncoder[_I, _O]:

@@ -10,13 +10,8 @@ _schema = marshmallow_dataclass.class_schema(Dataclass)()
 test_object = test_object
 
 
-def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
+def load(data: dict[str, Any]) -> Dataclass:
     return _schema.load(data)
-
-
-def load_json(data: str, validate: bool = True) -> Dataclass:
-    # todo: use orjson as render_module
-    return _schema.loads(data)
 
 
 def dump(obj: Dataclass) -> dict[str, Any]:

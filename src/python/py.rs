@@ -1,12 +1,11 @@
 use super::macros::{call_method, ffi};
 use super::types::{
-    DATE_STR, DECIMAL_PY_TYPE, FALSE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, NOT_SET,
-    PY_OBJECT__NEW__, TRUE, UUID_PY_TYPE, VALUE_STR,
+    DATE_STR, DECIMAL_PY_TYPE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, PY_OBJECT__NEW__,
+    UUID_PY_TYPE, VALUE_STR,
 };
 use crate::python::macros::use_immortal;
-use pyo3::{ffi, AsPyPointer, PyAny, PyErr, PyResult, Python};
+use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
-use serde_json::Number;
 use std::os::raw::c_int;
 use std::ptr::NonNull;
 
@@ -28,32 +27,18 @@ pub(crate) fn to_uuid(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject>
 }
 
 #[inline]
-pub(crate) fn to_bool(value: bool) -> *mut ffi::PyObject {
-    if value {
-        use_immortal!(TRUE)
-    } else {
-        use_immortal!(FALSE)
-    }
-}
-
-#[inline]
 pub(crate) fn get_value_attr(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     py_object_get_attr(value, unsafe { VALUE_STR })
 }
 
 #[inline]
-pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<Py_ssize_t> {
+pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<isize> {
     let v = ffi!(PyObject_Size(obj));
     if v == -1 {
         Err(Python::with_gil(PyErr::fetch))
     } else {
         Ok(v)
     }
-}
-
-#[inline]
-pub(crate) fn is_not_set(obj: &PyAny) -> PyResult<bool> {
-    Ok(obj.as_ptr() == unsafe { NOT_SET })
 }
 
 #[inline]
@@ -153,32 +138,6 @@ pub(crate) fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
     Ok(unsafe { std::str::from_utf8_unchecked(utf8_slice) })
 }
 
-#[inline(always)]
-fn parse_i64(val: i64) -> *mut ffi::PyObject {
-    ffi!(PyLong_FromLongLong(val))
-}
-
-#[inline(always)]
-fn parse_u64(val: u64) -> *mut ffi::PyObject {
-    ffi!(PyLong_FromUnsignedLongLong(val))
-}
-
-#[inline(always)]
-fn parse_f64(val: f64) -> *mut ffi::PyObject {
-    ffi!(PyFloat_FromDouble(val))
-}
-
-#[inline(always)]
-pub(crate) fn parse_number(val: Number) -> *mut ffi::PyObject {
-    if val.is_f64() {
-        parse_f64(val.as_f64().unwrap())
-    } else if val.is_i64() {
-        parse_i64(val.as_i64().unwrap())
-    } else {
-        parse_u64(val.as_u64().unwrap())
-    }
-}
-
 #[inline]
 pub(crate) fn py_tuple_get_item(
     obj: *mut ffi::PyObject,
@@ -224,7 +183,7 @@ impl Iterator for PyObjectIterator {
 }
 
 #[inline]
-fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
+pub(crate) fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
     NonNull::new(ptr).map(|p| p.as_ptr())
 }
 

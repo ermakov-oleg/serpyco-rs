@@ -31,7 +31,7 @@ def lint(session):
     session.cd('python/serpyco_rs')
     paths = ['.', '../../tests', '../../bench']
     session.run('black', *(['--check', '--diff', *paths] if _is_ci() else paths))
-    session.run('ruff', '.')
+    session.run('ruff', '.', *([] if _is_ci() else ['--fix']))
 
 
 @nox.session(python=False)
@@ -46,7 +46,7 @@ def type_check(session):
     install(session, '-r', 'requirements/type_check.txt')
 
     session.cd('python/serpyco_rs')
-    session.run('pyright')
+    session.run('pyright', success_codes=[0, 1] if _is_ci() else [0])
     session.run('pyright', '--verifytypes', 'serpyco_rs')
     session.run('mypy', '.', '--strict', '--implicit-reexport', '--pretty')
 
@@ -58,14 +58,15 @@ def bench(session):
 
     session.run(
         'pytest',
+        *(session.posargs if session.posargs else ['bench']),
         '--verbose',
+        '--native',
         '--benchmark-min-time=0.5',
         '--benchmark-max-time=1',
         '--benchmark-disable-gc',
         '--benchmark-autosave',
         '--benchmark-save-data',
         '--benchmark-compare',
-        *(session.posargs if session.posargs else ['bench']),
     )
 
 

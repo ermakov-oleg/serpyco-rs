@@ -10,12 +10,8 @@ _serializer = serpyco.Serializer(Dataclass)
 test_object = test_object
 
 
-def load(data: dict[str, Any], validate: bool = True) -> Dataclass:
-    return _serializer.load(data, validate=validate)
-
-
-def load_json(data: str, validate: bool = True) -> Dataclass:
-    return _serializer.load_json(data, validate=validate)
+def load(data: dict[str, Any]) -> Dataclass:
+    return _serializer.load(data, validate=True)
 
 
 def dump(obj: Dataclass) -> dict[str, Any]:

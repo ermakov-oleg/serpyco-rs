@@ -10,23 +10,18 @@ name = "serpyco_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.19.2", features = ["extension-module"] }
-pyo3-ffi = "0.19.2"
+pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3-ffi = "0.20"
 cfg-if = "*"
 speedate = "0.12.0"
 
 dyn-clone = "1.0"
 atomic_refcell = "0.1.12"
 
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-bytecount = { version = "^0.6.4", default_features = false, features = ["runtime-dispatch-simd"] }
-encoding_rs = { version = "0.8", default_features = false }
-jsonschema = { version = "0.17", default_features = false, features = ["draft202012"] }
 uuid = "1"
 
 [build-dependencies]
-pyo3-build-config = { version = "0.19", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.20", features = ["resolve-config"] }
 
 [profile.release]
 codegen-units = 1

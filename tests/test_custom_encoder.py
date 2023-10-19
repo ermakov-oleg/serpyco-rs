@@ -29,11 +29,4 @@ def test_serialize_with():
 def test_deserialize_with():
     serializer = Serializer(Annotated[datetime, deserialize_with(lambda x: x)])
     val = datetime.now()
-    assert serializer.load(val, validate=False) is val
-
-
-def test_deserialize_with__input_type_changed_and_validation_enabled__validation_fail():
-    """Custom deserialize don't support validation when result type changing."""
-    serializer = Serializer(Annotated[datetime, deserialize_with(lambda x: x)])
-    with pytest.raises(ValueError):
-        serializer.load(datetime.now(), validate=True)
+    assert serializer.load(val) is val
