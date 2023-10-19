@@ -77,22 +77,23 @@ macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
 
 | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
 |-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.05 |                 22188.2 |                 1    |
-| serpyco     |                            0.05 |                 20878.5 |                 1.06 |
-| mashumaro   |                            0.06 |                 15602.7 |                 1.42 |
-| pydantic    |                            2.66 |                   375.6 |                59    |
-| marshmallow |                            1.05 |                   951.7 |                23.33 |
+| serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
+| serpyco     |                            0.05 |                 21232.9 |                 1.06 |
+| mashumaro   |                            0.06 |                 15903.4 |                 1.42 |
+| pydantic    |                            0.16 |                  6262.6 |                 3.61 |
+| marshmallow |                            1.04 |                   962   |                23.5  |
 
 
-#### load with 
+#### load
 
 | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
 |-------------|---------------------------------|-------------------------|----------------------|
-| serpyco_rs  |                            0.23 |                  4400.1 |                 1    |
-| serpyco     |                            0.28 |                  3546.4 |                 1.24 |
-| mashumaro   |                            0.23 |                  4377.7 |                 1.01 |
-| pydantic    |                            2.01 |                   497.3 |                 8.86 |
-| marshmallow |                            4.55 |                   219.9 |                20.03 |
+| serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
+| mashumaro   |                            0.2  |                  4968   |                 2    |
+| pydantic    |                            0.34 |                  2866.7 |                 3.42 |
+| serpyco     |                            0.69 |                  1444.1 |                 6.87 |
+| marshmallow |                            4.14 |                   241.8 |                41.05 |
+
 
 
 ## Supported annotations
