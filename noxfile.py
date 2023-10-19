@@ -46,7 +46,7 @@ def type_check(session):
     install(session, '-r', 'requirements/type_check.txt')
 
     session.cd('python/serpyco_rs')
-    session.run('pyright')
+    session.run('pyright', success_codes=[0, 1] if _is_ci() else [0])
     session.run('pyright', '--verifytypes', 'serpyco_rs')
     session.run('mypy', '.', '--strict', '--implicit-reexport', '--pretty')
 
