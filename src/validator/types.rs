@@ -1,11 +1,11 @@
 use pyo3::exceptions::PyRuntimeError;
 use std::fmt;
 
-use pyo3::prelude::*;
-use pyo3::types::{PyNone, PyTuple, PyList};
 use crate::python::get_value_attr;
+use pyo3::prelude::*;
+use pyo3::types::{PyList, PyNone, PyTuple};
 
-use super::value::{Value};
+use super::value::Value;
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -633,7 +633,11 @@ pub struct EnumType {
 impl EnumType {
     #[new]
     #[pyo3(signature = (cls, items, custom_encoder=None))]
-    fn new(cls: &PyAny, items: &PyList, custom_encoder: Option<&PyAny>) -> PyResult<(Self, BaseType)> {
+    fn new(
+        cls: &PyAny,
+        items: &PyList,
+        custom_encoder: Option<&PyAny>,
+    ) -> PyResult<(Self, BaseType)> {
         let mut enum_items = vec![];
         for py_item in items.iter() {
             let item = Value::new(get_value_attr(py_item.as_ptr())?);
@@ -694,7 +698,12 @@ impl fmt::Display for EnumItems {
 
 impl<'a> From<&'a Vec<(EnumItem, Py<PyAny>)>> for EnumItems {
     fn from(items: &'a Vec<(EnumItem, Py<PyAny>)>) -> Self {
-        EnumItems(items.iter().map(|(item, _)| item.clone()).collect::<Vec<_>>())
+        EnumItems(
+            items
+                .iter()
+                .map(|(item, _)| item.clone())
+                .collect::<Vec<_>>(),
+        )
     }
 }
 

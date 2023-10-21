@@ -518,16 +518,14 @@ impl Encoder for EnumEncoder {
         } else {
             invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
         };
-        let index = self.enum_items.binary_search_by(|(e, _)| {
-            e.cmp(&item)
-        });
+        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&item));
 
         match index {
             Ok(index) => {
                 let (_, py_item) = &self.enum_items[index];
                 ffi!(Py_INCREF(py_item.as_ptr()));
                 Ok(py_item.as_ptr())
-            },
+            }
             Err(_) => {
                 invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
             }
@@ -560,15 +558,13 @@ impl Encoder for LiteralEncoder {
             invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
         };
 
-        let index = self.enum_items.binary_search_by(|(e, _)| {
-            e.cmp(&item)
-        });
+        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&item));
         match index {
             Ok(index) => {
                 let (_, py_item) = &self.enum_items[index];
                 ffi!(Py_INCREF(py_item.as_ptr()));
                 Ok(py_item.as_ptr())
-            },
+            }
             Err(_) => {
                 invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
             }
