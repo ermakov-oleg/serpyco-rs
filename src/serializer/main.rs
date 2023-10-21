@@ -238,7 +238,6 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(EnumEncoder {
-                enum_type: type_info.cls,
                 enum_items: type_info.enum_items,
                 ctx,
             }),

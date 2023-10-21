@@ -207,7 +207,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             )
 
         if issubclass(t, (Enum, IntEnum)):
-            return EnumType(cls=t, items=[item.value for item in t], custom_encoder=custom_encoder)
+            return EnumType(cls=t, items=[item for item in t], custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
             meta.add_to_state(meta_key, None)
