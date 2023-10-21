@@ -362,7 +362,8 @@ impl Encoder for EntityEncoder {
             for field in &self.fields {
                 let val = match dict.get_item(field.dict_key.as_ptr()) {
                     Some(val) => {
-                        let instance_path = instance_path.push(field.dict_key_rs.clone());
+                        let cur_path = PyValue::new(field.dict_key.as_ptr());
+                        let instance_path = instance_path.push(&cur_path);
                         field.encoder.load(val.as_ptr(), &instance_path)?
                     }
                     None => match (&field.default, &field.default_factory) {
@@ -444,7 +445,8 @@ impl Encoder for TypedDictEncoder {
             for field in &self.fields {
                 let val = match dict.get_item(field.dict_key.as_ptr()) {
                     Some(val) => {
-                        let instance_path = instance_path.push(field.dict_key_rs.clone());
+                        let cur_path = PyValue::new(field.dict_key.as_ptr());
+                        let instance_path = instance_path.push(&cur_path);
                         field.encoder.load(val.as_ptr(), &instance_path)? // new obj or RC +1
                     }
                     None => {
