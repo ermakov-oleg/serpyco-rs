@@ -27,6 +27,26 @@ pub(crate) fn to_uuid(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject>
 }
 
 #[inline]
+pub(crate) fn to_int(value: *mut pyo3::ffi::PyObject) -> PyResult<i64> {
+    let result = ffi!(PyLong_AsLongLong(value));
+    if result == -1 && !ffi!(PyErr_Occurred()).is_null() {
+        Err(Python::with_gil(PyErr::fetch))
+    } else {
+        Ok(result)
+    }
+}
+
+#[inline]
+pub(crate) fn to_float(value: *mut pyo3::ffi::PyObject) -> PyResult<f64> {
+    let result = ffi!(PyFloat_AsDouble(value));
+    if result == -1.0 && !ffi!(PyErr_Occurred()).is_null() {
+        Err(Python::with_gil(PyErr::fetch))
+    } else {
+        Ok(result)
+    }
+}
+
+#[inline]
 pub(crate) fn get_value_attr(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     py_object_get_attr(value, unsafe { VALUE_STR })
 }
@@ -152,8 +172,20 @@ pub(crate) fn py_object_get_item(
     obj: *mut ffi::PyObject,
     key: *mut ffi::PyObject,
 ) -> PyResult<*mut ffi::PyObject> {
+    // todo: use PyDict_GetItemWithError
     // Obj RC +1
     from_ptr_or_err(ffi!(PyObject_GetItem(obj, key)))
+}
+
+/// Returns None if key not found
+/// without setting an exception
+#[inline]
+pub(crate) fn py_dict_get_item(
+    obj: *mut ffi::PyObject,
+    key: *mut ffi::PyObject,
+) -> Option<*mut ffi::PyObject> {
+    // Obj RC not changed
+    from_ptr_or_opt(ffi!(PyDict_GetItemWithError(obj, key)))
 }
 
 #[inline]
