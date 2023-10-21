@@ -162,7 +162,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
         (datetime, '2022-10-10//12', _mk_e(ip='')),
         (date, '17-02-2022', _mk_e(ip='')),
         (datetime, '2022-10-10T14:23:43.123456-30:00', _mk_e(ip='')),
-        (EnumTest, 'buz', _mk_e(m='"buz" is not one of ["foo","bar"]')),
+        (EnumTest, 'buz', _mk_e(m='"buz" is not one of ["bar", "foo"]')),
         (
             Optional[int],
             'foo',

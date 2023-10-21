@@ -7,10 +7,7 @@ use pyo3::types::{PyDict, PyString};
 use pyo3::{PyAny, PyResult};
 
 use crate::python::{get_object_type, Type};
-use crate::serializer::encoders::{
-    BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, StringEncoder,
-    TypedDictEncoder,
-};
+use crate::serializer::encoders::{BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, StringEncoder, TypedDictEncoder};
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
 
@@ -238,7 +235,6 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(EnumEncoder {
-                enum_type: type_info.cls,
                 enum_items: type_info.enum_items,
                 ctx,
             }),

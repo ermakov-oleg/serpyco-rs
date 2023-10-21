@@ -2,9 +2,10 @@ use pyo3::exceptions::PyRuntimeError;
 use std::fmt;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyNone, PyTuple};
+use pyo3::types::{PyNone, PyTuple, PyList};
+use crate::python::get_value_attr;
 
-use super::value::{Sequence, Value};
+use super::value::{Value};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -624,35 +625,33 @@ pub struct EnumType {
     #[pyo3(get)]
     pub cls: Py<PyAny>,
     #[pyo3(get)]
-    pub items: Py<PyAny>,
-    pub enum_items: Vec<EnumItem>,
+    pub items: Py<PyList>,
+    pub enum_items: Vec<(EnumItem, Py<PyAny>)>,
 }
 
 #[pymethods]
 impl EnumType {
     #[new]
     #[pyo3(signature = (cls, items, custom_encoder=None))]
-    fn new(cls: &PyAny, items: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(cls: &PyAny, items: &PyList, custom_encoder: Option<&PyAny>) -> PyResult<(Self, BaseType)> {
         let mut enum_items = vec![];
-        let py_items = Value::new(items.as_ptr());
-        if let Some(array) = py_items.as_array() {
-            for i in 0..array.len() {
-                let item = array.get_item(i);
-                if let Some(str) = item.as_str() {
-                    enum_items.push(EnumItem::String(str.to_string()));
-                } else if let Some(int) = item.as_int() {
-                    enum_items.push(EnumItem::Int(int));
-                }
+        for py_item in items.iter() {
+            let item = Value::new(get_value_attr(py_item.as_ptr())?);
+            if let Some(str) = item.as_str() {
+                enum_items.push((EnumItem::String(str.to_string()), py_item.into()));
+            } else if let Some(int) = item.as_int() {
+                enum_items.push((EnumItem::Int(int), py_item.into()));
             }
         }
-        (
+        enum_items.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok((
             EnumType {
                 cls: cls.into(),
                 items: items.into(),
                 enum_items,
             },
             BaseType::new(custom_encoder),
-        )
+        ))
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -672,30 +671,30 @@ impl EnumType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum EnumItem {
     Int(i64),
     String(String),
 }
 
-pub struct EnumItems<'a>(&'a [EnumItem]);
+pub struct EnumItems(Vec<EnumItem>);
 
-impl<'a> fmt::Display for EnumItems<'a> {
+impl fmt::Display for EnumItems {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut items = vec![];
-        for item in self.0 {
+        for item in &self.0 {
             match item {
                 EnumItem::Int(int) => items.push(int.to_string()),
                 EnumItem::String(str) => items.push(format!("\"{}\"", str)),
             }
         }
-        write!(f, "[{}]", items.join(","))
+        write!(f, "[{}]", items.join(", "))
     }
 }
 
-impl<'a> From<&'a Vec<EnumItem>> for EnumItems<'a> {
-    fn from(items: &'a Vec<EnumItem>) -> Self {
-        EnumItems(items.as_slice())
+impl<'a> From<&'a Vec<(EnumItem, Py<PyAny>)>> for EnumItems {
+    fn from(items: &'a Vec<(EnumItem, Py<PyAny>)>) -> Self {
+        EnumItems(items.iter().map(|(item, _)| item.clone()).collect::<Vec<_>>())
     }
 }
 
@@ -921,27 +920,25 @@ impl UnionType {
 #[derive(Debug, Clone)]
 pub struct LiteralType {
     #[pyo3(get)]
-    pub args: Py<PyAny>,
-    pub enum_items: Vec<EnumItem>,
+    pub args: Py<PyList>,
+    pub enum_items: Vec<(EnumItem, Py<PyAny>)>,
 }
 
 #[pymethods]
 impl LiteralType {
     #[new]
     #[pyo3(signature = (args, custom_encoder=None))]
-    fn new(args: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(args: &PyList, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
         let mut enum_items = vec![];
-        let py_items = Value::new(args.as_ptr());
-        if let Some(array) = py_items.as_array() {
-            for i in 0..array.len() {
-                let item = array.get_item(i);
-                if let Some(str) = item.as_str() {
-                    enum_items.push(EnumItem::String(str.to_string()));
-                } else if let Some(int) = item.as_int() {
-                    enum_items.push(EnumItem::Int(int));
-                }
+        for py_value in args.iter() {
+            let item = Value::new(py_value.as_ptr());
+            if let Some(str) = item.as_str() {
+                enum_items.push((EnumItem::String(str.to_string()), py_value.into()));
+            } else if let Some(int) = item.as_int() {
+                enum_items.push((EnumItem::Int(int), py_value.into()));
             }
         }
+        enum_items.sort_by(|a, b| a.0.cmp(&b.0));
         (
             LiteralType {
                 args: args.into(),

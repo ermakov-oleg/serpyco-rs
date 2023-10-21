@@ -225,7 +225,7 @@ def test_enum_validation__invalid_type():
         B = 'foo'
 
     s = Serializer(A)
-    _check_errors(s, 'bar', [ErrorItem(message='"bar" is not one of [1,"foo"]', instance_path='')])
+    _check_errors(s, 'bar', [ErrorItem(message='"bar" is not one of [1, "foo"]', instance_path='')])
 
 
 def test_dict_validation__invalid_type():
@@ -316,7 +316,7 @@ def test_literal_validation__invalid_value():
     with pytest.raises(SchemaValidationError) as e:
         s.load(1)
 
-    assert e.value.errors == [ErrorItem(message='1 is not one of ["foo","bar"]', instance_path='')]
+    assert e.value.errors == [ErrorItem(message='1 is not one of ["bar", "foo"]', instance_path='')]
 
 
 def test_instance_path():

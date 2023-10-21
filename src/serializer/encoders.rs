@@ -497,8 +497,7 @@ impl Encoder for UUIDEncoder {
 
 #[derive(Debug, Clone)]
 pub struct EnumEncoder {
-    pub(crate) enum_type: pyo3::PyObject,
-    pub(crate) enum_items: Vec<EnumItem>,
+    pub(crate) enum_items: Vec<(EnumItem, Py<PyAny>)>,
     #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
@@ -519,18 +518,26 @@ impl Encoder for EnumEncoder {
         } else {
             invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
         };
+        let index = self.enum_items.binary_search_by(|(e, _)| {
+            e.cmp(&item)
+        });
 
-        if self.enum_items.contains(&item) {
-            py_object_call1_make_tuple_or_err(self.enum_type.as_ptr(), value)
-        } else {
-            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+        match index {
+            Ok(index) => {
+                let (_, py_item) = &self.enum_items[index];
+                ffi!(Py_INCREF(py_item.as_ptr()));
+                Ok(py_item.as_ptr())
+            },
+            Err(_) => {
+                invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+            }
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct LiteralEncoder {
-    pub(crate) enum_items: Vec<EnumItem>,
+    pub(crate) enum_items: Vec<(EnumItem, Py<PyAny>)>,
     #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
@@ -553,11 +560,18 @@ impl Encoder for LiteralEncoder {
             invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
         };
 
-        if self.enum_items.contains(&item) {
-            ffi!(Py_INCREF(value));
-            Ok(value)
-        } else {
-            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+        let index = self.enum_items.binary_search_by(|(e, _)| {
+            e.cmp(&item)
+        });
+        match index {
+            Ok(index) => {
+                let (_, py_item) = &self.enum_items[index];
+                ffi!(Py_INCREF(py_item.as_ptr()));
+                Ok(py_item.as_ptr())
+            },
+            Err(_) => {
+                invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+            }
         }
     }
 }
