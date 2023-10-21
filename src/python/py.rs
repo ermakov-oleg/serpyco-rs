@@ -27,6 +27,26 @@ pub(crate) fn to_uuid(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject>
 }
 
 #[inline]
+pub(crate) fn to_int(value: *mut pyo3::ffi::PyObject) -> PyResult<i64> {
+    let result = ffi!(PyLong_AsLongLong(value));
+    if result == -1 && !ffi!(PyErr_Occurred()).is_null() {
+        Err(Python::with_gil(PyErr::fetch))
+    } else {
+        Ok(result)
+    }
+}
+
+#[inline]
+pub(crate) fn to_float(value: *mut pyo3::ffi::PyObject) -> PyResult<f64> {
+    let result = ffi!(PyFloat_AsDouble(value));
+    if result == -1.0 && !ffi!(PyErr_Occurred()).is_null() {
+        Err(Python::with_gil(PyErr::fetch))
+    } else {
+        Ok(result)
+    }
+}
+
+#[inline]
 pub(crate) fn get_value_attr(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     py_object_get_attr(value, unsafe { VALUE_STR })
 }

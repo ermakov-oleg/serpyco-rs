@@ -6,8 +6,8 @@ use super::py_types::ObjectType;
 use crate::python::macros::{call_method, ffi};
 use crate::python::types::ITEMS_STR;
 use crate::python::{
-    from_ptr_or_err, from_ptr_or_opt, obj_to_str, py_len, py_object_get_item, py_str_to_str,
-    py_tuple_get_item,
+    error_on_minusone, from_ptr_or_err, from_ptr_or_opt, obj_to_str, py_len, py_object_get_item,
+    py_str_to_str, py_tuple_get_item, to_float, to_int,
 };
 
 use super::py_types::get_object_type_from_object;
@@ -82,7 +82,7 @@ impl Value {
     #[inline]
     pub fn as_int(&self) -> Option<i64> {
         if self.object_type == ObjectType::Int {
-            Some(ffi!(PyLong_AsLongLong(self.py_object)))
+            to_int(self.py_object).ok()
         } else {
             None
         }
@@ -92,7 +92,7 @@ impl Value {
     #[inline]
     pub fn as_float(&self) -> Option<f64> {
         if self.object_type == ObjectType::Float {
-            Some(ffi!(PyFloat_AS_DOUBLE(self.py_object)))
+            to_float(self.py_object).ok()
         } else {
             None
         }
@@ -205,7 +205,7 @@ pub trait MutableSequence {
     /// Creates a new empty sequence with the given capacity.
     fn new_with_capacity(capacity: isize) -> Self;
     /// Sets the value at the given index.
-    fn set(&mut self, index: isize, value: *mut pyo3::ffi::PyObject);
+    fn set(&mut self, index: isize, value: *mut pyo3::ffi::PyObject) -> PyResult<()>;
 }
 
 /// Represents a Python array.
@@ -257,7 +257,7 @@ impl Sequence for Array {
         for i in 0..self.len {
             let item = ffi!(PyList_GET_ITEM(self.as_ptr(), i));
             let new_item = f(i, item)?;
-            result.set(i, new_item);
+            result.set(i, new_item)?;
         }
         Ok(result)
     }
@@ -275,8 +275,8 @@ impl MutableSequence for Array {
     }
     /// Sets the value at the given index.
     #[inline]
-    fn set(&mut self, index: isize, value: *mut pyo3::ffi::PyObject) {
-        ffi!(PyList_SetItem(self.py_object, index, value));
+    fn set(&mut self, index: isize, value: *mut pyo3::ffi::PyObject) -> PyResult<()> {
+        error_on_minusone(ffi!(PyList_SetItem(self.py_object, index, value)))
     }
 }
 
@@ -308,9 +308,9 @@ impl Sequence for SequenceImpl {
     {
         let mut result = T::new_with_capacity(self.len);
         for i in 0..self.len {
-            let item = ffi!(PySequence_GetItem(self.as_ptr(), i)); // RC +1
+            let item = from_ptr_or_err(ffi!(PySequence_GetItem(self.as_ptr(), i)))?; // RC +1
             let new_item = f(i, item)?;
-            result.set(i, new_item);
+            result.set(i, new_item)?;
             ffi!(Py_DECREF(item));
         }
         Ok(result)
@@ -349,8 +349,8 @@ impl MutableSequence for Tuple {
     }
 
     #[inline]
-    fn set(&mut self, index: isize, value: *mut PyObject) {
-        ffi!(PyTuple_SetItem(self.py_object, index, value));
+    fn set(&mut self, index: isize, value: *mut PyObject) -> PyResult<()> {
+        error_on_minusone(ffi!(PyTuple_SetItem(self.py_object, index, value)))
     }
 }
 
@@ -391,10 +391,15 @@ impl Dict {
 
     /// Sets the value at the given key.
     #[inline]
-    pub fn set(&mut self, key: *mut pyo3::ffi::PyObject, value: *mut pyo3::ffi::PyObject) {
-        ffi!(PyDict_SetItem(self.py_object, key, value)); // key and val RC +1
+    pub fn set(
+        &mut self,
+        key: *mut pyo3::ffi::PyObject,
+        value: *mut pyo3::ffi::PyObject,
+    ) -> PyResult<()> {
+        error_on_minusone(ffi!(PyDict_SetItem(self.py_object, key, value)))?; // key and val RC +1
         ffi!(Py_DECREF(key));
         ffi!(Py_DECREF(value));
+        Ok(())
     }
 
     /// Returns dict items iterator.

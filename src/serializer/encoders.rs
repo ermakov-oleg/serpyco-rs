@@ -263,7 +263,7 @@ impl Encoder for DictionaryEncoder {
                 let instance_path = instance_path.push(&k);
                 let key = self.key_encoder.load(k.as_ptr(), &instance_path)?;
                 let value = self.value_encoder.load(v.as_ptr(), &instance_path)?;
-                result_dict.set(key, value);
+                result_dict.set(key, value)?;
             }
             Ok(result_dict.as_ptr())
         } else {
@@ -335,7 +335,7 @@ impl Encoder for EntityEncoder {
         let dict_ptr = ffi!(PyDict_New());
 
         for field in &self.fields {
-            let field_val = ffi!(PyObject_GetAttr(value, field.name.as_ptr())); // val RC +1
+            let field_val = py_object_get_attr(value, field.name.as_ptr())?; // val RC +1
             let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
 
             if field.required || !self.omit_none || !is_none(dump_result) {
