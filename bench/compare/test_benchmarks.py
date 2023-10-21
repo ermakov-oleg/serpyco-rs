@@ -1,9 +1,7 @@
-import json
-
 import pytest
 
 from .libs import marshmallow, mashumaro, pydantic, serpyco, serpyco_rs
-
+from ..utils import check_refcount
 
 serializers = {
     'serpyco_rs': serpyco_rs,
@@ -22,7 +20,8 @@ def test_dump(benchmark, lib):
     benchmark.group = 'dump'
     benchmark.extra_info['lib'] = lib
     benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
-    benchmark(serializer.dump, serializer.test_object)
+    with check_refcount():
+        benchmark(serializer.dump, serializer.test_object)
 
 
 @pytest.mark.parametrize('lib', serializers.keys())
@@ -34,4 +33,5 @@ def test_load_validate(benchmark, lib):
     benchmark.group = 'load with validate'
     benchmark.extra_info['lib'] = lib
     benchmark.extra_info['correct'] = serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
-    benchmark(serializer.load, test_dict)
+    with check_refcount():
+        benchmark(serializer.load, test_dict)

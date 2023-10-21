@@ -5,6 +5,7 @@ import orjson
 import pytest
 
 from .github_issue import mashumaro, serpyco_rs
+from ..utils import check_refcount
 
 serializers = {
     'serpyco_rs': serpyco_rs,
@@ -27,7 +28,8 @@ def test_dump_github_issue(benchmark, lib, data):
     benchmark.group = 'dump github issue'
     benchmark.extra_info['lib'] = lib
     benchmark.extra_info['correct'] = serializer.load(serializer.dump(test_object)) == test_object
-    benchmark(serializer.dump, test_object)
+    with check_refcount():
+        benchmark(serializer.dump, test_object)
 
 
 @pytest.mark.parametrize('lib', serializers.keys())
@@ -38,4 +40,5 @@ def test_load_github_issue(benchmark, lib, data):
     benchmark.group = 'load github issue'
     benchmark.extra_info['lib'] = lib
     benchmark.extra_info['correct'] = serializer.load(serializer.dump(test_object)) == test_object
-    benchmark(serializer.load, data)
+    with check_refcount():
+        benchmark(serializer.load, data)
