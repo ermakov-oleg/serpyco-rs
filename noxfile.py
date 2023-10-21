@@ -75,7 +75,7 @@ def bench_codespeed(session):
     build(session)
     install(session, '-r', 'requirements/bench.txt')
     install(session, 'pytest-codspeed')
-    session.run('pytest', 'bench', '--ignore=bench/compare', '--codspeed')
+    session.run('pytest', 'bench', '--ignore=bench/compare/test_benchmarks.py', '--codspeed')
 
 
 def _is_ci() -> bool:
