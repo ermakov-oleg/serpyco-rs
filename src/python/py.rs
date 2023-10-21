@@ -172,8 +172,20 @@ pub(crate) fn py_object_get_item(
     obj: *mut ffi::PyObject,
     key: *mut ffi::PyObject,
 ) -> PyResult<*mut ffi::PyObject> {
+    // todo: use PyDict_GetItemWithError
     // Obj RC +1
     from_ptr_or_err(ffi!(PyObject_GetItem(obj, key)))
+}
+
+/// Returns None if key not found
+/// without setting an exception
+#[inline]
+pub(crate) fn py_dict_get_item(
+    obj: *mut ffi::PyObject,
+    key: *mut ffi::PyObject,
+) -> Option<*mut ffi::PyObject> {
+    // Obj RC not changed
+    from_ptr_or_opt(ffi!(PyDict_GetItemWithError(obj, key)))
 }
 
 #[inline]
