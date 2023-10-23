@@ -3,6 +3,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Annotated, List, Optional
 
+import attr
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
 from serpyco_rs.metadata import CamelCase, NoFormat
@@ -253,3 +254,23 @@ def test_serializer_with_camelcase():
 
     assert serializer.load(expected) == obj
     assert serializer.dump(obj) == expected
+
+
+def test_load_frozen_dataclass():
+    @dataclass(frozen=True)
+    class Foo:
+        bar: bool
+
+    serializer = Serializer(Foo)
+
+    assert serializer.load({'bar': True}) == Foo(bar=True)
+
+
+def test_load_frozen_attrs():
+    @attr.frozen
+    class Foo:
+        bar: bool
+
+    serializer = Serializer(Foo)
+
+    assert serializer.load({'bar': True}) == Foo(bar=True)
