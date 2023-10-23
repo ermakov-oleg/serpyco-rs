@@ -112,6 +112,7 @@ class EntityType(BaseType):
     name: str
     fields: Sequence[EntityField]
     omit_none: bool
+    is_frozen: bool
     generics: Sequence[tuple[TypeVar, Any]]
     doc: str | None
 
@@ -121,6 +122,7 @@ class EntityType(BaseType):
         name: str,
         fields: Sequence[EntityField],
         omit_none: bool = False,
+        is_frozen: bool = False,
         generics: Sequence[tuple[TypeVar, Any]] | None = None,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,

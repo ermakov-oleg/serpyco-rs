@@ -200,6 +200,7 @@ pub fn get_encoder(
             let encoder = EntityEncoder {
                 fields,
                 omit_none: type_info.omit_none,
+                is_frozen: type_info.is_frozen,
                 cls: type_info.cls,
                 ctx,
             };

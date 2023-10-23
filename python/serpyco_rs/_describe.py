@@ -76,10 +76,16 @@ if sys.version_info >= (3, 10):  # pragma: no cover
 else:  # pragma: no cover
     StdUnionType = None
 
+FrozenInstanceErrors: tuple[type[Exception], ...] = (dataclasses.FrozenInstanceError,)
+
 try:
     import attr
+    from attr.exceptions import FrozenInstanceError
+
+    FrozenInstanceErrors += (FrozenInstanceError,)
 except ImportError:  # pragma: no cover
     attr = None  # type: ignore
+    FrozenInstanceError = None  # type: ignore
 
 
 _NoneType = type(None)
@@ -331,6 +337,7 @@ def _describe_entity(
         name=_generate_name(t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional, generics),
         fields=fields,
         omit_none=cls_none_format is OmitNone,
+        is_frozen=_is_frozen_dataclass(t, fields[0]) if fields else False,
         generics=generics,
         doc=_get_dataclass_doc(t),
         custom_encoder=custom_encoder,
@@ -515,3 +522,12 @@ def _get_dataclass_doc(cls: Any) -> Optional[str]:
     if doc is None or doc.startswith(f'{cls.__name__}('):
         return None
     return doc
+
+
+def _is_frozen_dataclass(cls: Any, field: EntityField) -> bool:
+    try:
+        obj = object.__new__(cls)
+        setattr(obj, field.name, None)
+        return False
+    except FrozenInstanceErrors:
+        return True

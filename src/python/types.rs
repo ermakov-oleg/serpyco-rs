@@ -23,6 +23,7 @@ pub static mut NONE_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DECIMAL_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_TUPLE_0: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__NEW__: *mut PyObject = 0 as *mut PyObject;
+pub static mut PY_OBJECT__SETATTR__: *mut PyObject = 0 as *mut PyObject;
 pub static mut EMPTY_UNICODE: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
@@ -101,6 +102,9 @@ pub fn init(py: Python<'_>) {
         let object = get_attr_ptr!(builtins, "object");
         let new_str = pyo3_ffi::PyUnicode_InternFromString("__new__\0".as_ptr() as *const c_char);
         PY_OBJECT__NEW__ = py_object_get_attr(object, new_str).unwrap();
+        let setattr_str =
+            pyo3_ffi::PyUnicode_InternFromString("__setattr__\0".as_ptr() as *const c_char);
+        PY_OBJECT__SETATTR__ = py_object_get_attr(object, setattr_str).unwrap();
 
         let decimal_str =
             pyo3_ffi::PyUnicode_InternFromString("Decimal\0".as_ptr() as *const c_char);

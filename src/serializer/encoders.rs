@@ -15,8 +15,8 @@ use crate::python::macros::{call_object, ffi};
 use crate::python::{
     call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime,
     is_none, iter_over_dict_items, obj_to_str, parse_date, parse_datetime, parse_time,
-    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
-    py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
+    py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_attr,
+    py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
@@ -313,6 +313,7 @@ impl Encoder for ArrayEncoder {
 pub struct EntityEncoder {
     pub(crate) cls: Py<PyAny>,
     pub(crate) omit_none: bool,
+    pub(crate) is_frozen: bool,
     pub(crate) fields: Vec<Field>,
     #[allow(dead_code)]
     pub(crate) ctx: Context,
@@ -356,6 +357,11 @@ impl Encoder for EntityEncoder {
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
+        let setattr_fn = if self.is_frozen {
+            py_frozen_object_set_attr
+        } else {
+            py_object_set_attr
+        };
         if let Some(dict) = py_value.as_dict() {
             let obj = create_new_object(self.cls.as_ptr())?;
 
@@ -381,7 +387,7 @@ impl Encoder for EntityEncoder {
                         }
                     },
                 };
-                py_object_set_attr(obj, field.name.as_ptr(), val)?;
+                setattr_fn(obj, field.name.as_ptr(), val)?;
                 // val RC +1
                 ffi!(Py_DECREF(val));
             }

@@ -380,6 +380,8 @@ pub struct EntityType {
     #[pyo3(get)]
     pub omit_none: bool,
     #[pyo3(get)]
+    pub is_frozen: bool,
+    #[pyo3(get)]
     pub generics: Py<PyAny>,
     #[pyo3(get)]
     pub doc: Py<PyAny>,
@@ -388,13 +390,14 @@ pub struct EntityType {
 #[pymethods]
 impl EntityType {
     #[new]
-    #[pyo3(signature = (cls, name, fields, omit_none=false, generics=None, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, generics=None, doc=None, custom_encoder=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         cls: &PyAny,
         name: &PyAny,
         fields: Vec<EntityField>,
         omit_none: bool,
+        is_frozen: bool,
         generics: Option<&PyAny>,
         doc: Option<&PyAny>,
         custom_encoder: Option<&PyAny>,
@@ -406,6 +409,7 @@ impl EntityType {
                 name: name.into(),
                 fields,
                 omit_none,
+                is_frozen,
                 generics: generics.map_or(PyTuple::empty(py).into(), |x| x.into()),
                 doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
             },

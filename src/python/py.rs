@@ -1,7 +1,7 @@
 use super::macros::{call_method, ffi};
 use super::types::{
     DATE_STR, DECIMAL_PY_TYPE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, PY_OBJECT__NEW__,
-    UUID_PY_TYPE, VALUE_STR,
+    PY_OBJECT__SETATTR__, UUID_PY_TYPE, VALUE_STR,
 };
 use crate::python::macros::use_immortal;
 use pyo3::{ffi, PyErr, PyResult, Python};
@@ -129,6 +129,18 @@ pub(crate) fn py_object_set_attr(
 ) -> PyResult<()> {
     let ret = ffi!(PyObject_SetAttr(obj, attr_name, value));
     error_on_minusone(ret)
+}
+
+#[inline]
+pub(crate) fn py_frozen_object_set_attr(
+    obj: *mut ffi::PyObject,
+    attr_name: *mut ffi::PyObject,
+    value: *mut ffi::PyObject,
+) -> PyResult<()> {
+    let tuple_arg = from_ptr_or_err(ffi!(PyTuple_Pack(3, obj, attr_name, value)))?;
+    py_object_call1_or_err(unsafe { PY_OBJECT__SETATTR__ }, tuple_arg)?;
+    ffi!(Py_DECREF(tuple_arg));
+    Ok(())
 }
 
 #[inline]
