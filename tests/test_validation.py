@@ -316,9 +316,7 @@ def test_tagged_union_validation__discriminator_missing():
     with pytest.raises(SchemaValidationError) as e:
         s.load({})
 
-    assert e.value.errors == [
-        ErrorItem(message='"type" is a required property', instance_path='')
-    ]
+    assert e.value.errors == [ErrorItem(message='"type" is a required property', instance_path='')]
 
 
 def test_dump_tagged_union_validation__discriminator_missing():
@@ -326,9 +324,7 @@ def test_dump_tagged_union_validation__discriminator_missing():
     with pytest.raises(SchemaValidationError) as e:
         s.dump({})
 
-    assert e.value.errors == [
-        ErrorItem(message='"type" is a required property', instance_path='')
-    ]
+    assert e.value.errors == [ErrorItem(message='"type" is a required property', instance_path='')]
 
 
 def test_literal_validation__invalid_value():
