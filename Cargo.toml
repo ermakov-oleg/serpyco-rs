@@ -1,6 +1,6 @@
 [package]
 name = "serpyco-rs"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2021"
 homepage = "https://github.com/ermakov-oleg/serpyco-rs"
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
