@@ -311,6 +311,26 @@ def test_tagged_union_validation__invalid_discriminator():
     ]
 
 
+def test_tagged_union_validation__discriminator_missing():
+    s = Serializer(Annotated[Union[A, B], Discriminator('type')])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load({})
+
+    assert e.value.errors == [
+        ErrorItem(message='"type" is a required property', instance_path='')
+    ]
+
+
+def test_dump_tagged_union_validation__discriminator_missing():
+    s = Serializer(Annotated[Union[A, B], Discriminator('type')])
+    with pytest.raises(SchemaValidationError) as e:
+        s.dump({})
+
+    assert e.value.errors == [
+        ErrorItem(message='"type" is a required property', instance_path='')
+    ]
+
+
 def test_literal_validation__invalid_value():
     s = Serializer(Literal['foo', 'bar'])
     with pytest.raises(SchemaValidationError) as e:

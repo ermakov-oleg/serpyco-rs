@@ -664,13 +664,24 @@ pub struct UnionEncoder {
 impl Encoder for UnionEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let discriminator = py_object_get_attr(value, self.dump_discriminator.as_ptr())?; // val RC +1
-        let key = py_str_to_str(discriminator)?;
+        let key = match py_object_get_attr(value, self.dump_discriminator.as_ptr()) {
+            Ok(val) => {
+                let result = py_str_to_str(val)?;
+                ffi!(Py_DECREF(val));
+                result
+            }
+            Err(_) => {
+                return Err(missing_required_property(
+                    py_str_to_str(self.dump_discriminator.as_ptr())?,
+                    &InstancePath::new(),
+                ))
+            }
+        };
+
         let encoder = self.encoders.get(key).ok_or_else(|| {
             let instance_path = InstancePath::new();
             no_encoder_for_discriminator(key, &self.keys, &instance_path)
         })?;
-        ffi!(Py_DECREF(discriminator));
         encoder.dump(value)
     }
 
@@ -680,14 +691,24 @@ impl Encoder for UnionEncoder {
         match py_value.as_dict() {
             None => invalid_type!("object", py_value, instance_path),
             Some(dict) => {
-                let discriminator =
-                    py_object_get_item(dict.as_ptr(), self.load_discriminator.as_ptr())?; // val RC +1
-                let key = py_str_to_str(discriminator)?;
+                let key = match py_object_get_item(dict.as_ptr(), self.load_discriminator.as_ptr())
+                {
+                    Ok(val) => {
+                        let result = py_str_to_str(val)?;
+                        ffi!(Py_DECREF(val));
+                        result
+                    }
+                    Err(_) => {
+                        return Err(missing_required_property(
+                            &self.load_discriminator_rs,
+                            instance_path,
+                        ))
+                    }
+                };
                 let encoder = self.encoders.get(key).ok_or_else(|| {
                     let instance_path = instance_path.push(self.load_discriminator_rs.clone());
                     no_encoder_for_discriminator(key, &self.keys, &instance_path)
                 })?;
-                ffi!(Py_DECREF(discriminator));
                 encoder.load(value, instance_path)
             }
         }
