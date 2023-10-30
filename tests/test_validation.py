@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum
-from typing import Annotated, Any, TypedDict, Literal, Union
+from typing import Annotated, Any, Literal, TypedDict, Union
 
 import pytest
 from serpyco_rs import SchemaValidationError, Serializer
 from serpyco_rs._impl import ErrorItem
-from serpyco_rs.metadata import CustomEncoder, Max, MaxLength, Min, MinLength, Discriminator
+from serpyco_rs.metadata import CustomEncoder, Discriminator, Max, MaxLength, Min, MinLength
 
 
 def _check_errors(s: Serializer, value: Any, expected_errors: list[ErrorItem]):

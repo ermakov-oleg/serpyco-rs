@@ -75,8 +75,6 @@ def test_force_default_for_optional__propagate_to_nested():
 
     serializer = Serializer(B, force_default_for_optional=True)
 
-    print(serializer.get_json_schema())
-
     assert serializer.load({}) == B(foo=None)
     assert serializer.load({'foo': {}}) == B(foo=A(bar=None))
 

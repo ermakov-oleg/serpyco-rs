@@ -439,6 +439,13 @@ impl Iterator for PyObjectIterator {
     }
 }
 
+impl Drop for PyObjectIterator {
+    #[inline]
+    fn drop(&mut self) {
+        ffi!(Py_DECREF(self.0));
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.as_str() {

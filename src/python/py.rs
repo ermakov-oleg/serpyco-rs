@@ -17,7 +17,9 @@ pub(crate) fn get_none() -> *mut ffi::PyObject {
 #[inline]
 pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     let result = py_object_call1_make_tuple_or_err(unsafe { DECIMAL_PY_TYPE }, obj_to_str(value)?);
-    ffi!(Py_DECREF(value));
+    if ffi!(PyUnicode_CheckExact(value)) == 1 {
+        ffi!(Py_DECREF(value));
+    }
     result
 }
 
