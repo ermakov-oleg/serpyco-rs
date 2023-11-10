@@ -223,7 +223,7 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     if: startsWith(github.event.ref, 'refs/tags')
-    needs: [ macos, windows, linux, test ]
+    needs: [ macos, windows, linux, linux-cross, test ]
     steps:
       - uses: actions/download-artifact@v2
         with:
