@@ -12,6 +12,7 @@ from ._serpyco_rs import (
     DecimalType,
     DefaultValue as _DefaultValue,
     DictionaryType,
+    DiscriminatedUnionType,
     EntityField,
     EntityType,
     EnumType,

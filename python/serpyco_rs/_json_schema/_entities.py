@@ -156,7 +156,7 @@ class RefType(Schema):
 
 
 @dataclass
-class UnionType(Schema):
+class DiscriminatedUnionType(Schema):
     discriminator: Discriminator | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:

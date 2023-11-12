@@ -33,6 +33,7 @@ from serpyco_rs._describe import (
     TupleType,
     TypedDictType,
     UnionType,
+    DiscriminatedUnionType,
     UUIDType,
     describe_type,
 )
@@ -509,11 +510,12 @@ def test_describe__optional__wrapped():
     assert describe_type(Optional[int]) == OptionalType(inner=IntegerType(custom_encoder=None), custom_encoder=None)
 
 
-def test_describe__other_unions__error():
-    with pytest.raises(RuntimeError) as exc_info:
-        describe_type(Union[int, str])
-
-    assert exc_info.match('For support Unions need specify serpyco_rs.metadata.Discriminator')
+def test_describe__unions():
+    assert describe_type(Union[int, str]) == UnionType(
+        item_types=[IntegerType(custom_encoder=None), StringType(custom_encoder=None)],
+        union_repr='Union[int, str]',
+        custom_encoder=None,
+    )
 
 
 @pytest.mark.skipif(sys.version_info < (3, 10), reason='New style unions available after 3.10')
@@ -613,7 +615,7 @@ def test_describe__tagged_union():
             EntityField(
                 name='field',
                 dict_key='field',
-                field_type=UnionType(
+                field_type=DiscriminatedUnionType(
                     item_types={
                         'foo': EntityType(
                             cls=Foo,

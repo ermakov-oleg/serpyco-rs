@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Union
 from typing import Optional, Annotated
 
 from serpyco_rs.metadata import Alias
@@ -121,8 +121,7 @@ class Issue:
     title: str
     body: Optional[str]
     user: Optional[User]
-    # labels: list[Union[IssueLabel, str]]  todo: fix this
-    labels: list[IssueLabel]
+    labels: list[Union[IssueLabel, str]]
     assignee: Optional[User]
     assignees: Optional[list[User]]
     milestone: Optional[Milestone]

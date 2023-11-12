@@ -322,6 +322,57 @@ def test_to_json_schema__tagged_union():
     }
 
 
+def test_to_json_schema__union():
+    @dataclass
+    class Foo:
+        val: int
+
+    @dataclass
+    class Bar:
+        val: str
+
+    @dataclass
+    class Base:
+        field: Union[Foo, Bar, str]
+
+    serializer = Serializer(Base)
+    assert serializer.get_json_schema() == {
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.Base[no_format,keep_nones]',
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'components': {
+            'schemas': {
+                'tests.json_schema.test_convert.Bar[no_format,keep_nones]': {
+                    'properties': {'val': {'type': 'string'}},
+                    'required': ['val'],
+                    'type': 'object',
+                },
+                'tests.json_schema.test_convert.Base[no_format,keep_nones]': {
+                    'properties': {
+                        'field': {
+                            'oneOf': [
+                                {
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.Foo[no_format,keep_nones]'
+                                },
+                                {
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.Bar[no_format,keep_nones]'
+                                },
+                                {'type': 'string'},
+                            ],
+                        }
+                    },
+                    'required': ['field'],
+                    'type': 'object',
+                },
+                'tests.json_schema.test_convert.Foo[no_format,keep_nones]': {
+                    'properties': {'val': {'type': 'integer'}},
+                    'required': ['val'],
+                    'type': 'object',
+                },
+            }
+        },
+    }
+
+
 def test_to_json_schema__force_none_as_default_for_optional():
     @dataclass
     class Data:

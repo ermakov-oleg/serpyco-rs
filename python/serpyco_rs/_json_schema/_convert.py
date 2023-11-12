@@ -11,6 +11,7 @@ from .. import _describe as describe
 from ._entities import (
     ArrayType,
     Boolean,
+    DiscriminatedUnionType,
     Discriminator,
     IntegerType,
     Null,
@@ -19,7 +20,6 @@ from ._entities import (
     RefType,
     Schema,
     StringType,
-    UnionType,
 )
 
 
@@ -212,13 +212,21 @@ def _(arg: describe.LiteralType, doc: Optional[str] = None) -> Schema:
 
 @to_json_schema.register
 def _(arg: describe.UnionType, doc: Optional[str] = None) -> Schema:
+    return Schema(
+        oneOf=[to_json_schema(t) for t in arg.item_types],
+        description=doc,
+    )
+
+
+@to_json_schema.register
+def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None) -> Schema:
     objects = {
         name: schema
         for name, t in arg.item_types.items()
         if (schema := to_json_schema(t)) and _check_unions_schema_types(schema)
     }
 
-    return UnionType(
+    return DiscriminatedUnionType(
         oneOf=list(objects.values()),
         discriminator=Discriminator(
             property_name=arg.load_discriminator,

@@ -235,3 +235,25 @@ def test_load_recursive(bench_or_check_refcount):
     bench_or_check_refcount.group = 'recursive'
     data = {'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}
     bench_or_check_refcount(repeat(lambda: serializer.load(data)))
+
+
+def test_dump_union(bench_or_check_refcount):
+    @dataclass
+    class Foo:
+        foo: int
+
+    serializer = Serializer(Union[int, Foo])
+    data = Foo(foo=1)
+    bench_or_check_refcount.group = 'union'
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+def test_load_union(bench_or_check_refcount):
+    @dataclass
+    class Foo:
+        foo: int
+
+    serializer = Serializer(Union[int, Foo])
+    bench_or_check_refcount.group = 'union'
+    data = {'foo': 1}
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
