@@ -254,6 +254,6 @@ def test_load_union(bench_or_check_refcount):
         foo: int
 
     serializer = Serializer(Union[int, Foo])
-    bench_or_check_refcount.group = 'union'
     data = {'foo': 1}
+    bench_or_check_refcount.group = 'union'
     bench_or_check_refcount(repeat(lambda: serializer.load(data)))
