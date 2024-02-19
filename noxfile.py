@@ -70,6 +70,19 @@ def bench(session):
     )
 
 
+@nox.session(python=False)
+def test_rc_leaks(session):
+    build(session)
+    install(session, '-r', 'requirements/bench.txt')
+
+    session.run(
+        'pytest',
+        *(session.posargs if session.posargs else ['bench']),
+        '--verbose',
+        '--debug-refs',
+    )
+
+
 @nox.session
 def bench_codespeed(session):
     build(session)
@@ -80,6 +93,7 @@ def bench_codespeed(session):
 
 def _is_ci() -> bool:
     return bool(os.environ.get('CI', None))
+
 
 def install(session, *args):
     session.run('pip', 'install', *args)

@@ -14,9 +14,9 @@ use crate::errors::{ToPyErr, ValidationError};
 use crate::python::macros::{call_object, ffi};
 use crate::python::{
     call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime,
-    is_none, iter_over_dict_items, obj_to_str, parse_date, parse_datetime, parse_time,
-    py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_attr,
-    py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_get_item, to_decimal, to_uuid,
+    is_none, obj_to_str, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr,
+    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
+    py_str_to_str, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
@@ -234,23 +234,25 @@ pub struct DictionaryEncoder {
 
 impl Encoder for DictionaryEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let dict_ptr = ffi!(PyDict_New());
-
-        for i in iter_over_dict_items(value)? {
-            // items RC +1
-            let item = i?;
-            let key = self.key_encoder.dump(py_tuple_get_item(item, 0)?)?; // new obj or RC +1
-            let value = self.value_encoder.dump(py_tuple_get_item(item, 1)?)?; // new obj or RC +1
-
-            if !self.omit_none || !is_none(value) {
-                ffi!(PyDict_SetItem(dict_ptr, key, value)); // key and val or RC +1
+    fn dump(&self, in_value: *mut PyObject) -> PyResult<*mut PyObject> {
+        let py_value = PyValue::new(in_value);
+        if let Some(dict) = py_value.as_dict() {
+            let mut result_dict = PyDict::new_empty();
+            for i in dict.iter()? {
+                let (k, v) = i?;
+                let key = self.key_encoder.dump(k.as_ptr())?;
+                let value = self.value_encoder.dump(v.as_ptr())?;
+                if !self.omit_none || !is_none(value) {
+                    result_dict.set(key, value)?;
+                } else {
+                    ffi!(Py_DECREF(key));
+                    ffi!(Py_DECREF(value));
+                }
             }
-            ffi!(Py_DECREF(key));
-            ffi!(Py_DECREF(value));
-            ffi!(Py_DECREF(item));
+            Ok(result_dict.as_ptr())
+        } else {
+            invalid_type_dump!("object", py_value)
         }
-        Ok(dict_ptr)
     }
 
     #[inline]

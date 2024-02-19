@@ -70,7 +70,6 @@ from .metadata import (
     OmitNone,
 )
 
-
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType as StdUnionType
 else:  # pragma: no cover
@@ -213,7 +212,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             )
 
         if issubclass(t, (Enum, IntEnum)):
-            return EnumType(cls=t, items=[item for item in t], custom_encoder=custom_encoder)
+            return EnumType(cls=t, items=list(t), custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
             meta.add_to_state(meta_key, None)
@@ -528,6 +527,7 @@ def _is_frozen_dataclass(cls: Any, field: EntityField) -> bool:
     try:
         obj = object.__new__(cls)
         setattr(obj, field.name, None)
-        return False
     except FrozenInstanceErrors:
         return True
+    else:
+        return False

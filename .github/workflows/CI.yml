@@ -169,6 +169,31 @@ jobs:
         env:
           CI: true
 
+  test_rc_leaks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+    name: Test on ${{ matrix.os}} for resource leaks
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: deadsnakes/action@v3.1.0
+        if: endsWith(matrix.python-version, '-dev')
+        with:
+          python-version: 3.11
+          debug: true
+      - run: python --version --version && which python && python -c "import sys; print(sys.gettotalrefcount())"
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --sdist -o wheels
+      - name: install dependencies
+        run: |
+          python -m pip install --upgrade pip nox
+      - name: tests
+        run: nox -s test_rc_leaks
+
   benchmark-codespeed:
     needs: [ linux ]
     runs-on: ubuntu-latest

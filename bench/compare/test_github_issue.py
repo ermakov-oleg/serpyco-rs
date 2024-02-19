@@ -5,7 +5,6 @@ import orjson
 import pytest
 
 from .github_issue import mashumaro, serpyco_rs
-from ..utils import check_refcount
 
 serializers = {
     'serpyco_rs': serpyco_rs,
@@ -20,25 +19,23 @@ def data() -> dict[str, Any]:
 
 
 @pytest.mark.parametrize('lib', serializers.keys())
-def test_dump_github_issue(benchmark, lib, data):
+def test_dump_github_issue(bench_or_check_refcount, lib, data):
     serializer = serializers[lib]
     test_object = serializer.load(data)
     serializer.dump(test_object)  # warmup
 
-    benchmark.group = 'dump github issue'
-    benchmark.extra_info['lib'] = lib
-    benchmark.extra_info['correct'] = serializer.load(serializer.dump(test_object)) == test_object
-    with check_refcount():
-        benchmark(serializer.dump, test_object)
+    bench_or_check_refcount.group = 'dump github issue'
+    bench_or_check_refcount.extra_info['lib'] = lib
+    bench_or_check_refcount.extra_info['correct'] = serializer.load(serializer.dump(test_object)) == test_object
+    bench_or_check_refcount(serializer.dump, test_object)
 
 
 @pytest.mark.parametrize('lib', serializers.keys())
-def test_load_github_issue(benchmark, lib, data):
+def test_load_github_issue(bench_or_check_refcount, lib, data):
     serializer = serializers[lib]
     test_object = serializer.load(data)  # warmup
 
-    benchmark.group = 'load github issue'
-    benchmark.extra_info['lib'] = lib
-    benchmark.extra_info['correct'] = serializer.load(serializer.dump(test_object)) == test_object
-    with check_refcount():
-        benchmark(serializer.load, data)
+    bench_or_check_refcount.group = 'load github issue'
+    bench_or_check_refcount.extra_info['lib'] = lib
+    bench_or_check_refcount.extra_info['correct'] = serializer.load(serializer.dump(test_object)) == test_object
+    bench_or_check_refcount(serializer.load, data)

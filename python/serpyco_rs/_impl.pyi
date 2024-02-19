@@ -1,6 +1,7 @@
-from typing import Any, Generic, TypeVar, Callable
 from collections.abc import Sequence
 from enum import Enum, IntEnum
+from typing import Any, Callable, Generic, TypeVar
+
 from ._meta import Meta, MetaStateKey
 
 _T = TypeVar('_T')

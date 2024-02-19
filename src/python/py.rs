@@ -1,7 +1,7 @@
 use super::macros::{call_method, ffi};
 use super::types::{
-    DATE_STR, DECIMAL_PY_TYPE, ISOFORMAT_STR, ITEMS_STR, NONE_PY_TYPE, PY_OBJECT__NEW__,
-    PY_OBJECT__SETATTR__, UUID_PY_TYPE, VALUE_STR,
+    DATE_STR, DECIMAL_PY_TYPE, ISOFORMAT_STR, NONE_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__,
+    UUID_PY_TYPE, VALUE_STR,
 };
 use crate::python::macros::use_immortal;
 use pyo3::{ffi, PyErr, PyResult, Python};
@@ -200,18 +200,6 @@ pub(crate) fn py_dict_get_item(
 ) -> Option<*mut ffi::PyObject> {
     // Obj RC not changed
     from_ptr_or_opt(ffi!(PyDict_GetItemWithError(obj, key)))
-}
-
-#[inline]
-pub(crate) fn iter_over_dict_items(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterator> {
-    let items = call_method!(obj, ITEMS_STR)?;
-    to_iter(items)
-}
-
-#[inline]
-fn to_iter(obj: *mut ffi::PyObject) -> PyResult<PyObjectIterator> {
-    let internal = PyObjectIterator(from_ptr_or_err(ffi!(PyObject_GetIter(obj)))?);
-    Ok(internal)
 }
 
 pub(crate) struct PyObjectIterator(*mut ffi::PyObject);

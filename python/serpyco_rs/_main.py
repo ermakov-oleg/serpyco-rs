@@ -5,7 +5,6 @@ from ._impl import Serializer as _Serializer
 from ._json_schema import get_json_schema
 from .metadata import CamelCase, ForceDefaultForOptional, OmitNone
 
-
 _T = TypeVar('_T', bound=Any)
 
 

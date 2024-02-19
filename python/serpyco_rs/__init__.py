@@ -1,2 +1,2 @@
 from ._main import Serializer
-from .exceptions import SchemaValidationError, ValidationError
+from .exceptions import ErrorItem, SchemaValidationError, ValidationError
