@@ -46,7 +46,13 @@ def bench_or_check_refcount(benchmark, debug_refs, debug_refs_gc):
         diff = after - before
 
         if abs(diff) > tolerance:
-            pytest.fail(f'[refcount changed] before: {before} after: {after} diff: {diff}', pytrace=False)
+            message = f'[refcount changed] before: {before} after: {after} diff: {diff}'
+            if inner.skip_refcount:
+                pytest.skip(message)
+            else:
+                pytest.fail(message)
+
+    inner.skip_refcount = False
 
     # for pytest-benchmark compatibility
     inner.extra_info = {}

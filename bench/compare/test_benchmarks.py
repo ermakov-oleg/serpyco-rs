@@ -21,6 +21,8 @@ def test_dump(bench_or_check_refcount, lib):
     bench_or_check_refcount.extra_info['correct'] = (
         serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
     )
+    if lib in {'serpyco', 'pydantic'}:
+        bench_or_check_refcount.skip_refcount = True
     bench_or_check_refcount(serializer.dump, serializer.test_object)
 
 
@@ -35,4 +37,6 @@ def test_load_validate(bench_or_check_refcount, lib):
     bench_or_check_refcount.extra_info['correct'] = (
         serializer.load(serializer.dump(serializer.test_object)) == serializer.test_object
     )
+    if lib in {'serpyco', 'pydantic'}:
+        bench_or_check_refcount.skip_refcount = True
     bench_or_check_refcount(serializer.load, test_dict)

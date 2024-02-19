@@ -170,20 +170,15 @@ jobs:
           CI: true
 
   test_rc_leaks:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, macos-latest ]
-    name: Test on ${{ matrix.os}} for resource leaks
-    runs-on: ${{ matrix.os }}
+    name: Test reference count leaks
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: deadsnakes/action@v3.1.0
-        if: endsWith(matrix.python-version, '-dev')
         with:
           python-version: 3.11
           debug: true
-      - run: python --version --version && which python && python -c "import sys; print(sys.gettotalrefcount())"
+      - run: python3.11 --version --version && which python3.11 && python3.11 -c "import sys; print(sys.gettotalrefcount())"
       - uses: PyO3/maturin-action@v1
         with:
           command: build

@@ -405,13 +405,11 @@ def _replace_generics(t: Any, generics: Sequence[tuple[TypeVar, Any]]) -> Any:
 
 
 @overload
-def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T) -> _T:
-    ...
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T) -> _T: ...
 
 
 @overload
-def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = None) -> Optional[_T]:
-    ...
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = None) -> Optional[_T]: ...
 
 
 def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optional[_T] = None) -> Optional[_T]:
