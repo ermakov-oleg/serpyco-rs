@@ -410,6 +410,7 @@ impl Dict {
     pub fn iter(&self) -> PyResult<PyObjectIterator> {
         let items = call_method!(self.py_object, ITEMS_STR)?;
         let internal = PyObjectIterator(from_ptr_or_err(ffi!(PyObject_GetIter(items)))?);
+        ffi!(Py_DECREF(items));
         Ok(internal)
     }
 }

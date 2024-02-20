@@ -3,178 +3,169 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Union
 
 import pytest
+
 from serpyco_rs import Serializer
+from .utils import repeat
 
-from .utils import repeat, check_refcount
+
+def test_dump_simple_types(bench_or_check_refcount):
+    serializer = Serializer(float)
+    bench_or_check_refcount.group = 'simple_types'
+    bench_or_check_refcount(repeat(lambda: serializer.dump(1)))
 
 
-def test_dump_simple_types(benchmark):
+def test_load_simple_types(bench_or_check_refcount):
     serializer = Serializer(int)
-    benchmark.group = 'simple_types'
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(1)))
+    bench_or_check_refcount.group = 'simple_types'
+    bench_or_check_refcount(repeat(lambda: serializer.load(1)))
 
 
-def test_load_simple_types(benchmark):
-    serializer = Serializer(int)
-    benchmark.group = 'simple_types'
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(1)))
-
-
-def test_dump_optional(benchmark):
+def test_dump_optional(bench_or_check_refcount):
     serializer = Serializer(Optional[int])
 
-    benchmark.group = 'optional'
+    bench_or_check_refcount.group = 'optional'
 
-    with check_refcount():
+    def inner():
+        repeat(lambda: serializer.dump(1))
+        repeat(lambda: serializer.dump(None))
 
-        @benchmark
-        def inner():
-            repeat(lambda: serializer.dump(1))
-            repeat(lambda: serializer.dump(None))
+    bench_or_check_refcount(inner)
 
 
-def test_load_optional(benchmark):
+def test_load_optional(bench_or_check_refcount):
     serializer = Serializer(Optional[int])
 
-    benchmark.group = 'optional'
+    bench_or_check_refcount.group = 'optional'
 
-    with check_refcount():
+    def inner():
+        repeat(lambda: serializer.load(1))
+        repeat(lambda: serializer.load(None))
 
-        @benchmark
-        def inner():
-            repeat(lambda: serializer.load(1))
-            repeat(lambda: serializer.load(None))
+    bench_or_check_refcount(inner)
 
 
-def test_dump_list_simple_types(benchmark):
+def test_dump_list_simple_types(bench_or_check_refcount):
     serializer = Serializer(list[int])
-    benchmark.group = 'list'
+    bench_or_check_refcount.group = 'list'
     data = list(range(1000))
-    benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_list_simple_types(benchmark):
+def test_load_list_simple_types(bench_or_check_refcount):
     serializer = Serializer(list[int])
-    benchmark.group = 'list'
+    bench_or_check_refcount.group = 'list'
     data = list(range(1000))
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
-def test_dump_tuple_simple_types(benchmark):
+def test_dump_tuple_simple_types(bench_or_check_refcount):
     serializer = Serializer(tuple[int, str, bool])
-    benchmark.group = 'tuple'
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump((123, 'foo', True))))
+    bench_or_check_refcount.group = 'tuple'
+    bench_or_check_refcount(repeat(lambda: serializer.dump((123, 'foo', True))))
 
 
-def test_load_tuple_simple_types(benchmark):
+def test_load_tuple_simple_types(bench_or_check_refcount):
     serializer = Serializer(tuple[int, str, bool])
-    benchmark.group = 'tuple'
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load((123, 'foo', True))))
+    bench_or_check_refcount.group = 'tuple'
+    bench_or_check_refcount(repeat(lambda: serializer.load((123, 'foo', True))))
 
 
-def test_dump_dict_simple_types(benchmark):
+def test_dump_dict_simple_types(bench_or_check_refcount):
     serializer = Serializer(dict[str, int])
-    benchmark.group = 'dict'
+    bench_or_check_refcount.group = 'dict'
     data = {str(i): i for i in range(1000)}
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-@pytest.mark.slowtest
-def test_load_dict_simple_types(benchmark):
+def test_dump_dict_dataclass_value(bench_or_check_refcount):
+    @dataclass
+    class Foo:
+        foo: int
+
+    serializer = Serializer(dict[str, Foo])
+    bench_or_check_refcount.group = 'dict'
+    data = {str(i): Foo(i) for i in range(12)}
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data), count=100))
+
+
+def test_load_dict_simple_types(bench_or_check_refcount):
     serializer = Serializer(dict[str, int])
-    benchmark.group = 'dict'
+    bench_or_check_refcount.group = 'dict'
     data = {str(i): i for i in range(1000)}
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data), count=100))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
-def test_dump_uuid(benchmark):
+def test_dump_uuid(bench_or_check_refcount):
     serializer = Serializer(uuid.UUID)
-    benchmark.group = 'uuid'
+    bench_or_check_refcount.group = 'uuid'
     data = uuid.uuid4()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_uuid(benchmark):
+def test_load_uuid(bench_or_check_refcount):
     serializer = Serializer(uuid.UUID)
-    benchmark.group = 'uuid'
+    bench_or_check_refcount.group = 'uuid'
     data = str(uuid.uuid4())
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
-def test_dump_date(benchmark):
+def test_dump_date(bench_or_check_refcount):
     serializer = Serializer(date)
-    benchmark.group = 'date'
+    bench_or_check_refcount.group = 'date'
     data = date.today()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_date(benchmark):
+def test_load_date(bench_or_check_refcount):
     serializer = Serializer(date)
-    benchmark.group = 'date'
+    bench_or_check_refcount.group = 'date'
     data = date.today().isoformat()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
-def test_dump_time(benchmark):
+def test_dump_time(bench_or_check_refcount):
     serializer = Serializer(time)
-    benchmark.group = 'time'
+    bench_or_check_refcount.group = 'time'
     data = datetime.now().time()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_time(benchmark):
+def test_load_time(bench_or_check_refcount):
     serializer = Serializer(time)
-    benchmark.group = 'time'
+    bench_or_check_refcount.group = 'time'
     data = datetime.now().time().isoformat()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
-def test_dump_datetime(benchmark):
+def test_dump_datetime(bench_or_check_refcount):
     serializer = Serializer(datetime)
-    benchmark.group = 'datetime'
+    bench_or_check_refcount.group = 'datetime'
     data = datetime.now()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_datetime(benchmark):
+def test_load_datetime(bench_or_check_refcount):
     serializer = Serializer(datetime)
-    benchmark.group = 'datetime'
+    bench_or_check_refcount.group = 'datetime'
     data = datetime.now().isoformat()
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
-def test_dump_decimal(benchmark):
+def test_dump_decimal(bench_or_check_refcount):
     serializer = Serializer(Decimal)
-    benchmark.group = 'decimal'
+    bench_or_check_refcount.group = 'decimal'
     data = Decimal('1.3')
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_decimal(benchmark):
+def test_load_decimal(bench_or_check_refcount):
     serializer = Serializer(Decimal)
-    benchmark.group = 'decimal'
+    bench_or_check_refcount.group = 'decimal'
     data = '1.3'
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
 class FooEunm(enum.Enum):
@@ -182,20 +173,18 @@ class FooEunm(enum.Enum):
     bar = 'bar'
 
 
-def test_dump_enum(benchmark):
+def test_dump_enum(bench_or_check_refcount):
     serializer = Serializer(FooEunm)
-    benchmark.group = 'enum'
+    bench_or_check_refcount.group = 'enum'
     data = FooEunm.bar
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_enum(benchmark):
+def test_load_enum(bench_or_check_refcount):
     serializer = Serializer(FooEunm)
-    benchmark.group = 'enum'
+    bench_or_check_refcount.group = 'enum'
     data = 'foo'
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
 @dataclass
@@ -204,20 +193,18 @@ class FooDataclass:
     bar: str
 
 
-def test_dump_dataclass(benchmark):
+def test_dump_dataclass(bench_or_check_refcount):
     serializer = Serializer(FooDataclass)
-    benchmark.group = 'dataclass'
+    bench_or_check_refcount.group = 'dataclass'
     data = FooDataclass(foo=1, bar='2')
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_dataclass(benchmark):
+def test_load_dataclass(bench_or_check_refcount):
     serializer = Serializer(FooDataclass)
-    benchmark.group = 'dataclass'
+    bench_or_check_refcount.group = 'dataclass'
     data = {'foo': 1, 'bar': '2'}
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
 @dataclass
@@ -231,22 +218,20 @@ class Root:
     head: Node
 
 
-def test_dump_recursive(benchmark):
+def test_dump_recursive(bench_or_check_refcount):
     serializer = Serializer(Root)
-    benchmark.group = 'recursive'
+    bench_or_check_refcount.group = 'recursive'
     data = Root(
         head=Node(
             value='1',
             next=Node(value='2'),
         ),
     )
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.dump(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
 
 
-def test_load_recursive(benchmark):
+def test_load_recursive(bench_or_check_refcount):
     serializer = Serializer(Root)
-    benchmark.group = 'recursive'
+    bench_or_check_refcount.group = 'recursive'
     data = {'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}
-    with check_refcount():
-        benchmark(repeat(lambda: serializer.load(data)))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))

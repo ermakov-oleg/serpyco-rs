@@ -49,7 +49,7 @@ class StringType(Schema):
     maxLength: int | None = None
     pattern: str | None = None
     format: str | None = None
-    # todo: enum https://json-schema.org/understanding-json-schema/reference/string.html#built-in-formats
+    # TODO: enum https://json-schema.org/understanding-json-schema/reference/string.html#built-in-formats
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)

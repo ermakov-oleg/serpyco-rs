@@ -73,7 +73,7 @@ def test_tagged_union__union_arg_has_no_discriminator_field():
         Serializer(Inner)
 
     assert exc_info.type is RuntimeError
-    assert exc_info.value.args[0] == ("Type <class 'tests.test_union.Buzz'> does not have discriminator field \"type\"")
+    assert exc_info.value.args[0] == "Type <class 'tests.test_union.Buzz'> does not have discriminator field \"type\""
 
 
 def test_tagged_union__unsupported_types():

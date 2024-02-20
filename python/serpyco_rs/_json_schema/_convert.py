@@ -2,13 +2,12 @@ import sys
 from functools import singledispatch
 from typing import Any, Optional, Union, cast
 
-
 if sys.version_info >= (3, 10):
     from typing import TypeGuard
 else:
     from typing_extensions import TypeGuard
 
-from .. import _describe as describe  # noqa: TID252
+from .. import _describe as describe
 from ._entities import (
     ArrayType,
     Boolean,
@@ -206,7 +205,7 @@ def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
 @to_json_schema.register
 def _(arg: describe.LiteralType, doc: Optional[str] = None) -> Schema:
     return Schema(
-        enum=[item for item in arg.args],
+        enum=list(arg.args),
         description=doc,
     )
 
