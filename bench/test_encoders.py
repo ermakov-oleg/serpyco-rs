@@ -91,12 +91,11 @@ def test_dump_dict_dataclass_value(bench_or_check_refcount):
     bench_or_check_refcount(repeat(lambda: serializer.dump(data), count=100))
 
 
-# todo: Утекает сам dict
 def test_load_dict_simple_types(bench_or_check_refcount):
     serializer = Serializer(dict[str, int])
     bench_or_check_refcount.group = 'dict'
     data = {str(i): i for i in range(1000)}
-    bench_or_check_refcount(repeat(lambda: serializer.load(data), count=100))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
 def test_dump_uuid(bench_or_check_refcount):

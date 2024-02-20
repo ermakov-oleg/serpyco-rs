@@ -35,7 +35,7 @@ def bench_or_check_refcount(benchmark, debug_refs, debug_refs_gc):
     if not hasattr(sys, 'gettotalrefcount'):
         raise RuntimeError('For use --debug-refs option, you need to run tests with python debug build.')
 
-    def inner(fn, *args, tolerance=10, **kwargs):
+    def inner(fn, *args, tolerance=5, **kwargs):
         if debug_refs_gc:
             gc.collect()
         before = sys.gettotalrefcount()

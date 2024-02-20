@@ -16,6 +16,7 @@ def build(session):
 
     session.run_always('maturin', 'develop', '-r')
 
+
 @nox.session(python=False)
 def test(session):
     build(session)
@@ -80,6 +81,7 @@ def test_rc_leaks(session):
         *(session.posargs if session.posargs else ['bench']),
         '--verbose',
         '--debug-refs',
+        '--debug-refs-gc',
     )
 
 
