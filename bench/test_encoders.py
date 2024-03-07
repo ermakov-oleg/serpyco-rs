@@ -3,9 +3,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional, Union
+from typing import Optional
 
-import pytest
 
 from serpyco_rs import Serializer
 from .utils import repeat
