@@ -13,10 +13,10 @@ use uuid::Uuid;
 use crate::errors::{ToPyErr, ValidationError};
 use crate::python::macros::{call_object, ffi};
 use crate::python::{
-    call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime,
-    is_none, obj_to_str, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr,
-    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
-    py_str_to_str, to_decimal, to_uuid,
+    call_isoformat, create_new_object, datetime_to_date, dump_date, get_none, get_value_attr,
+    is_datetime, is_none, obj_to_str, parse_date, parse_datetime, parse_time,
+    py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_attr,
+    py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
@@ -811,7 +811,7 @@ impl Encoder for DateEncoder {
         } else {
             value
         };
-        call_isoformat(date)
+        dump_date(date)
     }
 
     #[inline]

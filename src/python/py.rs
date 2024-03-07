@@ -202,6 +202,14 @@ pub(crate) fn py_dict_get_item(
     from_ptr_or_opt(ffi!(PyDict_GetItemWithError(obj, key)))
 }
 
+/// Create a new Python string object from a Rust str
+#[inline]
+pub(crate) fn to_py_str(s: &str) -> PyResult<*mut ffi::PyObject> {
+    let ptr = s.as_ptr() as *const i8;
+    let len = s.len() as Py_ssize_t;
+    from_ptr_or_err(ffi!(PyUnicode_FromStringAndSize(ptr, len)))
+}
+
 pub(crate) struct PyObjectIterator(*mut ffi::PyObject);
 
 impl Iterator for PyObjectIterator {

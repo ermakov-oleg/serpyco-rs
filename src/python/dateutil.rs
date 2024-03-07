@@ -1,10 +1,13 @@
 use std::os::raw::c_int;
 
 use pyo3::{PyErr, PyResult};
-use pyo3_ffi::{PyObject, PyTimeZone_FromOffset};
+use pyo3_ffi::{
+    PyDateTime_GET_DAY, PyDateTime_GET_MONTH, PyDateTime_GET_YEAR, PyDate_Check, PyObject,
+    PyTimeZone_FromOffset,
+};
 use speedate::{Date, DateTime, ParseError, Time};
 
-use super::py::from_ptr_or_err;
+use super::py::{from_ptr_or_err, to_py_str};
 use super::types::NONE_PY_TYPE;
 
 use crate::errors::{ToPyErr, ValidationError};
@@ -39,6 +42,28 @@ pub(crate) fn parse_date(value: &str) -> PyResult<*mut PyObject> {
         );
         from_ptr_or_err(ptr)
     }
+}
+
+/// Dump date to string
+#[inline]
+pub(crate) fn dump_date(value: *mut PyObject) -> PyResult<*mut PyObject> {
+    let _api = ensure_datetime_api();
+    // Check if the object is a date
+    if unsafe { PyDate_Check(value) } == 0 {
+        todo!("Not a date")
+    };
+
+    let year = unsafe { PyDateTime_GET_YEAR(value) };
+    let month = unsafe { PyDateTime_GET_MONTH(value) };
+    let day = unsafe { PyDateTime_GET_DAY(value) };
+    let date = Date {
+        year: year as u16,
+        month: month as u8,
+        day: day as u8,
+    };
+
+    let date_str = date.to_string();
+    to_py_str(&date_str)
 }
 
 #[inline]
