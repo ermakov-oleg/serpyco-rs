@@ -67,7 +67,7 @@ There is support for generic types from the standard typing module:
 * Sequence
 * Tuple (fixed size)
 * Literal[str, ...]
-* Tagged unions (restricted)
+* Unions / Tagged unions
 
 ## Benchmarks
 
@@ -203,6 +203,30 @@ ser = Serializer(A, omit_none=True) # or Serializer(Annotated[A, OmitNone])
 print(ser.dump(A(required_val=None, optional_val=None)))
 >>> {'required_val': None}
 ```
+
+### Unions
+
+`serpyco-rs` supports unions of types.
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+@dataclass
+class Foo:
+    val: int
+
+ser = Serializer(Foo | int)
+
+print(ser.load({'val': 1}))
+>> Foo(val=1)
+print(ser.load(1))
+>> 1
+```
+
+But performance of unions is worse than for single dataclasses. Because we need to check all possible types in the union.
+For better performance, you can use [Tagged unions](#tagged-unions).
+
 
 ### Tagged unions
 
