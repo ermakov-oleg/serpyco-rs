@@ -189,6 +189,17 @@ class AnyType(BaseType):
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
 class UnionType(BaseType):
+    item_types: list[BaseType]
+    union_repr: str
+
+    def __init__(
+        self,
+        item_types: list[BaseType],
+        union_repr: str,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+    ): ...
+
+class DiscriminatedUnionType(BaseType):
     item_types: dict[str, BaseType]
     dump_discriminator: str
     load_discriminator: str

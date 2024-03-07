@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::{PyAny, PyResult};
 
 use crate::python::{get_object_type, Type};
 use crate::serializer::encoders::{
     BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, StringEncoder,
-    TypedDictEncoder,
+    TypedDictEncoder, UnionEncoder,
 };
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
@@ -19,8 +19,8 @@ use super::encoders::{
     NoopEncoder, OptionalEncoder, TupleEncoder, UUIDEncoder,
 };
 use super::encoders::{
-    CustomEncoder, DateEncoder, DateTimeEncoder, Encoders, LazyEncoder, TEncoder, TimeEncoder,
-    UnionEncoder,
+    CustomEncoder, DateEncoder, DateTimeEncoder, DiscriminatedUnionEncoder, Encoders, LazyEncoder,
+    TEncoder, TimeEncoder,
 };
 
 type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
@@ -162,6 +162,26 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, base_type, Box::new(TupleEncoder { encoders, ctx }))?
         }
         Type::Union(type_info, base_type) => {
+            let item_types: &PyList = type_info.item_types.as_ref(py).downcast()?;
+
+            let mut encoders = vec![];
+
+            for value in item_types.iter() {
+                let encoder = get_encoder(py, get_object_type(value)?, encoder_state, ctx.clone())?;
+                encoders.push(encoder);
+            }
+
+            wrap_with_custom_encoder(
+                py,
+                base_type,
+                Box::new(UnionEncoder {
+                    encoders,
+                    union_repr: type_info.union_repr,
+                    ctx,
+                }),
+            )?
+        }
+        Type::DiscriminatedUnion(type_info, base_type) => {
             let dump_discriminator: &PyString =
                 type_info.dump_discriminator.as_ref(py).downcast()?;
 
@@ -184,7 +204,7 @@ pub fn get_encoder(
             wrap_with_custom_encoder(
                 py,
                 base_type,
-                Box::new(UnionEncoder {
+                Box::new(DiscriminatedUnionEncoder {
                     encoders,
                     dump_discriminator: dump_discriminator.into(),
                     load_discriminator: load_discriminator.into(),

@@ -34,17 +34,17 @@ class Schema:
 
 @dataclass
 class Boolean(Schema):
-    type: str = 'boolean'
+    type: str = 'boolean'  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 @dataclass
 class Null(Schema):
-    type: str = 'null'
+    type: str = 'null'  # pyright: ignore[reportIncompatibleVariableOverride]
 
 
 @dataclass
 class StringType(Schema):
-    type: str = 'string'
+    type: str = 'string'  # pyright: ignore[reportIncompatibleVariableOverride]
     minLength: int | None = None
     maxLength: int | None = None
     pattern: str | None = None
@@ -65,7 +65,7 @@ class StringType(Schema):
 
 @dataclass
 class NumberType(Schema):
-    type: str = 'number'
+    type: str = 'number'  # pyright: ignore[reportIncompatibleVariableOverride]
     multipleOf: int | None = None
     minimum: float | None = None
     maximum: float | None = None
@@ -91,7 +91,7 @@ class IntegerType(NumberType):
 @dataclass
 class ObjectType(Schema):
     name: str | None = None
-    type: str = 'object'
+    type: str = 'object'  # pyright: ignore[reportIncompatibleVariableOverride]
     properties: dict[str, Schema] | None = None
     additionalProperties: bool | Schema | None = None
     required: list[str] | None = None
@@ -123,7 +123,7 @@ class ObjectType(Schema):
 
 @dataclass
 class ArrayType(Schema):
-    type: str = 'array'
+    type: str = 'array'  # pyright: ignore[reportIncompatibleVariableOverride]
     items: Schema | None = None
     prefixItems: list[Schema] | None = None
     minItems: int | None = None
@@ -156,7 +156,7 @@ class RefType(Schema):
 
 
 @dataclass
-class UnionType(Schema):
+class DiscriminatedUnionType(Schema):
     discriminator: Discriminator | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:

@@ -654,6 +654,38 @@ impl Encoder for TupleEncoder {
 
 #[derive(Debug, Clone)]
 pub struct UnionEncoder {
+    pub(crate) encoders: Vec<Box<TEncoder>>,
+    pub(crate) union_repr: String,
+    #[allow(dead_code)]
+    pub(crate) ctx: Context,
+}
+
+impl Encoder for UnionEncoder {
+    #[inline]
+    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+        for encoder in &self.encoders {
+            let result = encoder.dump(value);
+            if result.is_ok() {
+                return result;
+            }
+        }
+        invalid_type_dump!(&self.union_repr, PyValue::new(value))
+    }
+
+    #[inline]
+    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+        for encoder in &self.encoders {
+            let result = encoder.load(value, instance_path);
+            if result.is_ok() {
+                return result;
+            }
+        }
+        invalid_type!(&self.union_repr, PyValue::new(value), instance_path)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DiscriminatedUnionEncoder {
     pub(crate) encoders: HashMap<String, Box<TEncoder>>,
     pub(crate) dump_discriminator: Py<PyString>,
     pub(crate) load_discriminator: Py<PyString>,
@@ -663,7 +695,7 @@ pub struct UnionEncoder {
     pub(crate) ctx: Context,
 }
 
-impl Encoder for UnionEncoder {
+impl Encoder for DiscriminatedUnionEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         let key = match py_object_get_attr(value, self.dump_discriminator.as_ptr()) {

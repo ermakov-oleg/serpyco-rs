@@ -36,6 +36,7 @@ from ._impl import (
     DecimalType,
     DefaultValue,
     DictionaryType,
+    DiscriminatedUnionType,
     EntityField,
     EntityType,
     EnumType,
@@ -96,6 +97,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
+    type_repr = repr(t)
     if get_origin(t) == Annotated:  # unwrap annotated
         t = t.__origin__
     if get_origin(t) in {Required, NotRequired}:  # unwrap TypedDict special forms
@@ -240,7 +242,11 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
 
         discriminator = _find_metadata(metadata, Discriminator)
         if not discriminator:
-            raise RuntimeError('For support Unions need specify serpyco_rs.metadata.Discriminator')
+            return UnionType(
+                item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args],
+                union_repr=type_repr.removeprefix('typing.'),
+                custom_encoder=custom_encoder,
+            )
 
         if not all(dataclasses.is_dataclass(arg) or _is_attrs(arg) for arg in args):
             raise RuntimeError(
@@ -248,7 +254,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             )
 
         meta = dataclasses.replace(meta, discriminator_field=discriminator.name)
-        return UnionType(
+        return DiscriminatedUnionType(
             item_types={
                 _get_discriminator_value(arg, discriminator.name): describe_type(annotation_wrapper(arg), meta)
                 for arg in args

@@ -881,7 +881,7 @@ impl AnyType {
 
 #[pyclass(frozen, extends=BaseType, module = "serde_json")]
 #[derive(Debug, Clone)]
-pub struct UnionType {
+pub struct DiscriminatedUnionType {
     #[pyo3(get)]
     pub item_types: Py<PyAny>,
     #[pyo3(get)]
@@ -891,7 +891,7 @@ pub struct UnionType {
 }
 
 #[pymethods]
-impl UnionType {
+impl DiscriminatedUnionType {
     #[new]
     #[pyo3(signature = (item_types, dump_discriminator, load_discriminator, custom_encoder=None))]
     fn new(
@@ -901,7 +901,7 @@ impl UnionType {
         custom_encoder: Option<&PyAny>,
     ) -> (Self, BaseType) {
         (
-            UnionType {
+            DiscriminatedUnionType {
                 item_types: item_types.into(),
                 dump_discriminator: dump_discriminator.into(),
                 load_discriminator: load_discriminator.into(),
@@ -921,11 +921,50 @@ impl UnionType {
 
     fn __repr__(&self) -> String {
         format!(
-            "<UnionType: item_types={:?}, dump_discriminator={:?}, load_discriminator={:?}>",
+            "<DiscriminatedUnionType: item_types={:?}, dump_discriminator={:?}, load_discriminator={:?}>",
             self.item_types.to_string(),
             self.dump_discriminator.to_string(),
             self.load_discriminator.to_string(),
         )
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[derive(Debug, Clone)]
+pub struct UnionType {
+    #[pyo3(get)]
+    pub item_types: Py<PyAny>,
+    pub union_repr: String,
+}
+
+#[pymethods]
+impl UnionType {
+    #[new]
+    #[pyo3(signature = (item_types, union_repr, custom_encoder=None))]
+    fn new(
+        item_types: &PyAny,
+        union_repr: String,
+        custom_encoder: Option<&PyAny>,
+    ) -> (Self, BaseType) {
+        (
+            UnionType {
+                item_types: item_types.into(),
+                union_repr,
+            },
+            BaseType::new(custom_encoder),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.item_types, other.item_types, py)
+            && self_.union_repr == other.union_repr)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<UnionType: item_types={:?}>", self.item_types.to_string(),)
     }
 }
 

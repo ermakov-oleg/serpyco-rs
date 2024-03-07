@@ -469,11 +469,13 @@ impl Display for SequenceImpl {
 }
 
 #[inline]
-pub fn _to_string(py_object: *mut pyo3::ffi::PyObject) -> &'static str {
-    if let Ok(result) = obj_to_str(py_object) {
-        if let Ok(result) = py_str_to_str(result) {
-            return result;
+pub fn _to_string(py_object: *mut pyo3::ffi::PyObject) -> String {
+    if let Ok(py_str) = obj_to_str(py_object) {
+        let result = py_str_to_str(py_str).map(|s| s.to_string());
+        ffi!(Py_DECREF(py_str));
+        if let Ok(str) = result {
+            return str;
         }
     }
-    "<Failed to convert PyObject to &str>"
+    "<Failed to convert PyObject to &str>".to_string()
 }

@@ -130,8 +130,7 @@ class Issue(BaseModel):
     title: str
     body: Optional[str]
     user: Optional[User]
-    # labels: list[Union[IssueLabel, str]]  # todo: fix this
-    labels: list[IssueLabel]
+    labels: list[Union[IssueLabel, str]]
     assignee: Optional[User]
     assignees: Optional[list[User]]
     milestone: Optional[Milestone]

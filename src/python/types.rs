@@ -8,8 +8,9 @@ use pyo3::{AsPyPointer, PyAny, PyResult};
 
 use crate::validator::types::{
     AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType,
-    DictionaryType, EntityType, EnumType, FloatType, IntegerType, LiteralType, OptionalType,
-    RecursionHolder, StringType, TimeType, TupleType, TypedDictType, UUIDType, UnionType,
+    DictionaryType, DiscriminatedUnionType, EntityType, EnumType, FloatType, IntegerType,
+    LiteralType, OptionalType, RecursionHolder, StringType, TimeType, TupleType, TypedDictType,
+    UUIDType, UnionType,
 };
 
 use super::py::py_object_get_attr;
@@ -47,6 +48,7 @@ pub enum Type<Base = BaseType> {
     Optional(OptionalType, Base),
     Dictionary(DictionaryType, Base),
     Tuple(TupleType, Base),
+    DiscriminatedUnion(DiscriminatedUnionType, Base),
     Union(UnionType, Base),
     Literal(LiteralType, Base),
     Any(AnyType, Base),
@@ -71,6 +73,12 @@ pub fn get_object_type(type_info: &PyAny) -> PyResult<Type> {
     check_type!(type_info, base_type, Tuple, TupleType);
     check_type!(type_info, base_type, Any, AnyType);
     check_type!(type_info, base_type, Union, UnionType);
+    check_type!(
+        type_info,
+        base_type,
+        DiscriminatedUnion,
+        DiscriminatedUnionType
+    );
     check_type!(type_info, base_type, Literal, LiteralType);
     check_type!(type_info, base_type, Bytes, BytesType);
     check_type!(type_info, base_type, RecursionHolder, RecursionHolder);

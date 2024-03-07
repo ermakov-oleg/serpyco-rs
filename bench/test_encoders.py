@@ -3,8 +3,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional
-
+from typing import Optional, Union
 
 from serpyco_rs import Serializer
 from .utils import repeat
@@ -233,4 +232,26 @@ def test_load_recursive(bench_or_check_refcount):
     serializer = Serializer(Root)
     bench_or_check_refcount.group = 'recursive'
     data = {'head': {'next': {'next': None, 'value': '2'}, 'value': '1'}}
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
+
+
+def test_dump_union(bench_or_check_refcount):
+    @dataclass
+    class Foo:
+        foo: int
+
+    serializer = Serializer(Union[int, Foo])
+    data = Foo(foo=1)
+    bench_or_check_refcount.group = 'union'
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+def test_load_union(bench_or_check_refcount):
+    @dataclass
+    class Foo:
+        foo: int
+
+    serializer = Serializer(Union[int, Foo])
+    data = {'foo': 1}
+    bench_or_check_refcount.group = 'union'
     bench_or_check_refcount(repeat(lambda: serializer.load(data)))
