@@ -6,7 +6,7 @@ use crate::errors::SchemaValidationError;
 use crate::validator::context::PathChunk;
 use crate::validator::InstancePath;
 
-pub fn raise_error(error: String, instance_path: &InstancePath) -> PyResult<()> {
+pub fn raise_error<T: Into<String>>(error: T, instance_path: &InstancePath) -> PyResult<()> {
     Python::with_gil(|py| {
         let errors: Vec<ErrorItem> = vec![into_err_item(error, instance_path)];
 
@@ -18,10 +18,9 @@ pub fn raise_error(error: String, instance_path: &InstancePath) -> PyResult<()> 
     })
 }
 
-fn into_err_item(error: String, instance_path: &InstancePath) -> ErrorItem {
-    let message = error.to_string();
+fn into_err_item<T: Into<String>>(error: T, instance_path: &InstancePath) -> ErrorItem {
     let instance_path = into_path(instance_path);
-    ErrorItem::new(message, instance_path)
+    ErrorItem::new(error.into(), instance_path)
 }
 
 fn into_path(pointer: &InstancePath) -> String {

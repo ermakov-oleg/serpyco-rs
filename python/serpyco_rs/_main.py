@@ -30,6 +30,9 @@ class Serializer(Generic[_T]):
     def dump(self, value: _T) -> Any:
         return self._encoder.dump(value)
 
+    def new_dump(self, value: _T) -> Any:
+        return self._encoder.new_dump(value)
+
     def load(self, data: Any) -> _T:
         return self._encoder.load(data)
 

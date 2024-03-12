@@ -1,8 +1,10 @@
 use crate::validator::types::EnumItems;
 use crate::validator::{raise_error, InstancePath, Sequence, Value};
-use pyo3::{PyErr, PyResult};
+use pyo3::{Bound, PyErr, PyResult};
 use std::cmp::Ordering;
 use std::fmt::Display;
+use pyo3::types::PySequence;
+use pyo3::prelude::*;
 
 pub fn check_lower_bound<T>(val: T, min: Option<T>, instance_path: &InstancePath) -> PyResult<()>
 where
@@ -109,7 +111,7 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
     .unwrap_err()
 }
 
-pub fn check_sequence_size(
+pub fn check_sequence_size_(
     val: &SequenceImpl,
     size: isize,
     instance_path: Option<&InstancePath>,
@@ -133,6 +135,33 @@ pub fn check_sequence_size(
         }
     }
 }
+
+
+pub fn check_sequence_size(
+    val: &Bound<'_, PySequence>,
+    size: usize,
+    instance_path: Option<&InstancePath>,
+) -> PyResult<()> {
+    let len = val.len()?;
+    match len.cmp(&size) {
+        Ordering::Equal => Ok(()),
+        Ordering::Less => {
+            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
+            raise_error(
+                format!(r#"{} has less than {} items"#, val.to_string(), size),
+                &instance_path,
+            )
+        }
+        Ordering::Greater => {
+            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
+            raise_error(
+                format!(r#"{} has more than {} items"#, val.to_string(), size),
+                &instance_path,
+            )
+        }
+    }
+}
+
 
 pub fn no_encoder_for_discriminator(
     key: &str,
@@ -170,6 +199,24 @@ macro_rules! invalid_type {
     }};
 }
 
+
+macro_rules! invalid_type_new {
+    ($type_: expr, $value: expr, $path: expr) => {{
+        let error = format!(r#""{}" is not of type "{}""#, $value.to_string(), $type_)
+        crate::validator::raise_error(error, $path)?;
+        unreachable!(); // todo: Discard the use of unreachable
+    }};
+}
+
+macro_rules! invalid_type_dump_new {
+    ($type_: expr, $value: expr) => {{
+        let error = format!(r#""{}" is not of type "{}""#, $value.to_string(), $type_);
+        let instance_path = InstancePath::new();
+        crate::validator::raise_error(error, &instance_path)?;
+        unreachable!(); // todo: Discard the use of unreachable
+    }};
+}
+
 macro_rules! invalid_type_dump {
     ($type_: expr, $value: expr) => {{
         let instance_path = InstancePath::new();
@@ -187,7 +234,7 @@ pub fn _invalid_enum_item(
         Some(val) => format!(r#""{}" is not one of {}"#, val, items),
         None => format!(r#"{} is not one of {}"#, value, items),
     };
-    raise_error(error, instance_path)?;
+    raise_error(&error, instance_path)?;
     Ok(())
 }
 
@@ -201,4 +248,6 @@ macro_rules! invalid_enum_item {
 use crate::validator::value::SequenceImpl;
 pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
+pub(crate) use invalid_type_new;
 pub(crate) use invalid_type_dump;
+pub(crate) use invalid_type_dump_new;

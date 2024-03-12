@@ -5,9 +5,10 @@ use std::sync::Arc;
 use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::types::PyString;
-use pyo3::{Py, PyAny, PyResult};
-use pyo3_ffi::PyObject;
+use pyo3::types::{PyDateTime, PyString, PyDict, PyList, PySequence};
+use pyo3::{Bound, Py, PyAny, PyResult};
+use pyo3::prelude::*;
+use pyo3_ffi::{PyObject};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
@@ -19,12 +20,9 @@ use crate::python::{
     py_str_to_str, to_decimal, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::validators::{
-    check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
-    invalid_type_dump, missing_required_property, no_encoder_for_discriminator,
-};
+use crate::validator::validators::{check_bounds, check_length, check_sequence_size, check_sequence_size_, invalid_enum_item, invalid_type, invalid_type_dump, invalid_type_dump_new, invalid_type_new, missing_required_property, no_encoder_for_discriminator};
 use crate::validator::{
-    Array as PyArray, Context, Dict as PyDict, InstancePath, Sequence, Tuple as PyTuple,
+    Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
     Value as PyValue,
 };
 
@@ -32,6 +30,7 @@ pub type TEncoder = dyn Encoder + Send + Sync;
 
 pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>>; // {todo!("asd") }
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject>;
 }
 
@@ -45,6 +44,11 @@ impl Encoder for NoopEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
 
     #[inline]
@@ -66,6 +70,11 @@ impl Encoder for IntEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
 
     #[inline]
@@ -94,6 +103,11 @@ impl Encoder for FloatEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
 
     #[inline]
@@ -128,6 +142,11 @@ impl Encoder for DecimalEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.str()?.into_any())
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
 
@@ -153,6 +172,11 @@ impl Encoder for StringEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
 
     #[inline]
@@ -187,6 +211,11 @@ impl Encoder for BooleanEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
         if py_val.as_bool().is_some() {
@@ -209,6 +238,11 @@ impl Encoder for BytesEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
 
     #[inline]
@@ -237,7 +271,7 @@ impl Encoder for DictionaryEncoder {
     fn dump(&self, in_value: *mut PyObject) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(in_value);
         if let Some(dict) = py_value.as_dict() {
-            let mut result_dict = PyDict::new_empty();
+            let mut result_dict = PyDictOld::new_empty();
             for i in dict.iter()? {
                 let (k, v) = i?;
                 let key = self.key_encoder.dump(k.as_ptr())?;
@@ -256,10 +290,27 @@ impl Encoder for DictionaryEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(dict) = value.downcast::<PyDict>() {
+            let result_dict = PyDict::new_bound(dict.py());
+            for (k, v) in dict.iter() {
+                let key = self.key_encoder.new_dump(&k)?;
+                let value = self.value_encoder.new_dump(&v)?;
+                if !self.omit_none || !value.is_none() {
+                    result_dict.set_item(key, value)?;
+                }
+            }
+            Ok(result_dict.into_any())
+        } else {
+            invalid_type_dump_new!("dict", value)
+        }
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         if let Some(dict) = py_value.as_dict() {
-            let mut result_dict = PyDict::new_empty();
+            let mut result_dict = PyDictOld::new_empty();
             for i in dict.iter()? {
                 let (k, v) = i?;
                 let instance_path = instance_path.push(&k);
@@ -293,6 +344,22 @@ impl Encoder for ArrayEncoder {
             None => {
                 invalid_type_dump!("array", py_val)
             }
+        }
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(list) = value.downcast::<PyList>() {
+            // todo: find a solution to prevent collect iterator to Vec for getting errors
+            let iter = list.iter().map(
+                |item| self.encoder.new_dump(&item)
+            ).collect::<PyResult<Vec<_>>>()?;
+
+            let new_list = PyList::new_bound(list.py(), iter);
+            Ok(new_list.into_any())
+
+        } else {
+            invalid_type_dump_new!("list", value)
         }
     }
 
@@ -354,6 +421,24 @@ impl Encoder for EntityEncoder {
         }
 
         Ok(dict_ptr)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let dict = PyDict::new_bound(value.py());
+
+        for field in &self.fields {
+            let field_val = value.getattr(&field.name)?;
+            let dump_result = field.encoder.new_dump(&field_val)?;
+            if field.required || !self.omit_none || !dump_result.is_none() {
+                dict.set_item(
+                    &field.dict_key,
+                    dump_result
+                )?;
+            }
+        }
+
+        Ok(dict.into_any())
     }
 
     #[inline]
@@ -446,6 +531,32 @@ impl Encoder for TypedDictEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let dict = PyDict::new_bound(value.py());
+
+        for field in &self.fields {
+            let field_val = match value.get_item(&field.name) {
+                Ok(val) => val,
+                Err(e) => {
+                    if field.required {
+                        return Err(ValidationError::new_err(format!(
+                            "data dictionary is missing required parameter {} (err: {})",
+                            &field.name, e
+                        )));
+                    } else {
+                        continue;
+                    }
+                }
+            };
+            let dump_result = field.encoder.new_dump(&field_val)?;
+            if field.required || !self.omit_none || !dump_result.is_none() {
+                dict.set_item(&field.dict_key, dump_result)?
+            }
+        }
+        Ok(dict.into_any())
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         if let Some(dict) = py_value.as_dict() {
@@ -492,6 +603,11 @@ impl Encoder for UUIDEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.str()?.into_any())
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_val = PyValue::new(value);
         if let Some(val) = py_val.as_str() {
@@ -514,6 +630,12 @@ impl Encoder for EnumEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         get_value_attr(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let value_str = PyString::intern_bound(value.py(), "value");
+        Ok(value.getattr(value_str)?.into_any())
     }
 
     #[inline]
@@ -553,6 +675,11 @@ impl Encoder for LiteralEncoder {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         ffi!(Py_INCREF(value));
         Ok(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
 
     #[inline]
@@ -599,6 +726,15 @@ impl Encoder for OptionalEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        if value.is_none() {
+            Ok(value.clone())
+        } else {
+            self.encoder.new_dump(value)
+        }
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         if py_value.is_none() {
@@ -622,7 +758,7 @@ impl Encoder for TupleEncoder {
         let py_value = PyValue::new(value);
         match py_value.as_sequence() {
             Some(seq) => {
-                check_sequence_size(&seq, self.encoders.len() as isize, None)?;
+                check_sequence_size_(&seq, self.encoders.len() as isize, None)?;
                 let array: PyArray =
                     seq.map_into(&|i, item| self.encoders[i as usize].dump(item))?;
                 Ok(array.as_ptr())
@@ -634,6 +770,21 @@ impl Encoder for TupleEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(seq) = value.downcast::<PySequence>() {
+            check_sequence_size(&seq, self.encoders.len(), None)?;
+            let iter = seq.iter()?.enumerate().map(
+                |(i, item)| self.encoders[i].new_dump(&item?)
+            ).collect::<PyResult<Vec<_>>>()?;
+
+            let result = PyList::new_bound(value.py(), iter);
+            Ok(result.into_any())
+        } else {
+            invalid_type_dump_new!("sequence", value)
+        }
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         match py_value.as_sequence() {
@@ -641,7 +792,7 @@ impl Encoder for TupleEncoder {
                 invalid_type!("sequence", py_value, instance_path)
             }
             Some(val) => {
-                check_sequence_size(&val, self.encoders.len() as isize, Some(instance_path))?;
+                check_sequence_size_(&val, self.encoders.len() as isize, Some(instance_path))?;
                 let tuple: PyTuple = val.map_into(&|i, item| {
                     let instance_path = instance_path.push(i);
                     self.encoders[i as usize].load(item, &instance_path)
@@ -670,6 +821,17 @@ impl Encoder for UnionEncoder {
             }
         }
         invalid_type_dump!(&self.union_repr, PyValue::new(value))
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        for encoder in &self.encoders {
+            let result = encoder.new_dump(value);
+            if result.is_ok() {
+                return result;
+            }
+        }
+        invalid_type_dump_new!(&self.union_repr, value)
     }
 
     #[inline]
@@ -720,6 +882,29 @@ impl Encoder for DiscriminatedUnionEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let key = match value.getattr(&self.dump_discriminator) {
+            Ok(val) => {
+                val.str()?
+            }
+            Err(_) => {
+                return Err(missing_required_property(
+                    self.dump_discriminator.bind(value.py()).str()?.to_str()?,
+                    &InstancePath::new(),
+                ))
+            }
+        };
+
+        let str_key = key.to_str()?;
+
+        let encoder = self.encoders.get(str_key).ok_or_else(|| {
+            let instance_path = InstancePath::new();
+            no_encoder_for_discriminator(str_key, &self.keys, &instance_path)
+        })?;
+        encoder.new_dump(value)
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         match py_value.as_dict() {
@@ -762,6 +947,12 @@ impl Encoder for TimeEncoder {
     }
 
     #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let isoformat = PyString::intern_bound(value.py(), "isoformat");
+        value.call_method0(isoformat)
+    }
+
+    #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
         let py_value = PyValue::new(value);
         if let Some(val) = py_value.as_str() {
@@ -783,6 +974,12 @@ impl Encoder for DateTimeEncoder {
     #[inline]
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
         call_isoformat(value)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let isoformat = PyString::intern_bound(value.py(), "isoformat");
+        value.call_method0(isoformat)
     }
 
     #[inline]
@@ -812,6 +1009,17 @@ impl Encoder for DateEncoder {
             value
         };
         call_isoformat(date)
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let date = if let Ok(datetime) = value.downcast::<PyDateTime>() {
+            datetime.call_method("date", (), None)?
+        } else {
+            value.clone()
+        };
+        let isoformat = PyString::intern_bound(value.py(), "isoformat");
+        date.call_method0(isoformat)
     }
 
     #[inline]
@@ -852,6 +1060,18 @@ impl Encoder for LazyEncoder {
             )),
         }
     }
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        match self.inner.borrow().as_ref() {
+            Some(encoder) => match encoder {
+                Encoders::Entity(encoder) => encoder.new_dump(value),
+                Encoders::TypedDict(encoder) => encoder.new_dump(value),
+            },
+            None => Err(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            )),
+        }
+    }
 
     #[inline]
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
@@ -880,6 +1100,14 @@ impl Encoder for CustomEncoder {
         match self.dump {
             Some(ref dump) => py_object_call1_make_tuple_or_err(dump.as_ptr(), value),
             None => self.inner.dump(value),
+        }
+    }
+
+    #[inline]
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        match self.dump {
+            Some(ref dump) => dump.bind(value.py()).call1((value, )),
+            None => self.inner.new_dump(value),
         }
     }
 
