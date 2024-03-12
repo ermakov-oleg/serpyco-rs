@@ -769,12 +769,19 @@ impl Encoder for TupleEncoder {
         if let Ok(seq) = value.downcast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(&seq, seq_len, self.encoders.len(), None)?;
-            let mut iter = seq.iter()?.enumerate().map(
-                |(i, item)| self.encoders[i].new_dump(&item?)
-            ).into_exact_size_iterator(seq_len);
+            let result = PyList::empty_bound(value.py());
+            for i in 0..seq_len {
+                let item = seq.get_item(i)?;
+                let val = self.encoders[i].new_dump(&item)?;
+                result.append(val)?;
+            }
 
-
-            let result = new_py_list_from_iter_with_error_filter(value.py(), &mut iter)?;
+            // let mut iter = seq.iter()?.enumerate().map(
+            //     |(i, item)| self.encoders[i].new_dump(&item?)
+            // ).into_exact_size_iterator(seq_len);
+            //
+            //
+            // let result = new_py_list_from_iter_with_error_filter(value.py(), &mut iter)?;
             Ok(result.into_any())
         } else {
             invalid_type_dump_new!("sequence", value)
