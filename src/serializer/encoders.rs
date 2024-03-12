@@ -6,7 +6,7 @@ use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{PyDateTime, PyString, PyDict, PyList, PySequence};
-use pyo3::{Bound, Py, PyAny, PyResult};
+use pyo3::{Bound, intern, Py, PyAny, PyResult};
 use pyo3::prelude::*;
 use pyo3_ffi::{PyObject};
 use uuid::Uuid;
@@ -629,7 +629,7 @@ impl Encoder for EnumEncoder {
 
     #[inline]
     fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let value_str = PyString::intern_bound(value.py(), "value");
+        let value_str = intern!(value.py(), "value");
         Ok(value.getattr(value_str)?.into_any())
     }
 
@@ -945,7 +945,7 @@ impl Encoder for TimeEncoder {
 
     #[inline]
     fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let isoformat = PyString::intern_bound(value.py(), "isoformat");
+        let isoformat = intern!(value.py(), "isoformat");
         value.call_method0(isoformat)
     }
 
@@ -975,7 +975,7 @@ impl Encoder for DateTimeEncoder {
 
     #[inline]
     fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let isoformat = PyString::intern_bound(value.py(), "isoformat");
+        let isoformat = intern!(value.py(), "isoformat");
         value.call_method0(isoformat)
     }
 
@@ -1015,7 +1015,7 @@ impl Encoder for DateEncoder {
         } else {
             value.clone()
         };
-        let isoformat = PyString::intern_bound(value.py(), "isoformat");
+        let isoformat = intern!(value.py(), "isoformat");
         date.call_method0(isoformat)
     }
 
