@@ -1040,7 +1040,7 @@ impl RecursionHolder {
         )
     }
 
-    pub fn get_type<'a>(&'a self, py: Python<'a>) -> PyResult<&'a PyAny> {
+    pub fn get_inner_type<'a>(&'a self, py: Python<'a>) -> PyResult<&'a PyAny> {
         match self.meta.as_ref(py).get_item(&self.state_key) {
             Ok(type_) => Ok(type_),
             Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!(
