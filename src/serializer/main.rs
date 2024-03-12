@@ -45,19 +45,9 @@ impl Serializer {
         Ok(serializer)
     }
 
-    // #[inline]
-    // pub fn dump(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
-    //     unsafe {
-    //         Ok(Py::from_owned_ptr(
-    //             value.py(),
-    //             self.encoder.dump(value.as_ptr())?,
-    //         ))
-    //     }
-    // }
-
     #[inline]
     pub fn dump<'py>(&'py self, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.encoder.new_dump(value)
+        self.encoder.dump(value)
     }
 
     #[inline]

@@ -4,7 +4,6 @@ use pyo3::{Bound, PyErr, PyResult};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use pyo3::types::PySequence;
-use pyo3::prelude::*;
 
 pub fn check_lower_bound<T>(val: T, min: Option<T>, instance_path: &InstancePath) -> PyResult<()>
 where
@@ -208,7 +207,7 @@ macro_rules! invalid_type_new {
     }};
 }
 
-macro_rules! invalid_type_dump_new {
+macro_rules! invalid_type_dump {
     ($type_: expr, $value: expr) => {{
         let error = format!(r#""{}" is not of type "{}""#, $value.to_string(), $type_);
         let instance_path = InstancePath::new();
@@ -217,13 +216,6 @@ macro_rules! invalid_type_dump_new {
     }};
 }
 
-macro_rules! invalid_type_dump {
-    ($type_: expr, $value: expr) => {{
-        let instance_path = InstancePath::new();
-        crate::validator::validators::_invalid_type($type_, $value, &instance_path)?;
-        unreachable!(); // todo: Discard the use of unreachable
-    }};
-}
 
 pub fn _invalid_enum_item(
     items: EnumItems,
@@ -250,4 +242,3 @@ pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
 pub(crate) use invalid_type_new;
 pub(crate) use invalid_type_dump;
-pub(crate) use invalid_type_dump_new;

@@ -4,29 +4,27 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
-use pyo3::exceptions::PyRuntimeError;
-use pyo3::types::{PyDateTime, PyString, PyDict, PyList, PySequence};
 use pyo3::{Bound, intern, Py, PyAny, PyResult};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use pyo3_ffi::{PyObject};
+use pyo3::types::{PyDateTime, PyDict, PyList, PySequence, PyString};
+use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
+use crate::python::{create_new_object, get_none, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
 use crate::python::macros::{call_object, ffi};
-use crate::python::{call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime, is_none, new_py_list_from_iter_with_error_filter, obj_to_str, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
-use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::validators::{check_bounds, check_length, check_sequence_size, check_sequence_size_, invalid_enum_item, invalid_type, invalid_type_dump, invalid_type_dump_new, invalid_type_new, missing_required_property, no_encoder_for_discriminator};
 use crate::validator::{
     Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
     Value as PyValue,
 };
-use crate::iterator_utils::IteratorUtils;
+use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
+use crate::validator::validators::{check_bounds, check_length, check_sequence_size, check_sequence_size_, invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property, no_encoder_for_discriminator};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
 pub trait Encoder: DynClone + Debug {
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>>;
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>>;
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject>;
 }
 
@@ -37,13 +35,7 @@ pub struct NoopEncoder;
 
 impl Encoder for NoopEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -63,13 +55,7 @@ pub struct IntEncoder {
 
 impl Encoder for IntEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -96,13 +82,7 @@ pub struct FloatEncoder {
 
 impl Encoder for FloatEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -133,12 +113,7 @@ pub struct DecimalEncoder {
 
 impl Encoder for DecimalEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        obj_to_str(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.str()?.into_any())
     }
 
@@ -164,14 +139,9 @@ pub struct StringEncoder {
 }
 
 impl Encoder for StringEncoder {
-    #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
 
     #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -201,13 +171,7 @@ pub struct BooleanEncoder {
 
 impl Encoder for BooleanEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -231,13 +195,7 @@ pub struct BytesEncoder {
 
 impl Encoder for BytesEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -264,41 +222,19 @@ pub struct DictionaryEncoder {
 
 impl Encoder for DictionaryEncoder {
     #[inline]
-    fn dump(&self, in_value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(in_value);
-        if let Some(dict) = py_value.as_dict() {
-            let mut result_dict = PyDictOld::new_empty();
-            for i in dict.iter()? {
-                let (k, v) = i?;
-                let key = self.key_encoder.dump(k.as_ptr())?;
-                let value = self.value_encoder.dump(v.as_ptr())?;
-                if !self.omit_none || !is_none(value) {
-                    result_dict.set(key, value)?;
-                } else {
-                    ffi!(Py_DECREF(key));
-                    ffi!(Py_DECREF(value));
-                }
-            }
-            Ok(result_dict.as_ptr())
-        } else {
-            invalid_type_dump!("object", py_value)
-        }
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(dict) = value.downcast::<PyDict>() {
             let result_dict = PyDict::new_bound(dict.py());
             for (k, v) in dict.iter() {
-                let key = self.key_encoder.new_dump(&k)?;
-                let value = self.value_encoder.new_dump(&v)?;
+                let key = self.key_encoder.dump(&k)?;
+                let value = self.value_encoder.dump(&v)?;
                 if !self.omit_none || !value.is_none() {
                     result_dict.set_item(key, value)?;
                 }
             }
             Ok(result_dict.into_any())
         } else {
-            invalid_type_dump_new!("dict", value)
+            invalid_type_dump!("dict", value)
         }
     }
 
@@ -330,31 +266,24 @@ pub struct ArrayEncoder {
 
 impl Encoder for ArrayEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        match py_val.as_array() {
-            Some(seq) => {
-                let array: PyArray = seq.map_into(&|_, item| self.encoder.dump(item))?;
-                Ok(array.as_ptr())
-            }
-            None => {
-                invalid_type_dump!("array", py_val)
-            }
-        }
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(list) = value.downcast::<PyList>() {
-            let mut iter = list.iter().map(
-                |item| self.encoder.new_dump(&item)
-            );
+            let result = PyList::empty_bound(value.py());
 
-            let new_list = new_py_list_from_iter_with_error_filter(list.py(), &mut iter)?;
-            Ok(new_list.into_any())
+            for index in 0..list.len() {
+                #[cfg(any(Py_LIMITED_API, PyPy))]
+                let item = list.get_item(index).expect("list.get failed");
+                #[cfg(not(any(Py_LIMITED_API, PyPy)))]
+                let item = unsafe { list.get_item_unchecked(index) };
+
+                let val = self.encoder.dump(&item)?;
+                result.append(val)?;
+            }
+
+            Ok(result.into_any())
 
         } else {
-            invalid_type_dump_new!("list", value)
+            invalid_type_dump!("list", value)
         }
     }
 
@@ -396,35 +325,12 @@ pub struct Field {
 
 impl Encoder for EntityEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let dict_ptr = ffi!(PyDict_New());
-
-        for field in &self.fields {
-            let field_val = py_object_get_attr(value, field.name.as_ptr())?; // val RC +1
-            let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
-
-            if field.required || !self.omit_none || !is_none(dump_result) {
-                ffi!(PyDict_SetItem(
-                    dict_ptr,
-                    field.dict_key.as_ptr(),
-                    dump_result
-                )); // key and val RC +1
-            }
-
-            ffi!(Py_DECREF(field_val));
-            ffi!(Py_DECREF(dump_result));
-        }
-
-        Ok(dict_ptr)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let dict = PyDict::new_bound(value.py());
 
         for field in &self.fields {
             let field_val = value.getattr(&field.name)?;
-            let dump_result = field.encoder.new_dump(&field_val)?;
+            let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 dict.set_item(
                     &field.dict_key,
@@ -490,43 +396,7 @@ pub struct TypedDictEncoder {
 
 impl Encoder for TypedDictEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let dict_ptr = ffi!(PyDict_New());
-
-        for field in &self.fields {
-            let field_val = match py_object_get_item(value, field.name.as_ptr()) {
-                Ok(val) => val,
-                Err(e) => {
-                    if field.required {
-                        return Err(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {} (err: {})",
-                            &field.name, e
-                        )));
-                    } else {
-                        continue;
-                    }
-                }
-            }; // val RC +1
-
-            let dump_result = field.encoder.dump(field_val)?; // new obj or RC +1
-
-            if field.required || !self.omit_none || !is_none(dump_result) {
-                ffi!(PyDict_SetItem(
-                    dict_ptr,
-                    field.dict_key.as_ptr(),
-                    dump_result
-                )); // key and val RC +1
-            }
-
-            ffi!(Py_DECREF(field_val));
-            ffi!(Py_DECREF(dump_result));
-        }
-
-        Ok(dict_ptr)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let dict = PyDict::new_bound(value.py());
 
         for field in &self.fields {
@@ -543,7 +413,7 @@ impl Encoder for TypedDictEncoder {
                     }
                 }
             };
-            let dump_result = field.encoder.new_dump(&field_val)?;
+            let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 dict.set_item(&field.dict_key, dump_result)?
             }
@@ -593,12 +463,7 @@ pub struct UUIDEncoder {
 
 impl Encoder for UUIDEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        obj_to_str(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.str()?.into_any())
     }
 
@@ -623,12 +488,7 @@ pub struct EnumEncoder {
 
 impl Encoder for EnumEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        get_value_attr(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let value_str = intern!(value.py(), "value");
         Ok(value.getattr(value_str)?.into_any())
     }
@@ -667,13 +527,7 @@ pub struct LiteralEncoder {
 
 impl Encoder for LiteralEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -711,21 +565,11 @@ pub struct OptionalEncoder {
 
 impl Encoder for OptionalEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if py_value.is_none() {
-            Ok(get_none())
-        } else {
-            self.encoder.dump(value)
-        }
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if value.is_none() {
             Ok(value.clone())
         } else {
-            self.encoder.new_dump(value)
+            self.encoder.dump(value)
         }
     }
 
@@ -749,42 +593,20 @@ pub struct TupleEncoder {
 
 impl Encoder for TupleEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        match py_value.as_sequence() {
-            Some(seq) => {
-                check_sequence_size_(&seq, self.encoders.len() as isize, None)?;
-                let array: PyArray =
-                    seq.map_into(&|i, item| self.encoders[i as usize].dump(item))?;
-                Ok(array.as_ptr())
-            }
-            None => {
-                invalid_type_dump!("sequence", py_value)
-            }
-        }
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(seq) = value.downcast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(&seq, seq_len, self.encoders.len(), None)?;
             let result = PyList::empty_bound(value.py());
-            for i in 0..seq_len {
-                let item = seq.get_item(i)?;
-                let val = self.encoders[i].new_dump(&item)?;
+            for index in 0..seq_len {
+                let item = seq.get_item(index)?;
+                let val = self.encoders[index].dump(&item)?;
                 result.append(val)?;
             }
 
-            // let mut iter = seq.iter()?.enumerate().map(
-            //     |(i, item)| self.encoders[i].new_dump(&item?)
-            // ).into_exact_size_iterator(seq_len);
-            //
-            //
-            // let result = new_py_list_from_iter_with_error_filter(value.py(), &mut iter)?;
             Ok(result.into_any())
         } else {
-            invalid_type_dump_new!("sequence", value)
+            invalid_type_dump!("sequence", value)
         }
     }
 
@@ -817,25 +639,14 @@ pub struct UnionEncoder {
 
 impl Encoder for UnionEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         for encoder in &self.encoders {
             let result = encoder.dump(value);
             if result.is_ok() {
                 return result;
             }
         }
-        invalid_type_dump!(&self.union_repr, PyValue::new(value))
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        for encoder in &self.encoders {
-            let result = encoder.new_dump(value);
-            if result.is_ok() {
-                return result;
-            }
-        }
-        invalid_type_dump_new!(&self.union_repr, value)
+        invalid_type_dump!(&self.union_repr, value)
     }
 
     #[inline]
@@ -863,30 +674,7 @@ pub struct DiscriminatedUnionEncoder {
 
 impl Encoder for DiscriminatedUnionEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let key = match py_object_get_attr(value, self.dump_discriminator.as_ptr()) {
-            Ok(val) => {
-                let result = py_str_to_str(val)?;
-                ffi!(Py_DECREF(val));
-                result
-            }
-            Err(_) => {
-                return Err(missing_required_property(
-                    py_str_to_str(self.dump_discriminator.as_ptr())?,
-                    &InstancePath::new(),
-                ))
-            }
-        };
-
-        let encoder = self.encoders.get(key).ok_or_else(|| {
-            let instance_path = InstancePath::new();
-            no_encoder_for_discriminator(key, &self.keys, &instance_path)
-        })?;
-        encoder.dump(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let key = match value.getattr(&self.dump_discriminator) {
             Ok(val) => {
                 val.str()?
@@ -905,7 +693,7 @@ impl Encoder for DiscriminatedUnionEncoder {
             let instance_path = InstancePath::new();
             no_encoder_for_discriminator(str_key, &self.keys, &instance_path)
         })?;
-        encoder.new_dump(value)
+        encoder.dump(value)
     }
 
     #[inline]
@@ -946,12 +734,7 @@ pub struct TimeEncoder {
 
 impl Encoder for TimeEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        call_isoformat(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let isoformat = intern!(value.py(), "isoformat");
         value.call_method0(isoformat)
     }
@@ -976,12 +759,7 @@ pub struct DateTimeEncoder {
 
 impl Encoder for DateTimeEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        call_isoformat(value)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let isoformat = intern!(value.py(), "isoformat");
         value.call_method0(isoformat)
     }
@@ -1006,17 +784,7 @@ pub struct DateEncoder {
 
 impl Encoder for DateEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        let date = if is_datetime(value) {
-            datetime_to_date(value)?
-        } else {
-            value
-        };
-        call_isoformat(date)
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let date = if let Ok(datetime) = value.downcast::<PyDateTime>() {
             datetime.call_method("date", (), None)?
         } else {
@@ -1053,23 +821,11 @@ pub struct LazyEncoder {
 
 impl Encoder for LazyEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => match encoder {
                 Encoders::Entity(encoder) => encoder.dump(value),
                 Encoders::TypedDict(encoder) => encoder.dump(value),
-            },
-            None => Err(PyRuntimeError::new_err(
-                "[RUST] Invalid recursive encoder".to_string(),
-            )),
-        }
-    }
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        match self.inner.borrow().as_ref() {
-            Some(encoder) => match encoder {
-                Encoders::Entity(encoder) => encoder.new_dump(value),
-                Encoders::TypedDict(encoder) => encoder.new_dump(value),
             },
             None => Err(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
@@ -1100,18 +856,10 @@ pub struct CustomEncoder {
 
 impl Encoder for CustomEncoder {
     #[inline]
-    fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject> {
-        match self.dump {
-            Some(ref dump) => py_object_call1_make_tuple_or_err(dump.as_ptr(), value),
-            None => self.inner.dump(value),
-        }
-    }
-
-    #[inline]
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         match self.dump {
             Some(ref dump) => dump.bind(value.py()).call1((value, )),
-            None => self.inner.new_dump(value),
+            None => self.inner.dump(value),
         }
     }
 

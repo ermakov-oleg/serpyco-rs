@@ -1,15 +1,17 @@
-use super::macros::{call_method, ffi};
-use super::types::{
-    DATE_STR, DECIMAL_PY_TYPE, ISOFORMAT_STR, NONE_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__,
-    UUID_PY_TYPE, VALUE_STR,
-};
-use crate::python::macros::use_immortal;
-use pyo3::{Bound, ffi, PyErr, PyResult, Python};
-use pyo3_ffi::Py_ssize_t;
 use std::os::raw::c_int;
 use std::ptr::NonNull;
-use pyo3::types::PyList;
+
+use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3::prelude::*;
+use pyo3_ffi::Py_ssize_t;
+
+use crate::python::macros::use_immortal;
+
+use super::macros::ffi;
+use super::types::{
+    DECIMAL_PY_TYPE, NONE_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__,
+    UUID_PY_TYPE, VALUE_STR,
+};
 
 #[inline]
 pub(crate) fn get_none() -> *mut ffi::PyObject {
@@ -65,65 +67,6 @@ pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<isize> {
     }
 }
 
-/// This function is a copy of `pyo3::types::PyList::new_bound` with the addition of an error filter.
-/// This is necessary because we don't want to create a temporary Vec to get errors from the `elements` iterator.
-#[inline]
-pub fn new_py_list_from_iter_with_error_filter<'py>(
-    py: Python<'py>,
-    elements: &mut dyn ExactSizeIterator<Item = PyResult<Bound<'py, PyAny>>>,
-) -> PyResult<Bound<'py, PyList>> {
-    unsafe {
-        // PyList_New checks for overflow but has a bad error message, so we check ourselves
-        let len: Py_ssize_t = elements
-            .len()
-            .try_into()
-            .expect("out of range integral type conversion attempted on `elements.len()`");
-
-        let ptr = ffi::PyList_New(len);
-
-        // We create the `Bound` pointer here for two reasons:
-        // - panics if the ptr is null
-        // - its Drop cleans up the list if user code or the asserts panic or when we return early
-        let list = Bound::from_owned_ptr(py, ptr).downcast_into_unchecked();
-
-        let mut counter: Py_ssize_t = 0;
-
-        for obj in elements.take(len as usize) {
-            let obj = obj?;
-            #[cfg(not(Py_LIMITED_API))]
-            ffi::PyList_SET_ITEM(ptr, counter, obj.into_ptr());
-            #[cfg(Py_LIMITED_API)]
-            ffi::PyList_SetItem(ptr, counter, obj.into_ptr());
-            counter += 1;
-        }
-
-        assert!(elements.next().is_none(), "Attempted to create PyList but `elements` was larger than reported by its `ExactSizeIterator` implementation.");
-        assert_eq!(len, counter, "Attempted to create PyList but `elements` was smaller than reported by its `ExactSizeIterator` implementation.");
-
-        Ok(list)
-    }
-}
-
-
-#[inline]
-pub(crate) fn is_none(obj: *mut ffi::PyObject) -> bool {
-    obj == unsafe { NONE_PY_TYPE }
-}
-
-#[inline]
-pub(crate) fn is_datetime(obj: *mut ffi::PyObject) -> bool {
-    ffi!(PyDateTime_Check(obj)) == 1
-}
-
-#[inline]
-pub(crate) fn datetime_to_date(obj: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    call_method!(obj, DATE_STR)
-}
-
-#[inline]
-pub(crate) fn call_isoformat(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    call_method!(value, ISOFORMAT_STR)
-}
 
 #[inline]
 pub(crate) fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
