@@ -12,7 +12,7 @@ use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::python::{create_new_object, get_none, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
+use crate::python::{create_new_object, create_py_list, get_none, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
 use crate::python::macros::{call_object, ffi};
 use crate::validator::{
     Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
@@ -268,16 +268,17 @@ impl Encoder for ArrayEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(list) = value.downcast::<PyList>() {
-            let result = PyList::empty_bound(value.py());
+            let size = list.len();
+            let result = create_py_list(value.py(), size);
 
-            for index in 0..list.len() {
+            for index in 0..size {
                 #[cfg(any(Py_LIMITED_API, PyPy))]
                 let item = list.get_item(index).expect("list.get failed");
                 #[cfg(not(any(Py_LIMITED_API, PyPy)))]
                 let item = unsafe { list.get_item_unchecked(index) };
 
                 let val = self.encoder.dump(&item)?;
-                result.append(val)?;
+                result.set_item(index, val)?;
             }
 
             Ok(result.into_any())
@@ -597,11 +598,11 @@ impl Encoder for TupleEncoder {
         if let Ok(seq) = value.downcast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(&seq, seq_len, self.encoders.len(), None)?;
-            let result = PyList::empty_bound(value.py());
+            let result = create_py_list(value.py(), seq_len);
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
                 let val = self.encoders[index].dump(&item)?;
-                result.append(val)?;
+                result.set_item(index, val)?
             }
 
             Ok(result.into_any())

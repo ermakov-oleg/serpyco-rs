@@ -3,6 +3,7 @@ use std::ptr::NonNull;
 
 use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3::prelude::*;
+use pyo3::types::PyList;
 use pyo3_ffi::Py_ssize_t;
 
 use crate::python::macros::use_immortal;
@@ -67,6 +68,14 @@ pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<isize> {
     }
 }
 
+
+#[inline]
+pub(crate) fn create_py_list(py: Python, size: usize) -> Bound<PyList> {
+    let size: Py_ssize_t = size.try_into().expect("size is too large");
+    unsafe {
+        Bound::from_owned_ptr(py, ffi::PyList_New(size)).downcast_into_unchecked()
+    }
+}
 
 #[inline]
 pub(crate) fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
