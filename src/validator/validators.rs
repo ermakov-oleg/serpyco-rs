@@ -139,11 +139,11 @@ pub fn check_sequence_size_(
 
 pub fn check_sequence_size(
     val: &Bound<'_, PySequence>,
+    seq_len: usize,
     size: usize,
     instance_path: Option<&InstancePath>,
 ) -> PyResult<()> {
-    let len = val.len()?;
-    match len.cmp(&size) {
+    match seq_len.cmp(&size) {
         Ordering::Equal => Ok(()),
         Ordering::Less => {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());

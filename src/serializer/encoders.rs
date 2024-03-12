@@ -13,24 +13,20 @@ use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::python::macros::{call_object, ffi};
-use crate::python::{
-    call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime,
-    is_none, obj_to_str, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr,
-    py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr,
-    py_str_to_str, to_decimal, to_uuid,
-};
+use crate::python::{call_isoformat, create_new_object, datetime_to_date, get_none, get_value_attr, is_datetime, is_none, new_py_list_from_iter_with_error_filter, obj_to_str, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_attr, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{check_bounds, check_length, check_sequence_size, check_sequence_size_, invalid_enum_item, invalid_type, invalid_type_dump, invalid_type_dump_new, invalid_type_new, missing_required_property, no_encoder_for_discriminator};
 use crate::validator::{
     Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
     Value as PyValue,
 };
+use crate::iterator_utils::IteratorUtils;
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
 pub trait Encoder: DynClone + Debug {
     fn dump(&self, value: *mut PyObject) -> PyResult<*mut PyObject>;
-    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>>; // {todo!("asd") }
+    fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>>;
     fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject>;
 }
 
@@ -350,12 +346,11 @@ impl Encoder for ArrayEncoder {
     #[inline]
     fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(list) = value.downcast::<PyList>() {
-            // todo: find a solution to prevent collect iterator to Vec for getting errors
-            let iter = list.iter().map(
+            let mut iter = list.iter().map(
                 |item| self.encoder.new_dump(&item)
-            ).collect::<PyResult<Vec<_>>>()?;
+            );
 
-            let new_list = PyList::new_bound(list.py(), iter);
+            let new_list = new_py_list_from_iter_with_error_filter(list.py(), &mut iter)?;
             Ok(new_list.into_any())
 
         } else {
@@ -772,12 +767,14 @@ impl Encoder for TupleEncoder {
     #[inline]
     fn new_dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(seq) = value.downcast::<PySequence>() {
-            check_sequence_size(&seq, self.encoders.len(), None)?;
-            let iter = seq.iter()?.enumerate().map(
+            let seq_len = seq.len()?;
+            check_sequence_size(&seq, seq_len, self.encoders.len(), None)?;
+            let mut iter = seq.iter()?.enumerate().map(
                 |(i, item)| self.encoders[i].new_dump(&item?)
-            ).collect::<PyResult<Vec<_>>>()?;
+            ).into_exact_size_iterator(seq_len);
 
-            let result = PyList::new_bound(value.py(), iter);
+
+            let result = new_py_list_from_iter_with_error_filter(value.py(), &mut iter)?;
             Ok(result.into_any())
         } else {
             invalid_type_dump_new!("sequence", value)
