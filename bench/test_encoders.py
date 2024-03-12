@@ -59,6 +59,20 @@ def test_load_list_simple_types(bench_or_check_refcount):
     bench_or_check_refcount(repeat(lambda: serializer.load(data)))
 
 
+def test_dump_small_list_simple_types(bench_or_check_refcount):
+    serializer = Serializer(list[int])
+    bench_or_check_refcount.group = 'small_list'
+    data = list(range(10))
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+def test_load_small_list_simple_types(bench_or_check_refcount):
+    serializer = Serializer(list[int])
+    bench_or_check_refcount.group = 'small_list'
+    data = list(range(10))
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
+
+
 def test_dump_tuple_simple_types(bench_or_check_refcount):
     serializer = Serializer(tuple[int, str, bool])
     bench_or_check_refcount.group = 'tuple'
