@@ -218,7 +218,6 @@ jobs:
           run: nox -s bench_codespeed
         env:
           CI: true
-          CODSPEED_LOG: debug
 
   fmt:
     name: rustfmt

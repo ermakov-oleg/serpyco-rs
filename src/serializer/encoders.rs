@@ -12,7 +12,7 @@ use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::python::{create_new_object, create_py_list, get_none, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
+use crate::python::{create_new_object, create_py_list, get_none, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
 use crate::python::macros::{call_object, ffi};
 use crate::validator::{
     Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
@@ -272,13 +272,9 @@ impl Encoder for ArrayEncoder {
             let result = create_py_list(value.py(), size);
 
             for index in 0..size {
-                #[cfg(any(Py_LIMITED_API, PyPy))]
-                let item = list.get_item(index).expect("list.get failed");
-                #[cfg(not(any(Py_LIMITED_API, PyPy)))]
-                let item = unsafe { list.get_item_unchecked(index) };
-
+                let item = py_list_get_item(list, index);
                 let val = self.encoder.dump(&item)?;
-                result.set_item(index, val)?;
+                py_list_set_item(&result, index, val);
             }
 
             Ok(result.into_any())
@@ -602,7 +598,7 @@ impl Encoder for TupleEncoder {
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
                 let val = self.encoders[index].dump(&item)?;
-                result.set_item(index, val)?
+                py_list_set_item(&result, index, val);
             }
 
             Ok(result.into_any())

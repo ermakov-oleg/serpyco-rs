@@ -2,7 +2,6 @@ mod errors;
 mod python;
 mod serializer;
 mod validator;
-mod iterator_utils;
 
 use pyo3::prelude::*;
 use validator::types;

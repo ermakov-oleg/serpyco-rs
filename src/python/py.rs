@@ -77,6 +77,25 @@ pub(crate) fn create_py_list(py: Python, size: usize) -> Bound<PyList> {
     }
 }
 
+
+#[inline]
+pub(crate) fn py_list_get_item<'a>(list: &'a Bound<'a, PyList>, index: usize) -> Bound<'a, PyAny> {
+    #[cfg(any(Py_LIMITED_API, PyPy))]
+    let item = list.get_item(index).expect("list.get failed");
+    #[cfg(not(any(Py_LIMITED_API, PyPy)))]
+    let item = unsafe { list.get_item_unchecked(index) };
+    item
+}
+
+#[inline]
+pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<PyAny>)  {
+    let index: Py_ssize_t = index.try_into().expect("size is too large");
+    #[cfg(not(Py_LIMITED_API))]
+    ffi!(PyList_SET_ITEM(list.as_ptr(), index, value.into_ptr()));
+    #[cfg(Py_LIMITED_API)]
+    ffi!(PyList_SetItem(list.as_ptr(), index, value.into_ptr()));
+}
+
 #[inline]
 pub(crate) fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     let tuple_arg = from_ptr_or_err(ffi!(PyTuple_Pack(1, cls)))?;
