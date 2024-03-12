@@ -215,7 +215,7 @@ jobs:
         uses: CodSpeedHQ/action@v2
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
-          run: nox -s bench_codespeed
+          run: nox -s bench_codespeed --no-venv
         env:
           CI: true
 

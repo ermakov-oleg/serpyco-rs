@@ -12,7 +12,7 @@ use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::python::{create_new_object, create_py_list, get_none, parse_date, parse_datetime, parse_time, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
+use crate::python::{create_new_object, create_py_list, get_none, parse_date, parse_datetime, parse_time, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
 use crate::python::macros::{call_object, ffi};
 use crate::validator::{
     Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
@@ -229,7 +229,7 @@ impl Encoder for DictionaryEncoder {
                 let key = self.key_encoder.dump(&k)?;
                 let value = self.value_encoder.dump(&v)?;
                 if !self.omit_none || !value.is_none() {
-                    result_dict.set_item(key, value)?;
+                    py_dict_set_item(&result_dict, key.as_ptr(), value)?;
                 }
             }
             Ok(result_dict.into_any())
@@ -329,10 +329,7 @@ impl Encoder for EntityEncoder {
             let field_val = value.getattr(&field.name)?;
             let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
-                dict.set_item(
-                    &field.dict_key,
-                    dump_result
-                )?;
+                py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
             }
         }
 
@@ -412,7 +409,7 @@ impl Encoder for TypedDictEncoder {
             };
             let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
-                dict.set_item(&field.dict_key, dump_result)?
+                py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
             }
         }
         Ok(dict.into_any())

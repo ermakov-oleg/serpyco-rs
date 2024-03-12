@@ -3,7 +3,7 @@ use std::ptr::NonNull;
 
 use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3::prelude::*;
-use pyo3::types::PyList;
+use pyo3::types::{PyDict, PyList};
 use pyo3_ffi::Py_ssize_t;
 
 use crate::python::macros::use_immortal;
@@ -94,6 +94,13 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
     ffi!(PyList_SET_ITEM(list.as_ptr(), index, value.into_ptr()));
     #[cfg(Py_LIMITED_API)]
     ffi!(PyList_SetItem(list.as_ptr(), index, value.into_ptr()));
+}
+
+
+#[inline]
+pub(crate) fn py_dict_set_item(list: &Bound<PyDict>, key: *mut ffi::PyObject, value: Bound<PyAny>) -> PyResult<()>  {
+    let result = ffi!(PyDict_SetItem(list.as_ptr(), key, value.as_ptr()));
+    error_on_minusone(result)
 }
 
 #[inline]
