@@ -1,5 +1,5 @@
 use crate::validator::types::EnumItems;
-use crate::validator::{raise_error, InstancePath, Value};
+use crate::validator::{raise_error, InstancePath};
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PySequence, PyString};
@@ -122,14 +122,14 @@ pub fn check_sequence_size(
         Ordering::Less => {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
-                format!(r#"{} has less than {} items"#, val.to_string(), size),
+                format!(r#"{} has less than {} items"#, val, size),
                 &instance_path,
             )
         }
         Ordering::Greater => {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
-                format!(r#"{} has more than {} items"#, val.to_string(), size),
+                format!(r#"{} has more than {} items"#, val, size),
                 &instance_path,
             )
         }
@@ -154,15 +154,6 @@ pub fn no_encoder_for_discriminator(
         instance_path,
     )
     .unwrap_err()
-}
-
-pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) -> PyResult<()> {
-    let error = match value.as_str() {
-        Some(val) => format!(r#""{}" is not of type "{}""#, val, type_),
-        None => format!(r#"{} is not of type "{}""#, value, type_),
-    };
-    raise_error(error, instance_path)?;
-    Ok(())
 }
 
 pub fn _invalid_type_new(
@@ -204,7 +195,7 @@ pub fn _invalid_enum_item(
         false => format!(r#"{} is not one of {}"#, value, items),
     };
 
-    raise_error(&error, instance_path)?;
+    raise_error(error, instance_path)?;
     Ok(())
 }
 

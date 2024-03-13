@@ -308,13 +308,13 @@ fn iterate_on_fields(
 ) -> PyResult<Vec<Field>> {
     let mut fields = vec![];
     for field in entity_fields {
-        let f_name: &PyString = field.name.downcast(py)?;
-        let dict_key: &PyString = field.dict_key.downcast(py)?;
+        let f_name = field.name.downcast_bound::<PyString>(py)?;
+        let dict_key = field.dict_key.downcast_bound::<PyString>(py)?;
         let f_type = get_object_type(field.field_type.bind(py))?;
 
         let fld = Field {
-            name: f_name.into(),
-            dict_key: dict_key.into(),
+            name: f_name.clone().unbind(),
+            dict_key: dict_key.clone().unbind(),
             dict_key_rs: dict_key.to_string_lossy().into(),
             encoder: get_encoder(py, f_type, encoder_state, ctx.clone())?,
             required: field.required,

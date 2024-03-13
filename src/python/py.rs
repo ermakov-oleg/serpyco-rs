@@ -7,7 +7,7 @@ use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
 use super::macros::ffi;
-use super::types::{DECIMAL_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__, VALUE_STR};
+use super::types::{DECIMAL_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__};
 
 #[inline]
 pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
@@ -24,41 +24,6 @@ pub(crate) fn to_uuid<'a, 'py>(
     value: &'a Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyAny>> {
     uuid_cls.call1((value,))
-}
-
-#[inline]
-pub(crate) fn to_int(value: *mut pyo3::ffi::PyObject) -> PyResult<i64> {
-    let result = ffi!(PyLong_AsLongLong(value));
-    if result == -1 && !ffi!(PyErr_Occurred()).is_null() {
-        Err(Python::with_gil(PyErr::fetch))
-    } else {
-        Ok(result)
-    }
-}
-
-#[inline]
-pub(crate) fn to_float(value: *mut pyo3::ffi::PyObject) -> PyResult<f64> {
-    let result = ffi!(PyFloat_AsDouble(value));
-    if result == -1.0 && !ffi!(PyErr_Occurred()).is_null() {
-        Err(Python::with_gil(PyErr::fetch))
-    } else {
-        Ok(result)
-    }
-}
-
-#[inline]
-pub(crate) fn get_value_attr(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    py_object_get_attr(value, unsafe { VALUE_STR })
-}
-
-#[inline]
-pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<isize> {
-    let v = ffi!(PyObject_Size(obj));
-    if v == -1 {
-        Err(Python::with_gil(PyErr::fetch))
-    } else {
-        Ok(v)
-    }
 }
 
 #[inline]
@@ -168,53 +133,6 @@ pub(crate) fn py_frozen_object_set_attr(
     py_object_call1_or_err(unsafe { PY_OBJECT__SETATTR__ }, tuple_arg)?;
     ffi!(Py_DECREF(tuple_arg));
     Ok(())
-}
-
-#[inline]
-pub(crate) fn py_str_to_str(obj: *mut ffi::PyObject) -> PyResult<&'static str> {
-    let utf8_slice = {
-        cfg_if::cfg_if! {
-            if #[cfg(any(Py_3_10, not(Py_LIMITED_API)))] {
-                // PyUnicode_AsUTF8AndSize only available on limited API starting with 3.10.
-                let mut size: ffi::Py_ssize_t = 0;
-                let data = ffi!(PyUnicode_AsUTF8AndSize(obj, &mut size));
-                if data.is_null() {
-                    return Err(Python::with_gil(PyErr::fetch));
-                } else {
-                    unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) }
-                }
-            } else {
-                let ptr = from_ptr_or_err(ffi!(PyUnicode_AsUTF8String(obj)))?;
-                unsafe {
-                    let buffer = ffi!(PyBytes_AsString(ptr)) as *const u8;
-                    let length = ffi!(PyBytes_Size(ptr)) as usize;
-                    debug_assert!(!buffer.is_null());
-                    std::slice::from_raw_parts(buffer, length)
-                }
-            }
-        }
-    };
-    Ok(unsafe { std::str::from_utf8_unchecked(utf8_slice) })
-}
-
-#[inline]
-pub(crate) fn py_tuple_get_item(
-    obj: *mut ffi::PyObject,
-    index: usize,
-) -> PyResult<*mut ffi::PyObject> {
-    // Doesn't touch RC
-    from_ptr_or_err(ffi!(PyTuple_GetItem(obj, index as Py_ssize_t)))
-}
-
-/// Returns None if key not found
-/// without setting an exception
-#[inline]
-pub(crate) fn py_dict_get_item(
-    obj: *mut ffi::PyObject,
-    key: *mut ffi::PyObject,
-) -> Option<*mut ffi::PyObject> {
-    // Obj RC not changed
-    from_ptr_or_opt(ffi!(PyDict_GetItemWithError(obj, key)))
 }
 
 pub(crate) struct PyObjectIterator(*mut ffi::PyObject);

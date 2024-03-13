@@ -4,8 +4,8 @@ use std::sync::Once;
 use pyo3::ffi::PyObject;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::PyModule;
-use pyo3::{AsPyPointer, PyAny, PyResult};
 use pyo3::{Bound, Python};
+use pyo3::{PyAny, PyResult};
 
 use crate::validator::types::{
     AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType,
@@ -16,17 +16,9 @@ use crate::validator::types::{
 
 use super::py::py_object_get_attr;
 
-pub static mut ITEMS_STR: *mut PyObject = 0 as *mut PyObject;
-pub static mut ISOFORMAT_STR: *mut PyObject = 0 as *mut PyObject;
-pub static mut DATE_STR: *mut PyObject = 0 as *mut PyObject;
-pub static mut VALUE_STR: *mut PyObject = 0 as *mut PyObject;
-pub static mut UUID_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
-pub static mut NONE_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut DECIMAL_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
-pub static mut PY_TUPLE_0: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__NEW__: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__SETATTR__: *mut PyObject = 0 as *mut PyObject;
-pub static mut EMPTY_UNICODE: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
 
@@ -97,16 +89,7 @@ pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
 
 pub fn init(py: Python<'_>) {
     INIT.call_once(|| unsafe {
-        if pyo3_ffi::PyDateTimeAPI().is_null() {
-            // initialize datetime module
-            pyo3_ffi::PyDateTime_IMPORT()
-        };
-
-        let uuid = PyModule::import(py, "uuid").unwrap();
-        UUID_PY_TYPE = get_attr_ptr!(uuid, "UUID");
-
-        let builtins = PyModule::import(py, "builtins").unwrap();
-        NONE_PY_TYPE = get_attr_ptr!(builtins, "None");
+        let builtins = PyModule::import_bound(py, "builtins").unwrap();
 
         let object = get_attr_ptr!(builtins, "object");
         let new_str = pyo3_ffi::PyUnicode_InternFromString("__new__\0".as_ptr() as *const c_char);
@@ -117,17 +100,8 @@ pub fn init(py: Python<'_>) {
 
         let decimal_str =
             pyo3_ffi::PyUnicode_InternFromString("Decimal\0".as_ptr() as *const c_char);
-        let decimal = PyModule::import(py, "decimal").unwrap();
+        let decimal = PyModule::import_bound(py, "decimal").unwrap();
         DECIMAL_PY_TYPE = py_object_get_attr(decimal.as_ptr(), decimal_str).unwrap();
-
-        ITEMS_STR = pyo3_ffi::PyUnicode_InternFromString("items\0".as_ptr() as *const c_char);
-        VALUE_STR = pyo3_ffi::PyUnicode_InternFromString("value\0".as_ptr() as *const c_char);
-        ISOFORMAT_STR =
-            pyo3_ffi::PyUnicode_InternFromString("isoformat\0".as_ptr() as *const c_char);
-        DATE_STR = pyo3_ffi::PyUnicode_InternFromString("date\0".as_ptr() as *const c_char);
-
-        EMPTY_UNICODE = pyo3_ffi::PyUnicode_New(0, 255);
-        PY_TUPLE_0 = pyo3_ffi::PyTuple_New(0);
     });
 }
 

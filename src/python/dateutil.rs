@@ -7,9 +7,9 @@ use speedate::{Date, DateTime, ParseError, Time};
 use crate::errors::{ToPyErr, ValidationError};
 
 #[inline]
-pub(crate) fn parse_datetime<'a, 'py>(
+pub(crate) fn parse_datetime<'py>(
     py: Python<'py>,
-    value: &'a str,
+    value: &str,
 ) -> PyResult<Bound<'py, PyDateTime>> {
     let datetime = DateTime::parse_str(value).map_err(InnerParseError::from)?;
     PyDateTime::new_bound(
@@ -26,7 +26,7 @@ pub(crate) fn parse_datetime<'a, 'py>(
 }
 
 #[inline]
-pub(crate) fn parse_time<'a, 'py>(py: Python<'py>, value: &'a str) -> PyResult<Bound<'py, PyTime>> {
+pub(crate) fn parse_time<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyTime>> {
     let time = Time::parse_str(value).map_err(InnerParseError::from)?;
     PyTime::new_bound(
         py,
@@ -39,7 +39,7 @@ pub(crate) fn parse_time<'a, 'py>(py: Python<'py>, value: &'a str) -> PyResult<B
 }
 
 #[inline]
-pub(crate) fn parse_date<'a, 'py>(py: Python<'py>, value: &'a str) -> PyResult<Bound<'py, PyDate>> {
+pub(crate) fn parse_date<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyDate>> {
     let date = Date::parse_str(value).map_err(InnerParseError::from)?;
     PyDate::new_bound(py, date.year.into(), date.month, date.day)
 }

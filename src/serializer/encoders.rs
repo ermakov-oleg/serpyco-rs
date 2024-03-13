@@ -678,7 +678,7 @@ impl Encoder for TupleEncoder {
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(seq) = value.downcast::<PySequence>() {
             let seq_len = seq.len()?;
-            check_sequence_size(&seq, seq_len, self.encoders.len(), None)?;
+            check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
             let result = create_py_list(value.py(), seq_len);
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
@@ -704,7 +704,7 @@ impl Encoder for TupleEncoder {
                 invalid_type!("sequence", value, instance_path);
             }
             let seq_len = seq.len()?;
-            check_sequence_size(&seq, seq_len, self.encoders.len(), Some(instance_path))?;
+            check_sequence_size(seq, seq_len, self.encoders.len(), Some(instance_path))?;
             let result = create_py_tuple(value.py(), seq_len);
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
