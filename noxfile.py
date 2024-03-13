@@ -99,4 +99,4 @@ def _is_ci() -> bool:
 
 def install(session, *args):
     session.run('pip', 'install', 'uv')
-    session.run('uv', 'pip', 'install', *args)
+    session.run('uv', 'pip', 'install', '--system', *args)
