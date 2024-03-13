@@ -7,11 +7,11 @@ nox.options.sessions = ['test', 'lint', 'type_check', 'rust_lint']
 nox.options.python = False
 
 
-def build(session):
+def build(session, use_pip: bool = False):
     if _is_ci():
         # Install form wheels
-        install(session, '--no-index', '--no-deps', '--find-links', 'wheels/', 'serpyco-rs')
-        install(session, '--find-links', 'wheels/', 'serpyco-rs')
+        install(session, '--no-index', '--no-deps', '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip)
+        install(session, '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip)
         return
 
     session.run_always('maturin', 'develop', '-r')
@@ -73,7 +73,7 @@ def bench(session):
 
 @nox.session(python=False)
 def test_rc_leaks(session):
-    build(session)
+    build(session, use_pip=True)
     install(session, '-r', 'requirements/bench.txt', use_pip=True)
     session.run(
         'pytest',
