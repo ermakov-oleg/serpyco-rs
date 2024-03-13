@@ -7,7 +7,7 @@ use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
 use super::macros::ffi;
-use super::types::{PY_OBJECT__NEW__, PY_OBJECT__SETATTR__};
+use super::types::{PY_OBJECT__SETATTR__};
 
 #[inline]
 pub(crate) fn to_uuid<'a, 'py>(
@@ -42,6 +42,12 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
 }
 
 #[inline]
+pub(crate) fn create_py_dict_known_size(py: Python, size: usize) -> Bound<PyDict> {
+    let size: Py_ssize_t = size.try_into().expect("size is too large");
+    unsafe { Bound::from_owned_ptr(py, ffi::_PyDict_NewPresized(size)).downcast_into_unchecked() }
+}
+
+#[inline]
 pub(crate) fn py_dict_set_item(
     list: &Bound<PyDict>,
     key: *mut ffi::PyObject,
@@ -64,13 +70,6 @@ pub(crate) fn py_tuple_set_item(list: &Bound<PyTuple>, index: usize, value: Boun
     ffi!(PyTuple_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
 
-#[inline]
-pub(crate) fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    let tuple_arg = from_ptr_or_err(ffi!(PyTuple_Pack(1, cls)))?;
-    let result = py_object_call1_or_err(unsafe { PY_OBJECT__NEW__ }, tuple_arg);
-    ffi!(Py_DECREF(tuple_arg));
-    result
-}
 
 #[inline]
 fn py_object_call1_or_err(

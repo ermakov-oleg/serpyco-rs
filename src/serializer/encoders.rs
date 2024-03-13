@@ -13,11 +13,7 @@ use pyo3::{intern, Bound, Py, PyAny, PyResult};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::python::{
-    create_new_object, create_py_list, create_py_tuple, parse_date, parse_datetime, parse_time,
-    py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item,
-    py_object_set_attr, py_tuple_set_item, to_uuid,
-};
+use crate::python::{create_py_dict_known_size, create_py_list, create_py_tuple, parse_date, parse_datetime, parse_time, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_set_attr, py_tuple_set_item, to_uuid};
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
@@ -289,7 +285,7 @@ impl Encoder for DictionaryEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(dict) = value.downcast::<PyDict>() {
-            let result_dict = PyDict::new_bound(dict.py());
+            let result_dict = create_py_dict_known_size(dict.py(), dict.len());
             for (k, v) in dict.iter() {
                 let key = self.key_encoder.dump(&k)?;
                 let value = self.value_encoder.dump(&v)?;
@@ -310,7 +306,7 @@ impl Encoder for DictionaryEncoder {
         instance_path: &InstancePath,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyDict>() {
-            let result_dict = PyDict::new_bound(val.py());
+            let result_dict = create_py_dict_known_size(val.py(), val.len());
             for (k, v) in val.iter() {
                 let instance_path = instance_path.push(&k);
                 let key = self.key_encoder.load(&k, &instance_path)?;
@@ -379,6 +375,7 @@ pub struct EntityEncoder {
     pub(crate) omit_none: bool,
     pub(crate) is_frozen: bool,
     pub(crate) fields: Vec<Field>,
+    pub(crate) create_object: Py<PyAny>,
     #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
@@ -397,7 +394,7 @@ pub struct Field {
 impl Encoder for EntityEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let dict = PyDict::new_bound(value.py());
+        let dict = create_py_dict_known_size(value.py(), self.fields.len());
 
         for field in &self.fields {
             let field_val = value.getattr(&field.name)?;
@@ -422,8 +419,7 @@ impl Encoder for EntityEncoder {
             py_object_set_attr
         };
         if let Ok(val) = value.downcast::<PyDict>() {
-            let obj_ptr = create_new_object(self.cls.as_ptr())?;
-            let obj = unsafe { Bound::from_owned_ptr(value.py(), obj_ptr) };
+            let obj = self.create_object.bind(value.py()).call1((self.cls.bind(value.py()),))?;
             for field in &self.fields {
                 let val = match val.get_item(&field.dict_key)? {
                     Some(val) => {
@@ -442,7 +438,7 @@ impl Encoder for EntityEncoder {
                         }
                     },
                 };
-                setattr_fn(obj_ptr, field.name.as_ptr(), val.as_ptr())?;
+                setattr_fn(obj.as_ptr(), field.name.as_ptr(), val.as_ptr())?;
             }
 
             Ok(obj)
@@ -463,11 +459,11 @@ pub struct TypedDictEncoder {
 impl Encoder for TypedDictEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let dict = PyDict::new_bound(value.py());
         let value = match value.downcast::<PyDict>() {
             Ok(val) => val,
             _ => invalid_type_dump!("dict", value),
         };
+        let dict = create_py_dict_known_size(value.py(), self.fields.len());
         for field in &self.fields {
             let field_val = match value.get_item(&field.name) {
                 Ok(Some(val)) => val,
@@ -502,7 +498,7 @@ impl Encoder for TypedDictEncoder {
                 invalid_type_dump!("dict", value);
             }
         };
-        let dict = PyDict::new_bound(value.py());
+        let dict = create_py_dict_known_size(value.py(), self.fields.len());
         for field in &self.fields {
             let field_val = match value.get_item(&field.dict_key) {
                 Ok(Some(val)) => val,

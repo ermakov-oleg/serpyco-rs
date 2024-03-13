@@ -4,7 +4,7 @@ use std::sync::Arc;
 use atomic_refcell::AtomicRefCell;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
-use pyo3::{PyAny, PyResult};
+use pyo3::{intern, PyAny, PyResult};
 
 use crate::python::{get_object_type, Type};
 use crate::serializer::encoders::{
@@ -229,14 +229,20 @@ pub fn get_encoder(
             )?
         }
         Type::Entity(type_info, base_type, python_object_id) => {
+            let type_info = type_info.get();
             let fields =
-                iterate_on_fields(py, &type_info.get().fields, encoder_state, ctx.clone())?;
+                iterate_on_fields(py, &type_info.fields, encoder_state, ctx.clone())?;
+
+            let builtins = PyModule::import_bound(py, intern!(py, "builtins"))?;
+            let object = builtins.getattr(intern!(py, "object"))?;
+            let create_object = object.getattr(intern!(py, "__new__"))?;
 
             let encoder = EntityEncoder {
                 fields,
-                omit_none: type_info.get().omit_none,
-                is_frozen: type_info.get().is_frozen,
-                cls: type_info.get().cls.clone(),
+                omit_none: type_info.omit_none,
+                is_frozen: type_info.is_frozen,
+                create_object: create_object.unbind(),
+                cls: type_info.cls.clone(),
                 ctx,
             };
             let val = encoder_state.entry(python_object_id).or_default();

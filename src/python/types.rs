@@ -16,7 +16,6 @@ use crate::validator::types::{
 
 use super::py::py_object_get_attr;
 
-pub static mut PY_OBJECT__NEW__: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__SETATTR__: *mut PyObject = 0 as *mut PyObject;
 
 static INIT: Once = Once::new();
@@ -91,8 +90,6 @@ pub fn init(py: Python<'_>) {
         let builtins = PyModule::import_bound(py, "builtins").unwrap();
 
         let object = get_attr_ptr!(builtins, "object");
-        let new_str = pyo3_ffi::PyUnicode_InternFromString("__new__\0".as_ptr() as *const c_char);
-        PY_OBJECT__NEW__ = py_object_get_attr(object, new_str).unwrap();
         let setattr_str =
             pyo3_ffi::PyUnicode_InternFromString("__setattr__\0".as_ptr() as *const c_char);
         PY_OBJECT__SETATTR__ = py_object_get_attr(object, setattr_str).unwrap();
