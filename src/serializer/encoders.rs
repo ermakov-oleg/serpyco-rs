@@ -229,7 +229,8 @@ impl Encoder for DictionaryEncoder {
                 let key = self.key_encoder.dump(&k)?;
                 let value = self.value_encoder.dump(&v)?;
                 if !self.omit_none || !value.is_none() {
-                    py_dict_set_item(&result_dict, key.as_ptr(), value)?;
+                    // py_dict_set_item(&result_dict, key.as_ptr(), value)?;
+                    result_dict.set_item(key, value)?;
                 }
             }
             Ok(result_dict.into_any())

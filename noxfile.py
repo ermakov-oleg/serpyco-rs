@@ -97,7 +97,7 @@ def install(session, *args, use_pip: bool = False):
         return
     use_pip = use_pip or _is_windows()
     python = session.run_always('which', 'python', silent=True).strip()
-    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install' '--python', python]
+    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', python]
     session.run_always(*cmd, *args)
 
 
