@@ -66,7 +66,7 @@ pub fn get_encoder(
     let encoder: Box<TEncoder> = match obj_type {
         Type::Integer(type_info, base_type) => {
             let type_info = type_info.get().clone();
-            let encoder = IntEncoder { ctx, type_info};
+            let encoder = IntEncoder { ctx, type_info };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::String(type_info, base_type) => {
@@ -95,7 +95,6 @@ pub fn get_encoder(
             let encoder = UUIDEncoder {
                 ctx,
                 uuid_cls: uuid_cls.unbind(),
-
             };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
@@ -168,7 +167,8 @@ pub fn get_encoder(
             let mut encoders = vec![];
 
             for value in item_types.iter() {
-                let encoder = get_encoder(py, get_object_type(&value)?, encoder_state, ctx.clone())?;
+                let encoder =
+                    get_encoder(py, get_object_type(&value)?, encoder_state, ctx.clone())?;
                 encoders.push(encoder);
             }
 
@@ -183,11 +183,17 @@ pub fn get_encoder(
             )?
         }
         Type::DiscriminatedUnion(type_info, base_type) => {
-            let dump_discriminator =
-                type_info.get().dump_discriminator.bind(py).downcast::<PyString>()?;
+            let dump_discriminator = type_info
+                .get()
+                .dump_discriminator
+                .bind(py)
+                .downcast::<PyString>()?;
 
-            let load_discriminator =
-                type_info.get().load_discriminator.bind(py).downcast::<PyString>()?;
+            let load_discriminator = type_info
+                .get()
+                .load_discriminator
+                .bind(py)
+                .downcast::<PyString>()?;
 
             let item_types = type_info.get().item_types.bind(py).downcast::<PyDict>()?;
 
@@ -196,7 +202,8 @@ pub fn get_encoder(
 
             for (key, value) in item_types.iter() {
                 let key = key.downcast::<PyString>()?;
-                let encoder = get_encoder(py, get_object_type(&value)?, encoder_state, ctx.clone())?;
+                let encoder =
+                    get_encoder(py, get_object_type(&value)?, encoder_state, ctx.clone())?;
                 let rs_key: String = key.to_string_lossy().into();
                 keys.push(rs_key.clone());
                 encoders.insert(rs_key, encoder);
@@ -216,7 +223,8 @@ pub fn get_encoder(
             )?
         }
         Type::Entity(type_info, base_type, python_object_id) => {
-            let fields = iterate_on_fields(py, &type_info.get().fields, encoder_state, ctx.clone())?;
+            let fields =
+                iterate_on_fields(py, &type_info.get().fields, encoder_state, ctx.clone())?;
 
             let encoder = EntityEncoder {
                 fields,
@@ -231,7 +239,8 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::TypedDict(type_info, base_type, python_object_id) => {
-            let fields = iterate_on_fields(py, &type_info.get().fields, encoder_state, ctx.clone())?;
+            let fields =
+                iterate_on_fields(py, &type_info.get().fields, encoder_state, ctx.clone())?;
 
             let encoder = TypedDictEncoder {
                 fields,

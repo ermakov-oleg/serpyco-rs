@@ -2,10 +2,10 @@ use std::os::raw::c_char;
 use std::sync::Once;
 
 use pyo3::ffi::PyObject;
-use pyo3::types::PyModule;
-use pyo3::{Bound, Python};
-use pyo3::{AsPyPointer, PyAny, PyResult};
 use pyo3::prelude::PyAnyMethods;
+use pyo3::types::PyModule;
+use pyo3::{AsPyPointer, PyAny, PyResult};
+use pyo3::{Bound, Python};
 
 use crate::validator::types::{
     AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType,

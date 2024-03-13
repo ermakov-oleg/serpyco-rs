@@ -54,43 +54,6 @@ macro_rules! call_method {
     };
 }
 
-// PyObject_CallNoArgs was added to python in 3.9 but to limited API in 3.10
-#[cfg(all(not(PyPy), any(Py_3_10, all(not(Py_LIMITED_API), Py_3_9))))]
-macro_rules! call_object {
-    ($obj:expr) => {
-        from_ptr_or_err(unsafe { pyo3_ffi::PyObject_CallNoArgs($obj) })
-    };
-}
-
-#[cfg(not(Py_3_9))]
-macro_rules! call_object {
-    ($obj1:expr) => {
-        crate::python::from_ptr_or_err(unsafe {
-            pyo3_ffi::PyObject_Call(
-                $obj1,
-                $crate::python::types::PY_TUPLE_0,
-                std::ptr::null_mut() as *mut pyo3_ffi::PyObject,
-            )
-        })
-    };
-}
-
-#[cfg(Py_3_12)]
-macro_rules! use_immortal {
-    ($op:expr) => {
-        unsafe { $op }
-    };
-}
-
-#[cfg(not(Py_3_12))]
-macro_rules! use_immortal {
-    ($op:expr) => {{
-        ffi!(Py_INCREF($op));
-        unsafe { $op }
-    }};
-}
-
 pub(crate) use call_method;
-pub(crate) use call_object;
+
 pub(crate) use ffi;
-pub(crate) use use_immortal;

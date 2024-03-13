@@ -1,23 +1,13 @@
 use std::os::raw::c_int;
 use std::ptr::NonNull;
 
-use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
-use crate::python::macros::use_immortal;
-
 use super::macros::ffi;
-use super::types::{
-    DECIMAL_PY_TYPE, NONE_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__,
-    UUID_PY_TYPE, VALUE_STR,
-};
-
-#[inline]
-pub(crate) fn get_none() -> *mut ffi::PyObject {
-    use_immortal!(NONE_PY_TYPE)
-}
+use super::types::{DECIMAL_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__, VALUE_STR};
 
 #[inline]
 pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
@@ -29,13 +19,11 @@ pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObje
 }
 
 #[inline]
-pub(crate) fn to_uuid(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    py_object_call1_make_tuple_or_err(unsafe { UUID_PY_TYPE }, value)
-}
-
-#[inline]
-pub(crate) fn to_uuid_new<'a, 'py>(uuid_cls: &'a Bound<'py, PyAny>, value: &'a Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
-    uuid_cls.call1((value, ))
+pub(crate) fn to_uuid<'a, 'py>(
+    uuid_cls: &'a Bound<'py, PyAny>,
+    value: &'a Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
+    uuid_cls.call1((value,))
 }
 
 #[inline]
@@ -73,16 +61,11 @@ pub(crate) fn py_len(obj: *mut ffi::PyObject) -> PyResult<isize> {
     }
 }
 
-
 #[inline]
 pub(crate) fn create_py_list(py: Python, size: usize) -> Bound<PyList> {
     let size: Py_ssize_t = size.try_into().expect("size is too large");
-    unsafe {
-        Bound::from_owned_ptr(py, ffi::PyList_New(size)).downcast_into_unchecked()
-    }
+    unsafe { Bound::from_owned_ptr(py, ffi::PyList_New(size)).downcast_into_unchecked() }
 }
-
-
 
 #[inline]
 pub(crate) fn py_list_get_item<'a>(list: &'a Bound<'a, PyList>, index: usize) -> Bound<'a, PyAny> {
@@ -94,7 +77,7 @@ pub(crate) fn py_list_get_item<'a>(list: &'a Bound<'a, PyList>, index: usize) ->
 }
 
 #[inline]
-pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<PyAny>)  {
+pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<PyAny>) {
     let index: Py_ssize_t = index.try_into().expect("size is too large");
     #[cfg(not(Py_LIMITED_API))]
     ffi!(PyList_SET_ITEM(list.as_ptr(), index, value.into_ptr()));
@@ -102,26 +85,25 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
     ffi!(PyList_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
 
-
 #[inline]
-pub(crate) fn py_dict_set_item(list: &Bound<PyDict>, key: *mut ffi::PyObject, value: Bound<PyAny>) -> PyResult<()>  {
+pub(crate) fn py_dict_set_item(
+    list: &Bound<PyDict>,
+    key: *mut ffi::PyObject,
+    value: Bound<PyAny>,
+) -> PyResult<()> {
     // todo: Check performance
     let result = ffi!(PyDict_SetItem(list.as_ptr(), key, value.as_ptr()));
     error_on_minusone(result)
 }
 
-
 #[inline]
 pub(crate) fn create_py_tuple(py: Python, size: usize) -> Bound<PyTuple> {
     let size: Py_ssize_t = size.try_into().expect("size is too large");
-    unsafe {
-        Bound::from_owned_ptr(py, ffi::PyTuple_New(size)).downcast_into_unchecked()
-    }
+    unsafe { Bound::from_owned_ptr(py, ffi::PyTuple_New(size)).downcast_into_unchecked() }
 }
 
-
 #[inline]
-pub(crate) fn py_tuple_set_item(list: &Bound<PyTuple>, index: usize, value: Bound<PyAny>)  {
+pub(crate) fn py_tuple_set_item(list: &Bound<PyTuple>, index: usize, value: Bound<PyAny>) {
     let index: Py_ssize_t = index.try_into().expect("size is too large");
     ffi!(PyTuple_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
@@ -222,16 +204,6 @@ pub(crate) fn py_tuple_get_item(
 ) -> PyResult<*mut ffi::PyObject> {
     // Doesn't touch RC
     from_ptr_or_err(ffi!(PyTuple_GetItem(obj, index as Py_ssize_t)))
-}
-
-#[inline]
-pub(crate) fn py_object_get_item(
-    obj: *mut ffi::PyObject,
-    key: *mut ffi::PyObject,
-) -> PyResult<*mut ffi::PyObject> {
-    // todo: use PyDict_GetItemWithError
-    // Obj RC +1
-    from_ptr_or_err(ffi!(PyObject_GetItem(obj, key)))
 }
 
 /// Returns None if key not found

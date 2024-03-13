@@ -32,18 +32,6 @@ impl Value {
 }
 
 impl Value {
-    /// Returns the pointer to the underlying PyObject.
-    #[inline]
-    pub fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
-        self.py_object
-    }
-
-    /// Is None value.
-    #[inline]
-    pub fn is_none(&self) -> bool {
-        self.object_type == ObjectType::None
-    }
-
     /// Is Bytes value.
     #[inline]
     pub fn is_bytes(&self) -> bool {
@@ -336,12 +324,7 @@ pub struct Tuple {
     py_object: *mut pyo3::ffi::PyObject,
 }
 
-impl Tuple {
-    #[inline]
-    pub fn as_ptr(&self) -> *mut pyo3::ffi::PyObject {
-        self.py_object
-    }
-}
+impl Tuple {}
 
 impl MutableSequence for Tuple {
     #[inline]
