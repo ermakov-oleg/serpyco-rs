@@ -230,8 +230,7 @@ pub fn get_encoder(
         }
         Type::Entity(type_info, base_type, python_object_id) => {
             let type_info = type_info.get();
-            let fields =
-                iterate_on_fields(py, &type_info.fields, encoder_state, ctx.clone())?;
+            let fields = iterate_on_fields(py, &type_info.fields, encoder_state, ctx.clone())?;
 
             let builtins = PyModule::import_bound(py, intern!(py, "builtins"))?;
             let object = builtins.getattr(intern!(py, "object"))?;

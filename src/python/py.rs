@@ -7,7 +7,7 @@ use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
 use super::macros::ffi;
-use super::types::{PY_OBJECT__SETATTR__};
+use super::types::PY_OBJECT__SETATTR__;
 
 #[inline]
 pub(crate) fn to_uuid<'a, 'py>(
@@ -69,7 +69,6 @@ pub(crate) fn py_tuple_set_item(list: &Bound<PyTuple>, index: usize, value: Boun
     let index: Py_ssize_t = index.try_into().expect("size is too large");
     ffi!(PyTuple_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
-
 
 #[inline]
 fn py_object_call1_or_err(

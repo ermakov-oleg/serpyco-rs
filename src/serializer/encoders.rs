@@ -13,7 +13,11 @@ use pyo3::{intern, Bound, Py, PyAny, PyResult};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::python::{create_py_dict_known_size, create_py_list, create_py_tuple, parse_date, parse_datetime, parse_time, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_set_attr, py_tuple_set_item, to_uuid};
+use crate::python::{
+    create_py_dict_known_size, create_py_list, create_py_tuple, parse_date, parse_datetime,
+    parse_time, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item,
+    py_object_set_attr, py_tuple_set_item, to_uuid,
+};
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
@@ -419,7 +423,10 @@ impl Encoder for EntityEncoder {
             py_object_set_attr
         };
         if let Ok(val) = value.downcast::<PyDict>() {
-            let obj = self.create_object.bind(value.py()).call1((self.cls.bind(value.py()),))?;
+            let obj = self
+                .create_object
+                .bind(value.py())
+                .call1((self.cls.bind(value.py()),))?;
             for field in &self.fields {
                 let val = match val.get_item(&field.dict_key)? {
                     Some(val) => {
