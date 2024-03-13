@@ -74,7 +74,7 @@ def bench(session):
 @nox.session(python=False)
 def test_rc_leaks(session):
     build(session)
-    install(session, '-r', 'requirements/bench.txt')
+    install(session, '-r', 'requirements/bench.txt', use_pip=True)
     session.run(
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
@@ -96,9 +96,9 @@ def _is_ci() -> bool:
     return bool(os.environ.get('CI', None))
 
 
-def install(session, *args):
+def install(session, *args, use_pip: bool = False):
     if session._runner.global_config.no_install:
-        session.debug('Skip install')
         return
     python = session.run_always('which', 'python', silent=True).strip()
-    session.run_always('uv', 'pip', 'install', '--python', python, *args)
+    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install']
+    session.run_always(*cmd, '--python', python, *args)
