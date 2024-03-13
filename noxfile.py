@@ -75,7 +75,6 @@ def bench(session):
 def test_rc_leaks(session):
     build(session)
     install(session, '-r', 'requirements/bench.txt')
-
     session.run(
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
@@ -98,5 +97,8 @@ def _is_ci() -> bool:
 
 
 def install(session, *args):
-    session.run('pip', 'install', 'uv')
-    session.run('uv', 'pip', 'install', '--system', *args)
+    if session._runner.global_config.no_install:
+        session.debug('Skip install')
+        return
+    python = session.run_always('which', 'python', silent=True).strip()
+    session.run_always('uv', 'pip', 'install', '--python', python, *args)
