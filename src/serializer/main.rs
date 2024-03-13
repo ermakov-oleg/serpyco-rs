@@ -81,7 +81,13 @@ pub fn get_encoder(
         }
         Type::Decimal(type_info, base_type) => {
             let type_info = type_info.get().clone();
-            let encoder = DecimalEncoder { type_info, ctx };
+            let decimal_module = PyModule::import_bound(py, "decimal")?;
+            let decimal_cls = decimal_module.getattr("Decimal")?;
+            let encoder = DecimalEncoder {
+                type_info,
+                ctx,
+                decimal_cls: decimal_cls.unbind(),
+            };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::Boolean(_, base_type) => {

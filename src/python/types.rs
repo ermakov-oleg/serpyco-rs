@@ -16,7 +16,6 @@ use crate::validator::types::{
 
 use super::py::py_object_get_attr;
 
-pub static mut DECIMAL_PY_TYPE: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__NEW__: *mut PyObject = 0 as *mut PyObject;
 pub static mut PY_OBJECT__SETATTR__: *mut PyObject = 0 as *mut PyObject;
 
@@ -97,11 +96,6 @@ pub fn init(py: Python<'_>) {
         let setattr_str =
             pyo3_ffi::PyUnicode_InternFromString("__setattr__\0".as_ptr() as *const c_char);
         PY_OBJECT__SETATTR__ = py_object_get_attr(object, setattr_str).unwrap();
-
-        let decimal_str =
-            pyo3_ffi::PyUnicode_InternFromString("Decimal\0".as_ptr() as *const c_char);
-        let decimal = PyModule::import_bound(py, "decimal").unwrap();
-        DECIMAL_PY_TYPE = py_object_get_attr(decimal.as_ptr(), decimal_str).unwrap();
     });
 }
 

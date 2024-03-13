@@ -7,16 +7,7 @@ use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
 use super::macros::ffi;
-use super::types::{DECIMAL_PY_TYPE, PY_OBJECT__NEW__, PY_OBJECT__SETATTR__};
-
-#[inline]
-pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    let result = py_object_call1_make_tuple_or_err(unsafe { DECIMAL_PY_TYPE }, obj_to_str(value)?);
-    if ffi!(PyUnicode_CheckExact(value)) == 1 {
-        ffi!(Py_DECREF(value));
-    }
-    result
-}
+use super::types::{PY_OBJECT__NEW__, PY_OBJECT__SETATTR__};
 
 #[inline]
 pub(crate) fn to_uuid<'a, 'py>(
@@ -82,27 +73,11 @@ pub(crate) fn create_new_object(cls: *mut ffi::PyObject) -> PyResult<*mut ffi::P
 }
 
 #[inline]
-pub(crate) fn obj_to_str(obj: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    from_ptr_or_err(ffi!(PyObject_Str(obj)))
-}
-
-#[inline]
 fn py_object_call1_or_err(
     obj: *mut ffi::PyObject,
     args: *mut ffi::PyObject,
 ) -> PyResult<*mut ffi::PyObject> {
     from_ptr_or_err(ffi!(PyObject_CallObject(obj, args)))
-}
-
-#[inline]
-pub(crate) fn py_object_call1_make_tuple_or_err(
-    obj: *mut ffi::PyObject,
-    arg: *mut ffi::PyObject,
-) -> PyResult<*mut ffi::PyObject> {
-    let tuple_arg = from_ptr_or_err(ffi!(PyTuple_Pack(1, arg)))?;
-    let result = py_object_call1_or_err(obj, tuple_arg)?;
-    ffi!(Py_DECREF(tuple_arg));
-    Ok(result)
 }
 
 #[inline]
@@ -133,20 +108,6 @@ pub(crate) fn py_frozen_object_set_attr(
     py_object_call1_or_err(unsafe { PY_OBJECT__SETATTR__ }, tuple_arg)?;
     ffi!(Py_DECREF(tuple_arg));
     Ok(())
-}
-
-pub(crate) struct PyObjectIterator(*mut ffi::PyObject);
-
-impl Iterator for PyObjectIterator {
-    type Item = PyResult<*mut ffi::PyObject>;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        match from_ptr_or_opt(ffi!(PyIter_Next(self.0))) {
-            Some(item) => Some(Ok(item)),
-            None => Python::with_gil(|py| PyErr::take(py).map(Err)),
-        }
-    }
 }
 
 #[inline]

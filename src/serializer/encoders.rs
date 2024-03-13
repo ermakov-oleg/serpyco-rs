@@ -16,7 +16,7 @@ use crate::errors::{ToPyErr, ValidationError};
 use crate::python::{
     create_new_object, create_py_list, create_py_tuple, parse_date, parse_datetime, parse_time,
     py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item,
-    py_object_set_attr, py_tuple_set_item, to_decimal, to_uuid,
+    py_object_set_attr, py_tuple_set_item, to_uuid,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
@@ -135,6 +135,7 @@ pub struct DecimalEncoder {
     pub(crate) type_info: DecimalType,
     #[allow(dead_code)]
     pub(crate) ctx: Context,
+    pub(crate) decimal_cls: Py<PyAny>,
 }
 
 impl Encoder for DecimalEncoder {
@@ -182,8 +183,8 @@ impl Encoder for DecimalEncoder {
             false
         };
         if valid {
-            let result = to_decimal(value.as_ptr()).expect("decimal");
-            Ok(unsafe { Bound::from_owned_ptr(value.py(), result) })
+            let str_value = value.str().expect("Failed to convert value to string.");
+            self.decimal_cls.bind(value.py()).call1((str_value,))
         } else {
             invalid_type!("decimal", value, instance_path)
         }
@@ -294,7 +295,6 @@ impl Encoder for DictionaryEncoder {
                 let value = self.value_encoder.dump(&v)?;
                 if !self.omit_none || !value.is_none() {
                     py_dict_set_item(&result_dict, key.as_ptr(), value)?;
-                    // result_dict.set_item(key, value)?;
                 }
             }
             Ok(result_dict.into_any())
