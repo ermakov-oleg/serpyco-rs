@@ -392,15 +392,20 @@ impl Encoder for TypedDictEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let dict = PyDict::new_bound(value.py());
-
+        let value = match value.downcast::<PyDict>() {
+            Ok(val) => val,
+            Err(_) => {
+                return invalid_type_dump!("dict", value);
+            }
+        };
         for field in &self.fields {
             let field_val = match value.get_item(&field.name) {
-                Ok(val) => val,
-                Err(e) => {
+                Ok(Some(val)) => val,
+                _ => {
                     if field.required {
                         return Err(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {} (err: {})",
-                            &field.name, e
+                            "data dictionary is missing required parameter {}",
+                            &field.name
                         )));
                     } else {
                         continue;
