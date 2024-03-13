@@ -92,13 +92,18 @@ def bench_codespeed(session):
     session.run('pytest', 'bench', '--ignore=bench/compare/test_benchmarks.py', '--codspeed')
 
 
+def install(session, *args, use_pip: bool = False):
+    if session._runner.global_config.no_install:
+        return
+    use_pip = use_pip or _is_windows()
+    python = session.run_always('which', 'python', silent=True).strip()
+    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install']
+    session.run_always(*cmd, '--python', python, *args)
+
+
 def _is_ci() -> bool:
     return bool(os.environ.get('CI', None))
 
 
-def install(session, *args, use_pip: bool = False):
-    if session._runner.global_config.no_install:
-        return
-    python = session.run_always('which', 'python', silent=True).strip()
-    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install']
-    session.run_always(*cmd, '--python', python, *args)
+def _is_windows() -> bool:
+    return os.name == 'nt'
