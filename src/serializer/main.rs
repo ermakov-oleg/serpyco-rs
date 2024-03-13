@@ -51,14 +51,9 @@ impl Serializer {
     }
 
     #[inline]
-    pub fn load(&self, value: &PyAny) -> PyResult<Py<PyAny>> {
+    pub fn load<'py>(&'py self, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let instance_path = InstancePath::new();
-        unsafe {
-            Ok(Py::from_owned_ptr(
-                value.py(),
-                self.encoder.load(value.as_ptr(), &instance_path)?,
-            ))
-        }
+        self.encoder.load(value, &instance_path)
     }
 }
 
@@ -94,7 +89,14 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::Uuid(_, base_type) => {
-            let encoder = UUIDEncoder { ctx };
+            let uuid = PyModule::import_bound(py, "uuid")?;
+            let uuid_cls = uuid.getattr("UUID")?;
+
+            let encoder = UUIDEncoder {
+                ctx,
+                uuid_cls: uuid_cls.unbind(),
+
+            };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::Time(_, base_type) => {

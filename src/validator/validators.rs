@@ -1,9 +1,11 @@
 use crate::validator::types::EnumItems;
 use crate::validator::{raise_error, InstancePath, Sequence, Value};
-use pyo3::{Bound, PyErr, PyResult};
+use pyo3::{Bound, PyAny, PyErr, PyResult};
 use std::cmp::Ordering;
 use std::fmt::Display;
-use pyo3::types::PySequence;
+use pyo3::conversion::FromPyObjectBound;
+use pyo3::prelude::PyAnyMethods;
+use pyo3::types::{PySequence, PyString};
 
 pub fn check_lower_bound<T>(val: T, min: Option<T>, instance_path: &InstancePath) -> PyResult<()>
 where
@@ -36,7 +38,7 @@ where
 }
 
 pub fn check_bounds<T>(
-    val: impl Into<T>,
+    val: T,
     min: Option<T>,
     max: Option<T>,
     instance_path: &InstancePath,
@@ -47,14 +49,13 @@ where
     if min.is_none() && max.is_none() {
         return Ok(());
     }
-    let val = val.into();
     check_lower_bound(val, min, instance_path)?;
     check_upper_bound(val, max, instance_path)?;
     Ok(())
 }
 
 pub fn check_min_length(
-    val: &Value,
+    val: &Bound<'_, PyString>,
     len: usize,
     min: Option<usize>,
     instance_path: &InstancePath,
@@ -71,7 +72,7 @@ pub fn check_min_length(
 }
 
 pub fn check_max_length(
-    val: &Value,
+    val: &Bound<'_, PyString>,
     len: usize,
     max: Option<usize>,
     instance_path: &InstancePath,
@@ -87,7 +88,24 @@ pub fn check_max_length(
     Ok(())
 }
 
+
 pub fn check_length(
+    val: &Bound<'_, PyString>,
+    min: Option<usize>,
+    max: Option<usize>,
+    instance_path: &InstancePath,
+) -> PyResult<()> {
+    if min.is_none() && max.is_none() {
+        return Ok(());
+    }
+    let len = val.len()?;
+    check_min_length(val, len, min, instance_path)?;
+    check_max_length(val, len, max, instance_path)?;
+    Ok(())
+}
+
+
+pub fn check_length_(
     val: &Value,
     min: Option<usize>,
     max: Option<usize>,
@@ -97,8 +115,8 @@ pub fn check_length(
         return Ok(());
     }
     let len = val.str_len()? as usize;
-    check_min_length(val, len, min, instance_path)?;
-    check_max_length(val, len, max, instance_path)?;
+    // check_min_length(val, len, min, instance_path)?;
+    // check_max_length(val, len, max, instance_path)?;
     Ok(())
 }
 
@@ -191,6 +209,16 @@ pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) ->
     Ok(())
 }
 
+
+pub fn _invalid_type_new(type_: &str, value: &Bound<'_, PyAny>, instance_path: &InstancePath) -> PyResult<()> {
+    let error = match value.is_instance_of::<PyString>() {
+        true => format!(r#""{}" is not of type "{}""#, value, type_),
+        false => format!(r#"{} is not of type "{}""#, value, type_),
+    };
+    raise_error(error, instance_path)?;
+    Ok(())
+}
+
 macro_rules! invalid_type {
     ($type_: expr, $value: expr, $path: expr) => {{
         crate::validator::validators::_invalid_type($type_, $value, $path)?;
@@ -201,8 +229,7 @@ macro_rules! invalid_type {
 
 macro_rules! invalid_type_new {
     ($type_: expr, $value: expr, $path: expr) => {{
-        let error = format!(r#""{}" is not of type "{}""#, $value.to_string(), $type_)
-        crate::validator::raise_error(error, $path)?;
+        crate::validator::validators::_invalid_type_new($type_, $value, $path)?;
         unreachable!(); // todo: Discard the use of unreachable
     }};
 }
@@ -217,7 +244,7 @@ macro_rules! invalid_type_dump {
 }
 
 
-pub fn _invalid_enum_item(
+pub fn __invalid_enum_item(
     items: EnumItems,
     value: Value,
     instance_path: &InstancePath,
@@ -230,6 +257,28 @@ pub fn _invalid_enum_item(
     Ok(())
 }
 
+macro_rules! invalid_enum_item_ {
+    ($items: expr, $value: expr, $path: expr) => {{
+        crate::validator::validators::__invalid_enum_item($items, $value, $path)?;
+        unreachable!(); // todo: Discard the use of unreachable
+    }};
+}
+
+
+pub fn _invalid_enum_item(
+    items: EnumItems,
+    value: &Bound<'_, PyAny>,
+    instance_path: &InstancePath,
+) -> PyResult<()> {
+    let error = match value.is_instance_of::<PyString>() {
+        true => format!(r#""{}" is not one of {}"#, value, items),
+        false => format!(r#"{} is not one of {}"#, value, items),
+    };
+
+    raise_error(&error, instance_path)?;
+    Ok(())
+}
+
 macro_rules! invalid_enum_item {
     ($items: expr, $value: expr, $path: expr) => {{
         crate::validator::validators::_invalid_enum_item($items, $value, $path)?;
@@ -237,7 +286,10 @@ macro_rules! invalid_enum_item {
     }};
 }
 
+
+
 use crate::validator::value::SequenceImpl;
+pub(crate) use invalid_enum_item_;
 pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
 pub(crate) use invalid_type_new;

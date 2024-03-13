@@ -7,25 +7,22 @@ use dyn_clone::{clone_trait_object, DynClone};
 use pyo3::{Bound, intern, Py, PyAny, PyResult};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDateTime, PyDict, PyList, PySequence, PyString};
+use pyo3::types::{PyBool, PyBytes, PyDateTime, PyDict, PyFloat, PyLong, PyList, PySequence, PyString};
 use pyo3_ffi::PyObject;
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::python::{create_new_object, create_py_list, get_none, parse_date, parse_datetime, parse_time, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, to_decimal, to_uuid};
+use crate::python::{create_new_object, create_py_list, create_py_tuple, get_none, parse_date, parse_date_new, parse_datetime, parse_datetime_new, parse_time, parse_time_new, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item, py_object_call1_make_tuple_or_err, py_object_get_item, py_object_set_attr, py_str_to_str, py_tuple_set_item, to_decimal, to_uuid, to_uuid_new};
 use crate::python::macros::{call_object, ffi};
-use crate::validator::{
-    Array as PyArray, Context, Dict as PyDictOld, InstancePath, Sequence, Tuple as PyTuple,
-    Value as PyValue,
-};
+use crate::validator::{Array as PyArray, Context, Dict as PyDictOld, Dict, InstancePath, Sequence, Tuple as PyTuple, Value as PyValue};
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
-use crate::validator::validators::{check_bounds, check_length, check_sequence_size, check_sequence_size_, invalid_enum_item, invalid_type, invalid_type_dump, missing_required_property, no_encoder_for_discriminator};
+use crate::validator::validators::{check_bounds, check_length, check_length_, check_sequence_size, check_sequence_size_, invalid_enum_item, invalid_enum_item_, invalid_type, invalid_type_dump, invalid_type_new, missing_required_property, no_encoder_for_discriminator};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
 pub trait Encoder: DynClone + Debug {
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>>;
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject>;
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>>;
 }
 
 clone_trait_object!(Encoder);
@@ -40,10 +37,10 @@ impl Encoder for NoopEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, _instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        ffi!(Py_INCREF(value));
-        Ok(value)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, _instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
     }
+
 }
 
 #[derive(Debug, Clone)]
@@ -60,15 +57,12 @@ impl Encoder for IntEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let val = PyValue::new(value);
-
-        if val.is_int() {
-            check_bounds(val, self.type_info.min, self.type_info.max, instance_path)?;
-            ffi!(Py_INCREF(value));
-            Ok(value)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyLong>() {
+            check_bounds(val.extract()?, self.type_info.min, self.type_info.max, instance_path)?;
+            Ok(value.clone())
         } else {
-            invalid_type!("integer", val, instance_path)
+            invalid_type_new!("integer", value, instance_path)
         }
     }
 }
@@ -85,21 +79,26 @@ impl Encoder for FloatEncoder {
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
-
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        if py_val.is_number() {
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyLong>() {
             check_bounds(
-                py_val,
+                val.extract()?,
                 self.type_info.min,
                 self.type_info.max,
                 instance_path,
             )?;
-            ffi!(Py_INCREF(value));
-            Ok(value)
+            Ok(value.clone())
+        } else if let Ok(val) = value.downcast::<PyFloat>() {
+            check_bounds(
+                val.extract()?,
+                self.type_info.min,
+                self.type_info.max,
+                instance_path,
+            )?;
+            Ok(value.clone())
         } else {
-            invalid_type!("number", py_val, instance_path)
+            invalid_type_new!("number", value, instance_path)
         }
     }
 }
@@ -112,22 +111,39 @@ pub struct DecimalEncoder {
 }
 
 impl Encoder for DecimalEncoder {
+
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.str()?.into_any())
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-
-        if let Some(val) = py_val.maybe_number() {
-            check_bounds(val, self.type_info.min, self.type_info.max, instance_path)?;
-            let result = to_decimal(value).expect("decimal");
-            Ok(result)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        let valid = if let Ok(val) = value.downcast::<PyFloat>() {
+            check_bounds(val.value(), self.type_info.min, self.type_info.max, instance_path)?;
+            true
+        } else if let Ok(val) = value.downcast::<PyLong>() {
+            check_bounds(val.extract()?, self.type_info.min, self.type_info.max, instance_path)?;
+            true
+        } else if let Ok(val) = value.downcast::<PyString>() {
+            match val.to_str()?.parse::<f64>() {
+                Ok(val_f64) => {
+                    check_bounds(val_f64, self.type_info.min, self.type_info.max, instance_path)?;
+                    true
+                }
+                Err(_) => false,
+            }
         } else {
-            invalid_type!("decimal", py_val, instance_path)
+           false
+        };
+        if valid {
+            let result = to_decimal(value.as_ptr()).expect("decimal");
+            Ok(unsafe {Bound::from_owned_ptr(value.py(), result)})
+        } else {
+            invalid_type_new!("decimal", value, instance_path)
         }
+
+
     }
 }
 
@@ -146,19 +162,17 @@ impl Encoder for StringEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let val = PyValue::new(value);
-        if val.is_string() {
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyString>() {
             check_length(
-                &val,
+                val,
                 self.type_info.min_length,
                 self.type_info.max_length,
                 instance_path,
             )?;
-            ffi!(Py_INCREF(value));
-            Ok(value)
+            Ok(value.clone())
         } else {
-            invalid_type!("string", val, instance_path)
+            invalid_type_new!("string", value, instance_path)
         }
     }
 }
@@ -176,13 +190,11 @@ impl Encoder for BooleanEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        if py_val.as_bool().is_some() {
-            ffi!(Py_INCREF(value));
-            Ok(value)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyBool>() {
+            Ok(value.clone())
         } else {
-            invalid_type!("boolean", py_val, instance_path)
+            invalid_type_new!("boolean", value, instance_path)
         }
     }
 }
@@ -200,13 +212,11 @@ impl Encoder for BytesEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if py_value.is_bytes() {
-            ffi!(Py_INCREF(value));
-            Ok(value)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyBytes>() {
+            Ok(value.clone())
         } else {
-            invalid_type!("bytes", py_value, instance_path)
+            invalid_type_new!("bytes", value, instance_path)
         }
     }
 }
@@ -240,20 +250,18 @@ impl Encoder for DictionaryEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if let Some(dict) = py_value.as_dict() {
-            let mut result_dict = PyDictOld::new_empty();
-            for i in dict.iter()? {
-                let (k, v) = i?;
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyDict>() {
+            let result_dict = PyDict::new_bound(val.py());
+            for (k, v) in val.iter() {
                 let instance_path = instance_path.push(&k);
-                let key = self.key_encoder.load(k.as_ptr(), &instance_path)?;
-                let value = self.value_encoder.load(v.as_ptr(), &instance_path)?;
-                result_dict.set(key, value)?;
+                let key = self.key_encoder.load(&k, &instance_path)?;
+                let value = self.value_encoder.load(&v, &instance_path)?;
+                py_dict_set_item(&result_dict, key.as_ptr(), value)?;
             }
-            Ok(result_dict.as_ptr())
+            Ok(result_dict.into_any())
         } else {
-            invalid_type!("object", py_value, instance_path)
+            invalid_type_dump!("dict", value)
         }
     }
 }
@@ -286,16 +294,20 @@ impl Encoder for ArrayEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if let Some(val) = py_value.as_array() {
-            let array: PyArray = val.map_into(&|i, item| {
-                let instance_path = instance_path.push(i);
-                self.encoder.load(item, &instance_path)
-            })?;
-            Ok(array.as_ptr())
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyList>() {
+            let size = val.len();
+            let result = create_py_list(value.py(), size);
+
+            for index in 0..size {
+                let item = py_list_get_item(val, index);
+                let instance_path = instance_path.push(index);
+                let val = self.encoder.load(&item, &instance_path)?;
+                py_list_set_item(&result, index, val);
+            }
+            Ok(result.into_any())
         } else {
-            invalid_type!("array", py_value, instance_path)
+            invalid_type_new!("list", value, instance_path)
         }
     }
 }
@@ -338,30 +350,24 @@ impl Encoder for EntityEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
         let setattr_fn = if self.is_frozen {
             py_frozen_object_set_attr
         } else {
             py_object_set_attr
         };
-        if let Some(dict) = py_value.as_dict() {
-            let obj = create_new_object(self.cls.as_ptr())?;
-
+        if let Ok(val) = value.downcast::<PyDict>() {
+            let obj_ptr = create_new_object(self.cls.as_ptr())?;
+            let obj = unsafe {Bound::from_owned_ptr(value.py(), obj_ptr)};
             for field in &self.fields {
-                let val = match dict.get_item(field.dict_key.as_ptr()) {
+                let val = match val.get_item(&field.dict_key)? {
                     Some(val) => {
-                        let cur_path = PyValue::new(field.dict_key.as_ptr());
-                        let instance_path = instance_path.push(&cur_path);
-                        field.encoder.load(val.as_ptr(), &instance_path)?
+                        let instance_path = instance_path.push(field.dict_key.bind(value.py()).as_any());
+                        field.encoder.load(&val, &instance_path)?
                     }
                     None => match (&field.default, &field.default_factory) {
-                        (Some(val), _) => {
-                            let val = val.as_ptr();
-                            ffi!(Py_INCREF(val));
-                            val
-                        }
-                        (_, Some(val)) => call_object!(val.as_ptr())?,
+                        (Some(val), _) => val.bind(value.py()).clone(),
+                        (_, Some(val)) => val.bind(value.py()).call0()?,
                         (None, _) => {
                             return Err(missing_required_property(
                                 &field.dict_key_rs,
@@ -370,13 +376,12 @@ impl Encoder for EntityEncoder {
                         }
                     },
                 };
-                setattr_fn(obj, field.name.as_ptr(), val)?;
-                // val RC +1
-                ffi!(Py_DECREF(val));
+                setattr_fn(obj_ptr, field.name.as_ptr(), val.as_ptr())?;
             }
+
             Ok(obj)
         } else {
-            invalid_type!("object", py_value, instance_path)
+            invalid_type_new!("object", value, instance_path)
         }
     }
 }
@@ -395,8 +400,8 @@ impl Encoder for TypedDictEncoder {
         let dict = PyDict::new_bound(value.py());
         let value = match value.downcast::<PyDict>() {
             Ok(val) => val,
-            Err(_) => {
-                return invalid_type_dump!("dict", value);
+            _ => {
+                return invalid_type_dump!("dict", value)
             }
         };
         for field in &self.fields {
@@ -422,36 +427,33 @@ impl Encoder for TypedDictEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if let Some(dict) = py_value.as_dict() {
-            let dict_ptr = ffi!(PyDict_New());
-            for field in &self.fields {
-                let val = match dict.get_item(field.dict_key.as_ptr()) {
-                    Some(val) => {
-                        let cur_path = PyValue::new(field.dict_key.as_ptr());
-                        let instance_path = instance_path.push(&cur_path);
-                        field.encoder.load(val.as_ptr(), &instance_path)? // new obj or RC +1
-                    }
-                    None => {
-                        if field.required {
-                            return Err(missing_required_property(
-                                &field.dict_key_rs,
-                                instance_path,
-                            ));
-                        } else {
-                            continue;
-                        }
-                    }
-                };
-                ffi!(PyDict_SetItem(dict_ptr, field.name.as_ptr(), val));
-                // key and val RC +1
-                ffi!(Py_DECREF(val));
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        let value = match value.downcast::<PyDict>() {
+            Ok(val) => val,
+            Err(_) => {
+                return invalid_type_dump!("dict", value);
             }
-            Ok(dict_ptr)
-        } else {
-            invalid_type!("object", py_value, instance_path)
+        };
+        let dict = PyDict::new_bound(value.py());
+        for field in &self.fields {
+            let field_val = match value.get_item(&field.dict_key) {
+                Ok(Some(val)) => val,
+                _ => {
+                    if field.required {
+                        return Err(missing_required_property(
+                            &field.dict_key_rs,
+                            instance_path,
+                        ));
+                    } else {
+                        continue;
+                    }
+                }
+            };
+            let instance_path = instance_path.push(field.dict_key.bind(value.py()).as_any());
+            let dump_result = field.encoder.load(&field_val, &instance_path)?;
+            py_dict_set_item(&dict, field.name.as_ptr(), dump_result)?;
         }
+        Ok(dict.into_any())
     }
 }
 
@@ -459,6 +461,7 @@ impl Encoder for TypedDictEncoder {
 pub struct UUIDEncoder {
     #[allow(dead_code)]
     pub(crate) ctx: Context,
+    pub(crate) uuid_cls: Py<PyAny>,
 }
 
 impl Encoder for UUIDEncoder {
@@ -468,14 +471,15 @@ impl Encoder for UUIDEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        if let Some(val) = py_val.as_str() {
-            if Uuid::parse_str(val).is_ok() {
-                return to_uuid(value);
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyString>() {
+            if Uuid::parse_str(val.to_str()?).is_ok() {
+                if let Ok(result) =  to_uuid_new(self.uuid_cls.bind(value.py()), val) {
+                    return Ok(result)
+                }
             }
         }
-        invalid_type!("uuid", py_val, instance_path)
+        invalid_type_new!("uuid", value, instance_path)
     }
 }
 
@@ -494,25 +498,24 @@ impl Encoder for EnumEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        let item = if let Some(val) = py_val.as_str() {
-            EnumItem::String(val.to_string())
-        } else if let Some(val) = py_val.as_int() {
-            EnumItem::Int(val)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        let val = if let Ok(val) = value.downcast::<PyString>() {
+            EnumItem::String(val.to_str()?.to_owned())
+        } else if let Ok(val) = value.downcast::<PyLong>() {
+            EnumItem::Int(val.extract()?)
         } else {
-            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+            invalid_enum_item!((&self.enum_items).into(), value, instance_path);
         };
-        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&item));
+
+        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&val));
 
         match index {
             Ok(index) => {
                 let (_, py_item) = &self.enum_items[index];
-                ffi!(Py_INCREF(py_item.as_ptr()));
-                Ok(py_item.as_ptr())
+                Ok(py_item.bind(value.py()).clone())
             }
             Err(_) => {
-                invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+                invalid_enum_item!((&self.enum_items).into(), value, instance_path);
             }
         }
     }
@@ -532,27 +535,27 @@ impl Encoder for LiteralEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        let item = if let Some(val) = py_val.as_str() {
-            EnumItem::String(val.to_string())
-        } else if let Some(val) = py_val.as_int() {
-            EnumItem::Int(val)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        let val = if let Ok(val) = value.downcast::<PyString>() {
+            EnumItem::String(val.to_str()?.to_owned())
+        } else if let Ok(val) = value.downcast::<PyLong>() {
+            EnumItem::Int(val.extract()?)
         } else {
-            invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+            invalid_enum_item!((&self.enum_items).into(), value, instance_path);
         };
 
-        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&item));
+        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&val));
+
         match index {
             Ok(index) => {
                 let (_, py_item) = &self.enum_items[index];
-                ffi!(Py_INCREF(py_item.as_ptr()));
-                Ok(py_item.as_ptr())
+                Ok(py_item.bind(value.py()).clone())
             }
             Err(_) => {
-                invalid_enum_item!((&self.enum_items).into(), py_val, instance_path);
+                invalid_enum_item!((&self.enum_items).into(), value, instance_path);
             }
         }
+
     }
 }
 
@@ -574,10 +577,9 @@ impl Encoder for OptionalEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if py_value.is_none() {
-            Ok(get_none())
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if value.is_none() {
+            Ok(value.clone())
         } else {
             self.encoder.load(value, instance_path)
         }
@@ -611,20 +613,24 @@ impl Encoder for TupleEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        match py_value.as_sequence() {
-            None => {
-                invalid_type!("sequence", py_value, instance_path)
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        // Check sequence is not str
+        if let Ok(seq) = value.downcast::<PySequence>() {
+            if value.is_instance_of::<PyString>() {
+                return invalid_type_new!("sequence", value, instance_path);
             }
-            Some(val) => {
-                check_sequence_size_(&val, self.encoders.len() as isize, Some(instance_path))?;
-                let tuple: PyTuple = val.map_into(&|i, item| {
-                    let instance_path = instance_path.push(i);
-                    self.encoders[i as usize].load(item, &instance_path)
-                })?;
-                Ok(tuple.as_ptr())
+            let seq_len = seq.len()?;
+            check_sequence_size(&seq, seq_len, self.encoders.len(), Some(instance_path))?;
+            let result = create_py_tuple(value.py(), seq_len);
+            for index in 0..seq_len {
+                let item = seq.get_item(index)?;
+                let instance_path = instance_path.push(index);
+                let val = self.encoders[index].load(&item, &instance_path)?;
+                py_tuple_set_item(&result, index, val);
             }
+            Ok(result.into_any())
+        } else {
+            invalid_type_new!("sequence", value, instance_path)
         }
     }
 }
@@ -650,14 +656,14 @@ impl Encoder for UnionEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
         for encoder in &self.encoders {
             let result = encoder.load(value, instance_path);
             if result.is_ok() {
                 return result;
             }
         }
-        invalid_type!(&self.union_repr, PyValue::new(value), instance_path)
+        invalid_type_new!(&self.union_repr, value, instance_path)
     }
 }
 
@@ -697,31 +703,28 @@ impl Encoder for DiscriminatedUnionEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        match py_value.as_dict() {
-            None => invalid_type!("object", py_value, instance_path),
-            Some(dict) => {
-                let key = match py_object_get_item(dict.as_ptr(), self.load_discriminator.as_ptr())
-                {
-                    Ok(val) => {
-                        let result = py_str_to_str(val)?;
-                        ffi!(Py_DECREF(val));
-                        result
-                    }
-                    Err(_) => {
-                        return Err(missing_required_property(
-                            &self.load_discriminator_rs,
-                            instance_path,
-                        ))
-                    }
-                };
-                let encoder = self.encoders.get(key).ok_or_else(|| {
-                    let instance_path = instance_path.push(self.load_discriminator_rs.clone());
-                    no_encoder_for_discriminator(key, &self.keys, &instance_path)
-                })?;
-                encoder.load(value, instance_path)
-            }
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyDict>() {
+            let key_any = match val.get_item(&self.load_discriminator) {
+                Ok(Some(k)) => k,
+                _ => {
+                    return Err(missing_required_property(
+                        &self.load_discriminator_rs,
+                        instance_path,
+                    ))
+                }
+            };
+
+            let key_py_string = key_any.downcast::<PyString>().expect("key must be a string");
+            let key_str = key_py_string.to_str()?;
+            let encoder = self.encoders.get(key_str).ok_or_else(|| {
+                let instance_path = instance_path.push(self.load_discriminator_rs.as_str());
+                no_encoder_for_discriminator(key_str, &self.keys, &instance_path)
+            })?;
+            encoder.load(value, instance_path)
+
+        } else {
+            invalid_type_new!("dict", value, instance_path)
         }
     }
 }
@@ -740,14 +743,13 @@ impl Encoder for TimeEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_value = PyValue::new(value);
-        if let Some(val) = py_value.as_str() {
-            if let Ok(result) = parse_time(val) {
-                return Ok(result);
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyString>() {
+            if let Ok(result) = parse_time_new(value.py(), val.to_str()?) {
+                return Ok(result.into_any());
             }
         }
-        invalid_type!("time", py_value, instance_path)
+        invalid_type_new!("time", value, instance_path)
     }
 }
 
@@ -765,14 +767,13 @@ impl Encoder for DateTimeEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        if let Some(val) = py_val.as_str() {
-            if let Ok(result) = parse_datetime(val) {
-                return Ok(result);
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyString>() {
+            if let Ok(result) = parse_datetime_new(value.py(), val.to_str()?) {
+                return Ok(result.into_any());
             }
         }
-        invalid_type!("datetime", py_val, instance_path)
+        invalid_type_new!("datetime", value, instance_path)
     }
 }
 
@@ -795,14 +796,13 @@ impl Encoder for DateEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
-        let py_val = PyValue::new(value);
-        if let Some(val) = py_val.as_str() {
-            if let Ok(result) = parse_date(val) {
-                return Ok(result);
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
+        if let Ok(val) = value.downcast::<PyString>() {
+            if let Ok(result) = parse_date_new(value.py(), val.to_str()?) {
+                return Ok(result.into_any());
             }
         }
-        invalid_type!("date", py_val, instance_path)
+        invalid_type_new!("date", value, instance_path)
     }
 }
 
@@ -834,7 +834,7 @@ impl Encoder for LazyEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => match encoder {
                 Encoders::Entity(encoder) => encoder.load(value, instance_path),
@@ -864,10 +864,11 @@ impl Encoder for CustomEncoder {
     }
 
     #[inline]
-    fn load(&self, value: *mut PyObject, instance_path: &InstancePath) -> PyResult<*mut PyObject> {
+    fn load<'a>(&self, value: &Bound<'a, PyAny>, instance_path: &InstancePath) -> PyResult<Bound<'a, PyAny>> {
         match self.load {
-            Some(ref load) => py_object_call1_make_tuple_or_err(load.as_ptr(), value),
+            Some(ref load) => load.bind(value.py()).call1((value, )),
             None => self.inner.load(value, instance_path),
         }
     }
+
 }

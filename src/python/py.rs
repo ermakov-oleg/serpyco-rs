@@ -3,7 +3,7 @@ use std::ptr::NonNull;
 
 use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 use pyo3_ffi::Py_ssize_t;
 
 use crate::python::macros::use_immortal;
@@ -31,6 +31,11 @@ pub(crate) fn to_decimal(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObje
 #[inline]
 pub(crate) fn to_uuid(value: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
     py_object_call1_make_tuple_or_err(unsafe { UUID_PY_TYPE }, value)
+}
+
+#[inline]
+pub(crate) fn to_uuid_new<'a, 'py>(uuid_cls: &'a Bound<'py, PyAny>, value: &'a Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
+    uuid_cls.call1((value, ))
 }
 
 #[inline]
@@ -78,6 +83,7 @@ pub(crate) fn create_py_list(py: Python, size: usize) -> Bound<PyList> {
 }
 
 
+
 #[inline]
 pub(crate) fn py_list_get_item<'a>(list: &'a Bound<'a, PyList>, index: usize) -> Bound<'a, PyAny> {
     #[cfg(any(Py_LIMITED_API, PyPy))]
@@ -99,8 +105,25 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
 
 #[inline]
 pub(crate) fn py_dict_set_item(list: &Bound<PyDict>, key: *mut ffi::PyObject, value: Bound<PyAny>) -> PyResult<()>  {
+    // todo: Check performance
     let result = ffi!(PyDict_SetItem(list.as_ptr(), key, value.as_ptr()));
     error_on_minusone(result)
+}
+
+
+#[inline]
+pub(crate) fn create_py_tuple(py: Python, size: usize) -> Bound<PyTuple> {
+    let size: Py_ssize_t = size.try_into().expect("size is too large");
+    unsafe {
+        Bound::from_owned_ptr(py, ffi::PyTuple_New(size)).downcast_into_unchecked()
+    }
+}
+
+
+#[inline]
+pub(crate) fn py_tuple_set_item(list: &Bound<PyTuple>, index: usize, value: Bound<PyAny>)  {
+    let index: Py_ssize_t = index.try_into().expect("size is too large");
+    ffi!(PyTuple_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
 
 #[inline]
