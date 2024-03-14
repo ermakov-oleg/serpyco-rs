@@ -8,7 +8,6 @@ use validator::types;
 
 #[pymodule]
 fn _serpyco_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    python::init(py);
     m.add_class::<serializer::Serializer>()?;
 
     // Types

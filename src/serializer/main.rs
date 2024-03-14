@@ -235,12 +235,14 @@ pub fn get_encoder(
             let builtins = PyModule::import_bound(py, intern!(py, "builtins"))?;
             let object = builtins.getattr(intern!(py, "object"))?;
             let create_object = object.getattr(intern!(py, "__new__"))?;
+            let object_set_attr = object.getattr("__setattr__")?;
 
             let encoder = EntityEncoder {
                 fields,
                 omit_none: type_info.omit_none,
                 is_frozen: type_info.is_frozen,
                 create_object: create_object.unbind(),
+                object_set_attr: object_set_attr.unbind(),
                 cls: type_info.cls.clone(),
                 ctx,
             };

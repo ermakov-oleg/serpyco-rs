@@ -15,8 +15,7 @@ use uuid::Uuid;
 use crate::errors::{ToPyErr, ValidationError};
 use crate::python::{
     create_py_dict_known_size, create_py_list, create_py_tuple, parse_date, parse_datetime,
-    parse_time, py_dict_set_item, py_frozen_object_set_attr, py_list_get_item, py_list_set_item,
-    py_object_set_attr, py_tuple_set_item, to_uuid,
+    parse_time, py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
@@ -380,6 +379,7 @@ pub struct EntityEncoder {
     pub(crate) is_frozen: bool,
     pub(crate) fields: Vec<Field>,
     pub(crate) create_object: Py<PyAny>,
+    pub(crate) object_set_attr: Py<PyAny>,
     #[allow(dead_code)]
     pub(crate) ctx: Context,
 }
@@ -417,11 +417,7 @@ impl Encoder for EntityEncoder {
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let setattr_fn = if self.is_frozen {
-            py_frozen_object_set_attr
-        } else {
-            py_object_set_attr
-        };
+        let py_frozen_object_set_attr = self.object_set_attr.bind(value.py());
         if let Ok(val) = value.downcast::<PyDict>() {
             let obj = self
                 .create_object
@@ -445,7 +441,12 @@ impl Encoder for EntityEncoder {
                         }
                     },
                 };
-                setattr_fn(obj.as_ptr(), field.name.as_ptr(), val.as_ptr())?;
+
+                if self.is_frozen {
+                    py_frozen_object_set_attr.call1((&obj, &field.name, val))?;
+                } else {
+                    obj.setattr(&field.name, val)?;
+                };
             }
 
             Ok(obj)
@@ -546,7 +547,7 @@ impl Encoder for UUIDEncoder {
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyString>() {
             if Uuid::parse_str(val.to_str()?).is_ok() {
-                if let Ok(result) = to_uuid(self.uuid_cls.bind(value.py()), val) {
+                if let Ok(result) = self.uuid_cls.bind(value.py()).call1((val,)) {
                     return Ok(result);
                 }
             }

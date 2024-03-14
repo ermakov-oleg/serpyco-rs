@@ -1,10 +1,5 @@
-use std::os::raw::c_char;
-use std::sync::Once;
-
-use pyo3::ffi::PyObject;
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::PyModule;
-use pyo3::{Bound, Python};
+use pyo3::Bound;
 use pyo3::{PyAny, PyResult};
 
 use crate::validator::types::{
@@ -13,12 +8,6 @@ use crate::validator::types::{
     LiteralType, OptionalType, RecursionHolder, StringType, TimeType, TupleType, TypedDictType,
     UUIDType, UnionType,
 };
-
-use super::py::py_object_get_attr;
-
-pub static mut PY_OBJECT__SETATTR__: *mut PyObject = 0 as *mut PyObject;
-
-static INIT: Once = Once::new();
 
 #[derive(Clone, Debug)]
 pub enum Type<'a, Base = Bound<'a, BaseType>> {
@@ -85,17 +74,6 @@ pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
     }
 }
 
-pub fn init(py: Python<'_>) {
-    INIT.call_once(|| unsafe {
-        let builtins = PyModule::import_bound(py, "builtins").unwrap();
-
-        let object = get_attr_ptr!(builtins, "object");
-        let setattr_str =
-            pyo3_ffi::PyUnicode_InternFromString("__setattr__\0".as_ptr() as *const c_char);
-        PY_OBJECT__SETATTR__ = py_object_get_attr(object, setattr_str).unwrap();
-    });
-}
-
 macro_rules! check_type {
     ($type_info:ident, $base_type:ident, $enum:ident, $type:ident) => {
         if let Ok(t) = $type_info.extract::<Bound<'_, $type>>() {
@@ -104,11 +82,4 @@ macro_rules! check_type {
     };
 }
 
-macro_rules! get_attr_ptr {
-    ($mod:expr, $type:expr) => {
-        $mod.getattr($type).unwrap().as_ptr()
-    };
-}
-
 pub(crate) use check_type;
-pub(crate) use get_attr_ptr;
