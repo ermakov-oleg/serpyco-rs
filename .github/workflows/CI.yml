@@ -131,7 +131,8 @@ jobs:
           path: wheels
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          # https://github.com/astral-sh/uv/issues/2450
+          python -m pip install --upgrade pip nox uv==0.1.18
       - name: tests
         run: nox -s test
         env:
@@ -166,7 +167,8 @@ jobs:
           path: wheels
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          # https://github.com/astral-sh/uv/issues/2450
+          python -m pip install --upgrade pip nox uv==0.1.18
           nox -s bench --no-venv --install-only
       - name: bench
         run: nox -s bench --no-venv --no-install
@@ -189,7 +191,8 @@ jobs:
           args: --release --sdist -o wheels
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          # https://github.com/astral-sh/uv/issues/2450
+          python -m pip install --upgrade pip nox uv==0.1.18
           nox -s test_rc_leaks --no-venv --install-only
       - name: tests
         run: nox -s test_rc_leaks --no-venv --no-install
@@ -217,7 +220,8 @@ jobs:
           path: wheels
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          # https://github.com/astral-sh/uv/issues/2450
+          python -m pip install --upgrade pip nox uv==0.1.18
           nox -s bench_codespeed --no-venv --install-only
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v2
