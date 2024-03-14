@@ -1,21 +1,11 @@
 use std::os::raw::c_int;
-use std::ptr::NonNull;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
 use super::macros::ffi;
-use super::types::PY_OBJECT__SETATTR__;
-
-#[inline]
-pub(crate) fn to_uuid<'a, 'py>(
-    uuid_cls: &'a Bound<'py, PyAny>,
-    value: &'a Bound<'py, PyString>,
-) -> PyResult<Bound<'py, PyAny>> {
-    uuid_cls.call1((value,))
-}
 
 #[inline]
 pub(crate) fn create_py_list(py: Python, size: usize) -> Bound<PyList> {
@@ -68,54 +58,6 @@ pub(crate) fn create_py_tuple(py: Python, size: usize) -> Bound<PyTuple> {
 pub(crate) fn py_tuple_set_item(list: &Bound<PyTuple>, index: usize, value: Bound<PyAny>) {
     let index: Py_ssize_t = index.try_into().expect("size is too large");
     ffi!(PyTuple_SetItem(list.as_ptr(), index, value.into_ptr()));
-}
-
-#[inline]
-fn py_object_call1_or_err(
-    obj: *mut ffi::PyObject,
-    args: *mut ffi::PyObject,
-) -> PyResult<*mut ffi::PyObject> {
-    from_ptr_or_err(ffi!(PyObject_CallObject(obj, args)))
-}
-
-#[inline]
-pub(crate) fn py_object_get_attr(
-    obj: *mut ffi::PyObject,
-    attr_name: *mut ffi::PyObject,
-) -> PyResult<*mut ffi::PyObject> {
-    from_ptr_or_err(ffi!(PyObject_GetAttr(obj, attr_name)))
-}
-
-#[inline]
-pub(crate) fn py_object_set_attr(
-    obj: *mut ffi::PyObject,
-    attr_name: *mut ffi::PyObject,
-    value: *mut ffi::PyObject,
-) -> PyResult<()> {
-    let ret = ffi!(PyObject_SetAttr(obj, attr_name, value));
-    error_on_minusone(ret)
-}
-
-#[inline]
-pub(crate) fn py_frozen_object_set_attr(
-    obj: *mut ffi::PyObject,
-    attr_name: *mut ffi::PyObject,
-    value: *mut ffi::PyObject,
-) -> PyResult<()> {
-    let tuple_arg = from_ptr_or_err(ffi!(PyTuple_Pack(3, obj, attr_name, value)))?;
-    py_object_call1_or_err(unsafe { PY_OBJECT__SETATTR__ }, tuple_arg)?;
-    ffi!(Py_DECREF(tuple_arg));
-    Ok(())
-}
-
-#[inline]
-pub(crate) fn from_ptr_or_opt(ptr: *mut ffi::PyObject) -> Option<*mut ffi::PyObject> {
-    NonNull::new(ptr).map(|p| p.as_ptr())
-}
-
-#[inline]
-pub(crate) fn from_ptr_or_err(ptr: *mut ffi::PyObject) -> PyResult<*mut ffi::PyObject> {
-    from_ptr_or_opt(ptr).ok_or_else(|| Python::with_gil(PyErr::fetch))
 }
 
 #[inline]
