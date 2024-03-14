@@ -1,15 +1,13 @@
 use pyo3::exceptions::PyRuntimeError;
+use pyo3::intern;
 use std::fmt;
 
-use crate::python::get_value_attr;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyNone, PyTuple};
-
-use super::value::Value;
+use pyo3::types::{PyList, PyLong, PyNone, PyString, PyTuple};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
-        $obj1.as_ref($py).eq($obj2.as_ref($py))?
+        $obj1.bind($py).eq($obj2.bind($py))?
     };
 }
 
@@ -23,9 +21,9 @@ pub struct BaseType {
 #[pymethods]
 impl BaseType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> Self {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> Self {
         BaseType {
-            custom_encoder: custom_encoder.map(|x| x.into()),
+            custom_encoder: custom_encoder.map(|x| x.clone().unbind()),
         }
     }
 
@@ -55,10 +53,13 @@ pub struct CustomEncoder {
 impl CustomEncoder {
     #[new]
     #[pyo3(signature = (serialize=None, deserialize=None))]
-    fn new(serialize: Option<&PyAny>, deserialize: Option<&PyAny>) -> PyResult<Self> {
+    fn new(
+        serialize: Option<&Bound<'_, PyAny>>,
+        deserialize: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
         Ok(CustomEncoder {
-            serialize: serialize.map(|x| x.into()),
-            deserialize: deserialize.map(|x| x.into()),
+            serialize: serialize.map(|x| x.clone().unbind()),
+            deserialize: deserialize.map(|x| x.clone().unbind()),
         })
     }
 
@@ -82,7 +83,11 @@ pub struct IntegerType {
 #[pymethods]
 impl IntegerType {
     #[new]
-    fn new(min: Option<i64>, max: Option<i64>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        min: Option<i64>,
+        max: Option<i64>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> (Self, BaseType) {
         (IntegerType { min, max }, BaseType::new(custom_encoder))
     }
 
@@ -109,7 +114,11 @@ pub struct FloatType {
 #[pymethods]
 impl FloatType {
     #[new]
-    fn new(min: Option<f64>, max: Option<f64>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        min: Option<f64>,
+        max: Option<f64>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> (Self, BaseType) {
         (FloatType { min, max }, BaseType::new(custom_encoder))
     }
 
@@ -136,7 +145,11 @@ pub struct DecimalType {
 #[pymethods]
 impl DecimalType {
     #[new]
-    fn new(min: Option<f64>, max: Option<f64>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        min: Option<f64>,
+        max: Option<f64>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> (Self, BaseType) {
         (DecimalType { min, max }, BaseType::new(custom_encoder))
     }
 
@@ -166,7 +179,7 @@ impl StringType {
     fn new(
         min_length: Option<usize>,
         max_length: Option<usize>,
-        custom_encoder: Option<&PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> (Self, BaseType) {
         (
             StringType {
@@ -200,7 +213,7 @@ pub struct BooleanType {}
 #[pymethods]
 impl BooleanType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (BooleanType {}, BaseType::new(custom_encoder))
     }
 
@@ -222,7 +235,7 @@ pub struct UUIDType {}
 #[pymethods]
 impl UUIDType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (UUIDType {}, BaseType::new(custom_encoder))
     }
 
@@ -244,7 +257,7 @@ pub struct TimeType {}
 #[pymethods]
 impl TimeType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (TimeType {}, BaseType::new(custom_encoder))
     }
 
@@ -266,7 +279,7 @@ pub struct DateTimeType {}
 #[pymethods]
 impl DateTimeType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (DateTimeType {}, BaseType::new(custom_encoder))
     }
 
@@ -288,7 +301,7 @@ pub struct DateType {}
 #[pymethods]
 impl DateType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (DateType {}, BaseType::new(custom_encoder))
     }
 
@@ -320,8 +333,8 @@ impl DefaultValue {
         Self(DefaultValueEnum::None)
     }
     #[staticmethod]
-    fn some(value: &PyAny) -> Self {
-        Self(DefaultValueEnum::Value(value.into()))
+    fn some(value: &Bound<'_, PyAny>) -> Self {
+        Self(DefaultValueEnum::Value(value.clone().unbind()))
     }
 
     fn is_none(&self) -> bool {
@@ -331,7 +344,7 @@ impl DefaultValue {
     fn __repr__(&self, py: Python<'_>) -> String {
         match &self.0 {
             DefaultValueEnum::None => "Rust None".to_string(),
-            DefaultValueEnum::Value(value) => format!("{}", value.as_ref(py).repr().unwrap()),
+            DefaultValueEnum::Value(value) => format!("{}", value.bind(py).repr().unwrap()),
         }
     }
 
@@ -342,7 +355,7 @@ impl DefaultValue {
     fn __hash__(&self, py: Python<'_>) -> PyResult<isize> {
         match &self.0 {
             DefaultValueEnum::None => Ok(0),
-            DefaultValueEnum::Value(value) => value.as_ref(py).hash(),
+            DefaultValueEnum::Value(value) => value.bind(py).hash(),
         }
     }
 }
@@ -361,7 +374,7 @@ impl PartialEq<Self> for DefaultValue {
         match (&self.0, &other.0) {
             (DefaultValueEnum::None, DefaultValueEnum::None) => true,
             (DefaultValueEnum::Value(a), DefaultValueEnum::Value(b)) => {
-                Python::with_gil(|py| a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false))
+                Python::with_gil(|py| a.bind(py).eq(b.bind(py)).unwrap_or(false))
             }
             _ => false,
         }
@@ -393,25 +406,27 @@ impl EntityType {
     #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, generics=None, doc=None, custom_encoder=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
-        cls: &PyAny,
-        name: &PyAny,
+        cls: &Bound<'_, PyAny>,
+        name: &Bound<'_, PyAny>,
         fields: Vec<EntityField>,
         omit_none: bool,
         is_frozen: bool,
-        generics: Option<&PyAny>,
-        doc: Option<&PyAny>,
-        custom_encoder: Option<&PyAny>,
+        generics: Option<&Bound<'_, PyAny>>,
+        doc: Option<&Bound<'_, PyAny>>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> (Self, BaseType) {
         (
             EntityType {
-                cls: cls.into(),
-                name: name.into(),
+                cls: cls.clone().unbind(),
+                name: name.clone().unbind(),
                 fields,
                 omit_none,
                 is_frozen,
-                generics: generics.map_or(PyTuple::empty(py).into(), |x| x.into()),
-                doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
+                generics: generics.map_or(PyTuple::empty_bound(py).into_any().unbind(), |x| {
+                    x.clone().unbind()
+                }),
+                doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
             },
             BaseType::new(custom_encoder),
         )
@@ -473,21 +488,23 @@ impl TypedDictType {
     #[new]
     #[pyo3(signature = (name, fields, omit_none=false, generics=None, doc=None, custom_encoder=None))]
     fn new(
-        name: &PyAny,
+        name: &Bound<'_, PyAny>,
         fields: Vec<EntityField>,
         omit_none: bool,
-        generics: Option<&PyAny>,
-        doc: Option<&PyAny>,
-        custom_encoder: Option<&PyAny>,
+        generics: Option<&Bound<'_, PyAny>>,
+        doc: Option<&Bound<'_, PyAny>>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> (Self, BaseType) {
         (
             TypedDictType {
-                name: name.into(),
+                name: name.clone().unbind(),
                 fields,
                 omit_none,
-                generics: generics.map_or(PyTuple::empty(py).into(), |x| x.into()),
-                doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
+                generics: generics.map_or(PyTuple::empty_bound(py).into_any().unbind(), |x| {
+                    x.clone().unbind()
+                }),
+                doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
             },
             BaseType::new(custom_encoder),
         )
@@ -554,23 +571,23 @@ impl EntityField {
     #[pyo3(signature = (name, dict_key, field_type, required=true, is_discriminator_field=false, default=DefaultValue(DefaultValueEnum::None), default_factory=DefaultValue(DefaultValueEnum::None), doc=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
-        name: &PyAny,
-        dict_key: &PyAny,
-        field_type: &PyAny,
+        name: &Bound<'_, PyAny>,
+        dict_key: &Bound<'_, PyAny>,
+        field_type: &Bound<'_, PyAny>,
         required: bool,
         is_discriminator_field: bool,
         default: DefaultValue,
         default_factory: DefaultValue,
-        doc: Option<&PyAny>,
+        doc: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> Self {
         EntityField {
-            name: name.into(),
-            dict_key: dict_key.into(),
-            field_type: field_type.into(),
+            name: name.clone().unbind(),
+            dict_key: dict_key.clone().unbind(),
+            field_type: field_type.clone().clone().unbind(),
             required,
             is_discriminator_field,
-            doc: doc.map_or(PyNone::get(py).into(), |x| x.into()),
+            doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
             default,
             default_factory,
         }
@@ -603,10 +620,13 @@ pub struct ArrayType {
 impl ArrayType {
     #[new]
     #[pyo3(signature = (item_type, custom_encoder=None))]
-    fn new(item_type: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        item_type: &Bound<'_, PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> (Self, BaseType) {
         (
             ArrayType {
-                item_type: item_type.into(),
+                item_type: item_type.clone().unbind(),
             },
             BaseType::new(custom_encoder),
         )
@@ -638,24 +658,31 @@ impl EnumType {
     #[new]
     #[pyo3(signature = (cls, items, custom_encoder=None))]
     fn new(
-        cls: &PyAny,
-        items: &PyList,
-        custom_encoder: Option<&PyAny>,
+        cls: &Bound<'_, PyAny>,
+        items: &Bound<'_, PyList>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
         let mut enum_items = vec![];
         for py_item in items.iter() {
-            let item = Value::new(get_value_attr(py_item.as_ptr())?);
-            if let Some(str) = item.as_str() {
-                enum_items.push((EnumItem::String(str.to_string()), py_item.into()));
-            } else if let Some(int) = item.as_int() {
-                enum_items.push((EnumItem::Int(int), py_item.into()));
+            let value = py_item.getattr(intern!(py_item.py(), "value"))?;
+            if let Ok(item) = value.as_ref().downcast::<PyString>() {
+                enum_items.push((
+                    EnumItem::String(item.to_str()?.to_string()),
+                    py_item.unbind(),
+                ));
+            } else if let Ok(item) = value.as_ref().downcast::<PyLong>() {
+                enum_items.push((EnumItem::Int(item.extract()?), py_item.unbind()));
+            } else {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Enum items must be strings or integers ({py_item})"
+                )));
             }
         }
         enum_items.sort_by(|a, b| a.0.cmp(&b.0));
         Ok((
             EnumType {
-                cls: cls.into(),
-                items: items.into(),
+                cls: cls.clone().unbind(),
+                items: items.clone().unbind(),
                 enum_items,
             },
             BaseType::new(custom_encoder),
@@ -722,10 +749,13 @@ pub struct OptionalType {
 impl OptionalType {
     #[new]
     #[pyo3(signature = (inner, custom_encoder=None))]
-    fn new(inner: &PyAny, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        inner: &Bound<'_, PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> (Self, BaseType) {
         (
             OptionalType {
-                inner: inner.into(),
+                inner: inner.clone().unbind(),
             },
             BaseType::new(custom_encoder),
         )
@@ -758,15 +788,15 @@ impl DictionaryType {
     #[new]
     #[pyo3(signature = (key_type, value_type, omit_none=false, custom_encoder=None))]
     fn new(
-        key_type: &PyAny,
-        value_type: &PyAny,
+        key_type: &Bound<'_, PyAny>,
+        value_type: &Bound<'_, PyAny>,
         omit_none: bool,
-        custom_encoder: Option<&PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> (Self, BaseType) {
         (
             DictionaryType {
-                key_type: key_type.into(),
-                value_type: value_type.into(),
+                key_type: key_type.clone().unbind(),
+                value_type: value_type.clone().unbind(),
                 omit_none,
             },
             BaseType::new(custom_encoder),
@@ -803,10 +833,13 @@ pub struct TupleType {
 impl TupleType {
     #[new]
     #[pyo3(signature = (item_types, custom_encoder=None))]
-    fn new(item_types: Vec<&PyAny>, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        item_types: Vec<Bound<'_, PyAny>>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> (Self, BaseType) {
         (
             TupleType {
-                item_types: item_types.into_iter().map(|x| x.into()).collect(),
+                item_types: item_types.into_iter().map(|x| x.unbind()).collect(),
             },
             BaseType::new(custom_encoder),
         )
@@ -821,7 +854,7 @@ impl TupleType {
                 .item_types
                 .iter()
                 .zip(other.item_types.iter())
-                .all(|(a, b)| a.as_ref(py).eq(b.as_ref(py)).unwrap_or(false)))
+                .all(|(a, b)| a.bind(py).eq(b.bind(py)).unwrap_or(false)))
     }
 
     fn __repr__(&self) -> String {
@@ -842,7 +875,7 @@ pub struct BytesType {}
 #[pymethods]
 impl BytesType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (BytesType {}, BaseType::new(custom_encoder))
     }
 
@@ -864,7 +897,7 @@ pub struct AnyType {}
 #[pymethods]
 impl AnyType {
     #[new]
-    fn new(custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (AnyType {}, BaseType::new(custom_encoder))
     }
 
@@ -895,16 +928,16 @@ impl DiscriminatedUnionType {
     #[new]
     #[pyo3(signature = (item_types, dump_discriminator, load_discriminator, custom_encoder=None))]
     fn new(
-        item_types: &PyAny,
-        dump_discriminator: &PyAny,
-        load_discriminator: &PyAny,
-        custom_encoder: Option<&PyAny>,
+        item_types: &Bound<'_, PyAny>,
+        dump_discriminator: &Bound<'_, PyAny>,
+        load_discriminator: &Bound<'_, PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> (Self, BaseType) {
         (
             DiscriminatedUnionType {
-                item_types: item_types.into(),
-                dump_discriminator: dump_discriminator.into(),
-                load_discriminator: load_discriminator.into(),
+                item_types: item_types.clone().unbind(),
+                dump_discriminator: dump_discriminator.clone().unbind(),
+                load_discriminator: load_discriminator.clone().unbind(),
             },
             BaseType::new(custom_encoder),
         )
@@ -942,13 +975,13 @@ impl UnionType {
     #[new]
     #[pyo3(signature = (item_types, union_repr, custom_encoder=None))]
     fn new(
-        item_types: &PyAny,
+        item_types: &Bound<'_, PyAny>,
         union_repr: String,
-        custom_encoder: Option<&PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> (Self, BaseType) {
         (
             UnionType {
-                item_types: item_types.into(),
+                item_types: item_types.clone().unbind(),
                 union_repr,
             },
             BaseType::new(custom_encoder),
@@ -980,24 +1013,30 @@ pub struct LiteralType {
 impl LiteralType {
     #[new]
     #[pyo3(signature = (args, custom_encoder=None))]
-    fn new(args: &PyList, custom_encoder: Option<&PyAny>) -> (Self, BaseType) {
+    fn new(
+        args: &Bound<'_, PyList>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<(Self, BaseType)> {
         let mut enum_items = vec![];
         for py_value in args.iter() {
-            let item = Value::new(py_value.as_ptr());
-            if let Some(str) = item.as_str() {
-                enum_items.push((EnumItem::String(str.to_string()), py_value.into()));
-            } else if let Some(int) = item.as_int() {
-                enum_items.push((EnumItem::Int(int), py_value.into()));
+            if let Ok(item) = py_value.as_ref().downcast::<PyString>() {
+                enum_items.push((EnumItem::String(item.to_string()), py_value.unbind()));
+            } else if let Ok(item) = py_value.as_ref().downcast::<PyLong>() {
+                enum_items.push((EnumItem::Int(item.extract()?), py_value.unbind()));
+            } else {
+                return Err(PyRuntimeError::new_err(
+                    "Literal items must be strings or integers",
+                ));
             }
         }
         enum_items.sort_by(|a, b| a.0.cmp(&b.0));
-        (
+        Ok((
             LiteralType {
-                args: args.into(),
+                args: args.clone().unbind(),
                 enum_items,
             },
             BaseType::new(custom_encoder),
-        )
+        ))
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -1025,23 +1064,23 @@ impl RecursionHolder {
     #[new]
     #[pyo3(signature = (name, state_key, meta, custom_encoder=None))]
     fn new(
-        name: &PyAny,
-        state_key: &PyAny,
-        meta: &PyAny,
-        custom_encoder: Option<&PyAny>,
+        name: &Bound<'_, PyAny>,
+        state_key: &Bound<'_, PyAny>,
+        meta: &Bound<'_, PyAny>,
+        custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> (Self, BaseType) {
         (
             RecursionHolder {
-                name: name.into(),
-                state_key: state_key.into(),
-                meta: meta.into(),
+                name: name.clone().unbind(),
+                state_key: state_key.clone().unbind(),
+                meta: meta.clone().unbind(),
             },
             BaseType::new(custom_encoder),
         )
     }
 
-    pub fn get_type<'a>(&'a self, py: Python<'a>) -> PyResult<&'a PyAny> {
-        match self.meta.as_ref(py).get_item(&self.state_key) {
+    pub fn get_inner_type<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'_, pyo3::PyAny>> {
+        match self.meta.bind(py).get_item(&self.state_key) {
             Ok(type_) => Ok(type_),
             Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!(
                 "Recursive type not resolved: {}",

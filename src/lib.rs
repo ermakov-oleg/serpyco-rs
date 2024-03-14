@@ -7,9 +7,8 @@ use pyo3::prelude::*;
 use validator::types;
 
 #[pymodule]
-fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
+fn _serpyco_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     python::init(py);
-    validator::init();
     m.add_class::<serializer::Serializer>()?;
 
     // Types
@@ -41,11 +40,14 @@ fn _serpyco_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<types::RecursionHolder>()?;
 
     // Errors
-    m.add("ValidationError", py.get_type::<errors::ValidationError>())?;
+    m.add(
+        "ValidationError",
+        py.get_type_bound::<errors::ValidationError>(),
+    )?;
     m.add(
         "SchemaValidationError",
-        py.get_type::<errors::SchemaValidationError>(),
+        py.get_type_bound::<errors::SchemaValidationError>(),
     )?;
-    m.add("ErrorItem", py.get_type::<errors::ErrorItem>())?;
+    m.add("ErrorItem", py.get_type_bound::<errors::ErrorItem>())?;
     Ok(())
 }

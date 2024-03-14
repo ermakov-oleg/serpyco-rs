@@ -1,6 +1,9 @@
 use crate::validator::types::EnumItems;
-use crate::validator::{raise_error, InstancePath, Sequence, Value};
-use pyo3::{PyErr, PyResult};
+use crate::validator::{raise_error, InstancePath};
+
+use pyo3::prelude::PyAnyMethods;
+use pyo3::types::{PySequence, PyString};
+use pyo3::{Bound, PyAny, PyErr, PyResult};
 use std::cmp::Ordering;
 use std::fmt::Display;
 
@@ -35,7 +38,7 @@ where
 }
 
 pub fn check_bounds<T>(
-    val: impl Into<T>,
+    val: T,
     min: Option<T>,
     max: Option<T>,
     instance_path: &InstancePath,
@@ -46,14 +49,13 @@ where
     if min.is_none() && max.is_none() {
         return Ok(());
     }
-    let val = val.into();
     check_lower_bound(val, min, instance_path)?;
     check_upper_bound(val, max, instance_path)?;
     Ok(())
 }
 
 pub fn check_min_length(
-    val: &Value,
+    val: &Bound<'_, PyString>,
     len: usize,
     min: Option<usize>,
     instance_path: &InstancePath,
@@ -70,7 +72,7 @@ pub fn check_min_length(
 }
 
 pub fn check_max_length(
-    val: &Value,
+    val: &Bound<'_, PyString>,
     len: usize,
     max: Option<usize>,
     instance_path: &InstancePath,
@@ -87,7 +89,7 @@ pub fn check_max_length(
 }
 
 pub fn check_length(
-    val: &Value,
+    val: &Bound<'_, PyString>,
     min: Option<usize>,
     max: Option<usize>,
     instance_path: &InstancePath,
@@ -95,7 +97,7 @@ pub fn check_length(
     if min.is_none() && max.is_none() {
         return Ok(());
     }
-    let len = val.str_len()? as usize;
+    let len = val.len()?;
     check_min_length(val, len, min, instance_path)?;
     check_max_length(val, len, max, instance_path)?;
     Ok(())
@@ -110,12 +112,12 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
 }
 
 pub fn check_sequence_size(
-    val: &SequenceImpl,
-    size: isize,
+    val: &Bound<'_, PySequence>,
+    seq_len: usize,
+    size: usize,
     instance_path: Option<&InstancePath>,
 ) -> PyResult<()> {
-    let len = val.len();
-    match len.cmp(&size) {
+    match seq_len.cmp(&size) {
         Ordering::Equal => Ok(()),
         Ordering::Less => {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
@@ -154,10 +156,14 @@ pub fn no_encoder_for_discriminator(
     .unwrap_err()
 }
 
-pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) -> PyResult<()> {
-    let error = match value.as_str() {
-        Some(val) => format!(r#""{}" is not of type "{}""#, val, type_),
-        None => format!(r#"{} is not of type "{}""#, value, type_),
+pub fn _invalid_type_new(
+    type_: &str,
+    value: &Bound<'_, PyAny>,
+    instance_path: &InstancePath,
+) -> PyResult<()> {
+    let error = match value.is_instance_of::<PyString>() {
+        true => format!(r#""{}" is not of type "{}""#, value, type_),
+        false => format!(r#"{} is not of type "{}""#, value, type_),
     };
     raise_error(error, instance_path)?;
     Ok(())
@@ -165,28 +171,30 @@ pub fn _invalid_type(type_: &str, value: Value, instance_path: &InstancePath) ->
 
 macro_rules! invalid_type {
     ($type_: expr, $value: expr, $path: expr) => {{
-        crate::validator::validators::_invalid_type($type_, $value, $path)?;
+        crate::validator::validators::_invalid_type_new($type_, $value, $path)?;
         unreachable!(); // todo: Discard the use of unreachable
     }};
 }
 
 macro_rules! invalid_type_dump {
     ($type_: expr, $value: expr) => {{
+        let error = format!(r#""{}" is not of type "{}""#, $value.to_string(), $type_);
         let instance_path = InstancePath::new();
-        crate::validator::validators::_invalid_type($type_, $value, &instance_path)?;
+        crate::validator::raise_error(error, &instance_path)?;
         unreachable!(); // todo: Discard the use of unreachable
     }};
 }
 
 pub fn _invalid_enum_item(
     items: EnumItems,
-    value: Value,
+    value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> PyResult<()> {
-    let error = match value.as_str() {
-        Some(val) => format!(r#""{}" is not one of {}"#, val, items),
-        None => format!(r#"{} is not one of {}"#, value, items),
+    let error = match value.is_instance_of::<PyString>() {
+        true => format!(r#""{}" is not one of {}"#, value, items),
+        false => format!(r#"{} is not one of {}"#, value, items),
     };
+
     raise_error(error, instance_path)?;
     Ok(())
 }
@@ -198,7 +206,7 @@ macro_rules! invalid_enum_item {
     }};
 }
 
-use crate::validator::value::SequenceImpl;
 pub(crate) use invalid_enum_item;
+
 pub(crate) use invalid_type;
 pub(crate) use invalid_type_dump;

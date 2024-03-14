@@ -187,7 +187,7 @@ def test_typed_dict_validation__invalid_type():
     with pytest.raises(SchemaValidationError) as e:
         s.load('foo')
 
-    assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
+    assert e.value.errors == [ErrorItem(message='"foo" is not of type "dict"', instance_path='')]
 
 
 def test_typed_dict_validation__missing_field():
@@ -211,7 +211,7 @@ def test_typed_dict_validation__missing_field__with_instance_path():
 
 def test_list_validation__invalid_type():
     s = Serializer(list[int])
-    _check_errors(s, 'foo', [ErrorItem(message='"foo" is not of type "array"', instance_path='')])
+    _check_errors(s, 'foo', [ErrorItem(message='"foo" is not of type "list"', instance_path='')])
 
 
 def test_list_validation__invalid_item_type():
@@ -230,7 +230,7 @@ def test_enum_validation__invalid_type():
 
 def test_dict_validation__invalid_type():
     s = Serializer(dict[str, int])
-    _check_errors(s, 'foo', [ErrorItem(message='"foo" is not of type "object"', instance_path='')])
+    _check_errors(s, 'foo', [ErrorItem(message='"foo" is not of type "dict"', instance_path='')])
 
 
 def test_dict_validation__invalid_value_type():
@@ -298,7 +298,7 @@ def test_tagged_union_validation__invalid_type():
     with pytest.raises(SchemaValidationError) as e:
         s.load('foo')
 
-    assert e.value.errors == [ErrorItem(message='"foo" is not of type "object"', instance_path='')]
+    assert e.value.errors == [ErrorItem(message='"foo" is not of type "dict"', instance_path='')]
 
 
 def test_tagged_union_validation__invalid_discriminator():

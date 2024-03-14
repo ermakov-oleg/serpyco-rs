@@ -1,6 +1,7 @@
+use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
 use pyo3::types::PyList;
-use pyo3::{exceptions, pyclass, pymethods, Py, PyCell, PyErr, PyErrArguments, PyRef, PyTypeInfo};
+use pyo3::{exceptions, pyclass, pymethods, Py, PyErr, PyErrArguments, PyRef, PyTypeInfo};
 use std::fmt::Debug;
 
 #[pyclass(extends=exceptions::PyValueError, module="serpyco_rs", subclass)]
@@ -47,8 +48,8 @@ impl SchemaValidationError {
         let mut result = String::new();
         result.push_str(&format!("{}:\n", super_.message));
 
-        for error in self_.errors.as_ref(self_.py()).iter() {
-            let message = match error.downcast::<PyCell<ErrorItem>>() {
+        for error in self_.errors.bind(self_.py()).iter() {
+            let message = match error.downcast::<ErrorItem>() {
                 Ok(cell) => cell.borrow().__str__(),
                 Err(e) => format!("Error: {}", e),
             };
@@ -64,8 +65,8 @@ impl SchemaValidationError {
         result.push_str("SchemaValidationError(\n");
         result.push_str(&format!("    message=\"{}\",\n", super_.message));
         result.push_str("    errors=[\n");
-        for error in self_.errors.as_ref(self_.py()).iter() {
-            let message = match error.downcast::<PyCell<ErrorItem>>() {
+        for error in self_.errors.bind(self_.py()).iter() {
+            let message = match error.downcast::<ErrorItem>() {
                 Ok(cell) => cell.borrow().__repr__(),
                 Err(e) => format!("Error: {}", e),
             };

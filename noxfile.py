@@ -7,11 +7,11 @@ nox.options.sessions = ['test', 'lint', 'type_check', 'rust_lint']
 nox.options.python = False
 
 
-def build(session):
+def build(session, use_pip: bool = False):
     if _is_ci():
         # Install form wheels
-        install(session, '--no-index', '--no-deps', '--find-links', 'wheels/', 'serpyco-rs')
-        install(session, '--find-links', 'wheels/', 'serpyco-rs')
+        install(session, '--no-index', '--no-deps', '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip)
+        install(session, '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip)
         return
 
     session.run_always('maturin', 'develop', '-r')
@@ -73,9 +73,8 @@ def bench(session):
 
 @nox.session(python=False)
 def test_rc_leaks(session):
-    build(session)
-    install(session, '-r', 'requirements/bench.txt')
-
+    build(session, use_pip=True)
+    install(session, '-r', 'requirements/bench.txt', use_pip=True)
     session.run(
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
@@ -93,9 +92,18 @@ def bench_codespeed(session):
     session.run('pytest', 'bench', '--ignore=bench/compare/test_benchmarks.py', '--codspeed')
 
 
+def install(session, *args, use_pip: bool = False):
+    if session._runner.global_config.no_install:
+        return
+    use_pip = use_pip or _is_windows()
+    python = session.run_always('which', 'python', silent=True).strip()
+    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', python]
+    session.run_always(*cmd, *args)
+
+
 def _is_ci() -> bool:
     return bool(os.environ.get('CI', None))
 
 
-def install(session, *args):
-    session.run('pip', 'install', *args)
+def _is_windows() -> bool:
+    return os.name == 'nt'

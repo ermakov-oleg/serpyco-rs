@@ -1,4 +1,4 @@
-use crate::validator::Value;
+use pyo3::{Bound, PyAny};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
@@ -16,9 +16,9 @@ pub enum PathChunk<'a> {
     /// Property name within a JSON object.
     Property(Box<str>),
     /// Index within a JSON array.
-    Index(isize),
+    Index(usize),
     /// Python value
-    PropertyPyValue(&'a Value),
+    PropertyValue(&'a Bound<'a, PyAny>),
 }
 
 #[derive(Debug, Clone)]
@@ -68,16 +68,23 @@ impl<'a> From<String> for PathChunk<'a> {
     }
 }
 
-impl<'a> From<isize> for PathChunk<'a> {
+impl<'a> From<&str> for PathChunk<'a> {
     #[inline]
-    fn from(value: isize) -> Self {
+    fn from(value: &str) -> Self {
+        PathChunk::Property(value.into())
+    }
+}
+
+impl<'a> From<usize> for PathChunk<'a> {
+    #[inline]
+    fn from(value: usize) -> Self {
         PathChunk::Index(value)
     }
 }
 
-impl<'a> From<&'a Value> for PathChunk<'a> {
+impl<'a> From<&'a Bound<'a, PyAny>> for PathChunk<'a> {
     #[inline]
-    fn from(value: &'a Value) -> Self {
-        PathChunk::PropertyPyValue(value)
+    fn from(value: &'a Bound<'a, PyAny>) -> Self {
+        PathChunk::PropertyValue(value)
     }
 }
