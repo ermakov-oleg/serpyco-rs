@@ -1,7 +1,7 @@
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional, Literal
 
 import attr
 import pytest
@@ -274,3 +274,25 @@ def test_load_frozen_attrs():
     serializer = Serializer(Foo)
 
     assert serializer.load({'bar': True}) == Foo(bar=True)
+
+
+def test_load_literal():
+    @dataclass
+    class Foo:
+        bar: Literal[1, '2']
+
+    serializer = Serializer(Foo)
+
+    assert serializer.load({'bar': 1}) == Foo(bar=1)
+    assert serializer.load({'bar': '2'}) == Foo(bar='2')
+
+
+def test_dump_literal():
+    @dataclass
+    class Foo:
+        bar: Literal[1, '2']
+
+    serializer = Serializer(Foo)
+
+    assert serializer.dump(Foo(bar=1)) == {'bar': 1}
+    assert serializer.dump(Foo(bar='2')) == {'bar': '2'}
