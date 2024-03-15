@@ -101,10 +101,12 @@ impl Encoder for IntEncoder {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
-        if let (true, Ok(val)) = (ctx.try_cast_from_string, value.downcast::<PyString>()) {
-            if let Ok(val) = val.to_str()?.parse::<i64>() {
-                check_bounds!(val, self.type_info, instance_path)?;
-                return Ok(val.to_object(value.py()).into_bound(value.py()));
+        if ctx.try_cast_from_string {
+            if let Ok(val) = value.downcast::<PyString>() {
+                if let Ok(val) = val.to_str()?.parse::<i64>() {
+                    check_bounds!(val, self.type_info, instance_path)?;
+                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                }
             }
         }
         invalid_type!("integer", value, instance_path)
@@ -136,10 +138,12 @@ impl Encoder for FloatEncoder {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
-        if let (true, Ok(val)) = (ctx.try_cast_from_string, value.downcast::<PyString>()) {
-            if let Ok(val) = val.to_str()?.parse::<f64>() {
-                check_bounds!(val, self.type_info, instance_path)?;
-                return Ok(val.to_object(value.py()).into_bound(value.py()));
+        if ctx.try_cast_from_string {
+            if let Ok(val) = value.downcast::<PyString>() {
+                if let Ok(val) = val.to_str()?.parse::<f64>() {
+                    check_bounds!(val, self.type_info, instance_path)?;
+                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                }
             }
         }
         invalid_type!("number", value, instance_path)
@@ -242,9 +246,11 @@ impl Encoder for BooleanEncoder {
         if let Ok(_val) = value.downcast::<PyBool>() {
             return Ok(value.clone());
         }
-        if let (true, Ok(val)) = (ctx.try_cast_from_string, value.downcast::<PyString>()) {
-            if let Some(val) = str_as_bool(val.to_str()?) {
-                return Ok(val.to_object(value.py()).into_bound(value.py()));
+        if ctx.try_cast_from_string {
+            if let Ok(val) = value.downcast::<PyString>() {
+                if let Some(val) = str_as_bool(val.to_str()?) {
+                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                }
             }
         }
 
@@ -635,15 +641,16 @@ impl Encoder for EnumEncoder {
                 let (_, py_item) = &self.enum_items[index];
                 return Ok(py_item.bind(value.py()).clone());
             }
-            Err(_) if ctx.try_cast_from_string && value.is_instance_of::<PyString>() => {
-                let value = value.downcast::<PyString>().unwrap();
-                if let Ok(val) = value.to_str()?.parse::<i64>() {
-                    if let Ok(index) = self
-                        .enum_items
-                        .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
-                    {
-                        let (_, py_item) = &self.enum_items[index];
-                        return Ok(py_item.bind(value.py()).clone());
+            Err(_) if ctx.try_cast_from_string => {
+                if let Ok(value) = value.downcast::<PyString>() {
+                    if let Ok(val) = value.to_str()?.parse::<i64>() {
+                        if let Ok(index) = self
+                            .enum_items
+                            .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
+                        {
+                            let (_, py_item) = &self.enum_items[index];
+                            return Ok(py_item.bind(value.py()).clone());
+                        }
                     }
                 }
             }
@@ -687,15 +694,16 @@ impl Encoder for LiteralEncoder {
                 let (_, py_item) = &self.enum_items[index];
                 return Ok(py_item.bind(value.py()).clone());
             }
-            Err(_) if ctx.try_cast_from_string && value.is_instance_of::<PyString>() => {
-                let value = value.downcast::<PyString>().unwrap();
-                if let Ok(val) = value.to_str()?.parse::<i64>() {
-                    if let Ok(index) = self
-                        .enum_items
-                        .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
-                    {
-                        let (_, py_item) = &self.enum_items[index];
-                        return Ok(py_item.bind(value.py()).clone());
+            Err(_) if ctx.try_cast_from_string => {
+                if let Ok(value) = value.downcast::<PyString>() {
+                    if let Ok(val) = value.to_str()?.parse::<i64>() {
+                        if let Ok(index) = self
+                            .enum_items
+                            .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
+                        {
+                            let (_, py_item) = &self.enum_items[index];
+                            return Ok(py_item.bind(value.py()).clone());
+                        }
                     }
                 }
             }
