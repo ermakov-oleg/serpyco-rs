@@ -1,4 +1,5 @@
 import os
+import sys
 
 import nox
 
@@ -61,7 +62,6 @@ def bench(session):
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
         '--verbose',
-        '--native',
         '--benchmark-min-time=0.5',
         '--benchmark-max-time=1',
         '--benchmark-disable-gc',
@@ -73,6 +73,7 @@ def bench(session):
 
 @nox.session(python=False)
 def test_rc_leaks(session):
+    # uv don't resolve wheels when used python debug build
     build(session, use_pip=True)
     install(session, '-r', 'requirements/bench.txt', use_pip=True)
     session.run(
@@ -95,15 +96,9 @@ def bench_codespeed(session):
 def install(session, *args, use_pip: bool = False):
     if session._runner.global_config.no_install:
         return
-    use_pip = use_pip or _is_windows()
-    python = session.run_always('which', 'python', silent=True).strip()
-    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', python]
+    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', sys.executable]
     session.run_always(*cmd, *args)
 
 
 def _is_ci() -> bool:
     return bool(os.environ.get('CI', None))
-
-
-def _is_windows() -> bool:
-    return os.name == 'nt'

@@ -2,12 +2,14 @@ use pyo3::{Bound, PyAny};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Context {
-    // pub try_cast: bool,
+    pub try_cast_from_string: bool,
 }
 
 impl Context {
-    pub fn new() -> Self {
-        Context {}
+    pub fn new(try_cast_from_string: bool) -> Self {
+        Context {
+            try_cast_from_string,
+        }
     }
 }
 

@@ -6,6 +6,8 @@ from typing import Optional, Union, Any
 from mashumaro import DataClassDictMixin, field_options, pass_through
 from mashumaro.config import BaseConfig
 
+from ._utils import get_dataclass_args
+
 
 class BaseModel(DataClassDictMixin):
     class Config(BaseConfig):
@@ -44,7 +46,7 @@ class AuthorAssociation(Enum):
     OWNER = "OWNER"
 
 
-@dataclass(slots=True)
+@dataclass(**get_dataclass_args())
 class User(BaseModel):
     login: str
     id: int
@@ -69,7 +71,7 @@ class User(BaseModel):
     starred_at: Optional[datetime] = None
 
 
-@dataclass(slots=True)
+@dataclass(**get_dataclass_args())
 class IssueLabel(BaseModel):
     id: int
     node_id: str
@@ -80,7 +82,7 @@ class IssueLabel(BaseModel):
     default: bool
 
 
-@dataclass(slots=True)
+@dataclass(**get_dataclass_args())
 class Milestone(BaseModel):
     url: str
     html_url: str
@@ -100,7 +102,7 @@ class Milestone(BaseModel):
     state: MilestoneState = MilestoneState.OPEN
 
 
-@dataclass(slots=True)
+@dataclass(**get_dataclass_args())
 class Reactions(BaseModel):
     url: str
     total_count: int
@@ -114,7 +116,7 @@ class Reactions(BaseModel):
     rocket: int
 
 
-@dataclass(slots=True)
+@dataclass(**get_dataclass_args())
 class Issue(BaseModel):
     id: int
     node_id: str

@@ -231,9 +231,9 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             return entity_type
 
     if _is_literal_type(t):
-        if args and all(isinstance(arg, str) for arg in args):
+        if args and all(isinstance(arg, (str, int)) for arg in args):
             return LiteralType(args=list(args), custom_encoder=custom_encoder)
-        raise RuntimeError('Supported only Literal[str, ...]')
+        raise RuntimeError('Supported only Literal[str | int, ...]')
 
     if t in {Union}:
         if len(args) == 2 and _NoneType in args:

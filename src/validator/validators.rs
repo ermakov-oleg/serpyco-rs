@@ -37,7 +37,7 @@ where
     Ok(())
 }
 
-pub fn check_bounds<T>(
+pub fn _check_bounds<T>(
     val: T,
     min: Option<T>,
     max: Option<T>,
@@ -52,6 +52,12 @@ where
     check_lower_bound(val, min, instance_path)?;
     check_upper_bound(val, max, instance_path)?;
     Ok(())
+}
+
+macro_rules! check_bounds {
+    ($val: expr, $type_info: expr, $path: expr) => {
+        crate::validator::validators::_check_bounds($val, $type_info.min, $type_info.max, $path)
+    };
 }
 
 pub fn check_min_length(
@@ -206,7 +212,15 @@ macro_rules! invalid_enum_item {
     }};
 }
 
-pub(crate) use invalid_enum_item;
+pub fn str_as_bool(str: &str) -> Option<bool> {
+    match str.as_bytes() {
+        [b't'] | [b'T'] | b"true" | b"True" | b"TRUE" => Some(true),
+        [b'f'] | [b'F'] | b"false" | b"False" | b"FALSE" => Some(false),
+        _ => None,
+    }
+}
 
+pub(crate) use check_bounds;
+pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
 pub(crate) use invalid_type_dump;

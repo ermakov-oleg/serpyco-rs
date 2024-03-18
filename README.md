@@ -49,6 +49,7 @@ $ pip install serpyco-rs
 - Support recursive schemas
 - Generate JSON Schema Specification (Draft 2020-12)
 - Support custom encoders/decoders for fields
+- Support deserialization from query string parameters (MultiDict like structures) with from string coercion 
 
 ## Supported field types
 There is support for generic types from the standard typing module:
@@ -386,4 +387,27 @@ print(ser.get_json_schema())
         }
     }
 }
+```
+
+## Query string deserialization
+
+`serpyco-rs` can deserialize query string parameters (MultiDict like structures) with from string coercion.
+
+```python
+
+from dataclasses import dataclass
+from urllib.parse import parse_qsl
+
+from serpyco_rs import Serializer
+from multidict import MultiDict
+
+@dataclass
+class A:
+    foo: int
+    bar: str
+
+ser = Serializer(A)
+
+print(ser.load_query_params(MultiDict(parse_qsl('foo=1&bar=2'))))
+>> A(foo=1, bar='2')
 ```

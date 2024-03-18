@@ -21,7 +21,7 @@ atomic_refcell = "0.1.13"
 uuid = "1"
 
 [build-dependencies]
-pyo3-build-config = { version = "0.20", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.21.0-beta.0", features = ["resolve-config"] }
 
 [profile.release]
 codegen-units = 1

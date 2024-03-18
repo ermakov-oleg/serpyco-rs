@@ -20,7 +20,7 @@ use crate::python::{
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
-    invalid_type_dump, missing_required_property, no_encoder_for_discriminator,
+    invalid_type_dump, missing_required_property, no_encoder_for_discriminator, str_as_bool,
 };
 use crate::validator::{Context, InstancePath};
 
@@ -32,7 +32,29 @@ pub trait Encoder: DynClone + Debug {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>>;
+
+    fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
+        None
+    }
+    fn is_sequence(&self) -> bool {
+        false
+    }
+}
+
+pub struct EncoderField<'a> {
+    pub(crate) name: &'a Py<PyString>,
+    pub(crate) is_sequence: bool,
+}
+
+pub enum QueryFields<'a> {
+    Object(Vec<EncoderField<'a>>),
+    Dict(bool), // is_sequence
+}
+
+pub trait ContainerEncoder: Encoder {
+    fn get_fields(&self) -> QueryFields;
 }
 
 clone_trait_object!(Encoder);
@@ -51,6 +73,7 @@ impl Encoder for NoopEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         _instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
@@ -59,8 +82,6 @@ impl Encoder for NoopEncoder {
 #[derive(Debug, Clone)]
 pub struct IntEncoder {
     pub(crate) type_info: IntegerType,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for IntEncoder {
@@ -74,26 +95,27 @@ impl Encoder for IntEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyLong>() {
-            check_bounds(
-                val.extract()?,
-                self.type_info.min,
-                self.type_info.max,
-                instance_path,
-            )?;
-            Ok(value.clone())
-        } else {
-            invalid_type!("integer", value, instance_path)
+            check_bounds!(val.extract()?, self.type_info, instance_path)?;
+            return Ok(value.clone());
         }
+        if ctx.try_cast_from_string {
+            if let Ok(val) = value.downcast::<PyString>() {
+                if let Ok(val) = val.to_str()?.parse::<i64>() {
+                    check_bounds!(val, self.type_info, instance_path)?;
+                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                }
+            }
+        }
+        invalid_type!("integer", value, instance_path)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct FloatEncoder {
     pub(crate) type_info: FloatType,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for FloatEncoder {
@@ -106,34 +128,31 @@ impl Encoder for FloatEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyLong>() {
-            check_bounds(
-                val.extract()?,
-                self.type_info.min,
-                self.type_info.max,
-                instance_path,
-            )?;
-            Ok(value.clone())
-        } else if let Ok(val) = value.downcast::<PyFloat>() {
-            check_bounds(
-                val.extract()?,
-                self.type_info.min,
-                self.type_info.max,
-                instance_path,
-            )?;
-            Ok(value.clone())
-        } else {
-            invalid_type!("number", value, instance_path)
+            check_bounds!(val.extract()?, self.type_info, instance_path)?;
+            return Ok(value.clone());
         }
+        if let Ok(val) = value.downcast::<PyFloat>() {
+            check_bounds!(val.extract()?, self.type_info, instance_path)?;
+            return Ok(value.clone());
+        }
+        if ctx.try_cast_from_string {
+            if let Ok(val) = value.downcast::<PyString>() {
+                if let Ok(val) = val.to_str()?.parse::<f64>() {
+                    check_bounds!(val, self.type_info, instance_path)?;
+                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                }
+            }
+        }
+        invalid_type!("number", value, instance_path)
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct DecimalEncoder {
     pub(crate) type_info: DecimalType,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
     pub(crate) decimal_cls: Py<PyAny>,
 }
 
@@ -148,32 +167,18 @@ impl Encoder for DecimalEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         let valid = if let Ok(val) = value.downcast::<PyFloat>() {
-            check_bounds(
-                val.value(),
-                self.type_info.min,
-                self.type_info.max,
-                instance_path,
-            )?;
+            check_bounds!(val.value(), self.type_info, instance_path)?;
             true
         } else if let Ok(val) = value.downcast::<PyLong>() {
-            check_bounds(
-                val.extract()?,
-                self.type_info.min,
-                self.type_info.max,
-                instance_path,
-            )?;
+            check_bounds!(val.extract()?, self.type_info, instance_path)?;
             true
         } else if let Ok(val) = value.downcast::<PyString>() {
             match val.to_str()?.parse::<f64>() {
                 Ok(val_f64) => {
-                    check_bounds(
-                        val_f64,
-                        self.type_info.min,
-                        self.type_info.max,
-                        instance_path,
-                    )?;
+                    check_bounds!(val_f64, self.type_info, instance_path)?;
                     true
                 }
                 Err(_) => false,
@@ -193,8 +198,6 @@ impl Encoder for DecimalEncoder {
 #[derive(Debug, Clone)]
 pub struct StringEncoder {
     pub(crate) type_info: StringType,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for StringEncoder {
@@ -208,6 +211,7 @@ impl Encoder for StringEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyString>() {
             check_length(
@@ -224,10 +228,7 @@ impl Encoder for StringEncoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct BooleanEncoder {
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
-}
+pub struct BooleanEncoder {}
 
 impl Encoder for BooleanEncoder {
     #[inline]
@@ -240,20 +241,25 @@ impl Encoder for BooleanEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(_val) = value.downcast::<PyBool>() {
-            Ok(value.clone())
-        } else {
-            invalid_type!("boolean", value, instance_path)
+            return Ok(value.clone());
         }
+        if ctx.try_cast_from_string {
+            if let Ok(val) = value.downcast::<PyString>() {
+                if let Some(val) = str_as_bool(val.to_str()?) {
+                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                }
+            }
+        }
+
+        invalid_type!("boolean", value, instance_path)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct BytesEncoder {
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
-}
+pub struct BytesEncoder {}
 
 impl Encoder for BytesEncoder {
     #[inline]
@@ -266,6 +272,7 @@ impl Encoder for BytesEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(_val) = value.downcast::<PyBytes>() {
             Ok(value.clone())
@@ -280,8 +287,6 @@ pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,
     pub(crate) value_encoder: Box<TEncoder>,
     pub(crate) omit_none: bool,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for DictionaryEncoder {
@@ -307,13 +312,14 @@ impl Encoder for DictionaryEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyDict>() {
             let result_dict = create_py_dict_known_size(val.py(), val.len());
             for (k, v) in val.iter() {
                 let instance_path = instance_path.push(&k);
-                let key = self.key_encoder.load(&k, &instance_path)?;
-                let value = self.value_encoder.load(&v, &instance_path)?;
+                let key = self.key_encoder.load(&k, &instance_path, ctx)?;
+                let value = self.value_encoder.load(&v, &instance_path, ctx)?;
                 py_dict_set_item(&result_dict, key.as_ptr(), value)?;
             }
             Ok(result_dict.into_any())
@@ -321,13 +327,21 @@ impl Encoder for DictionaryEncoder {
             invalid_type_dump!("dict", value)
         }
     }
+
+    fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
+        Some(self)
+    }
+}
+
+impl ContainerEncoder for DictionaryEncoder {
+    fn get_fields(&self) -> QueryFields {
+        QueryFields::Dict(self.value_encoder.is_sequence())
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ArrayEncoder {
     pub(crate) encoder: Box<TEncoder>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for ArrayEncoder {
@@ -354,6 +368,7 @@ impl Encoder for ArrayEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyList>() {
             let size = val.len();
@@ -362,13 +377,17 @@ impl Encoder for ArrayEncoder {
             for index in 0..size {
                 let item = py_list_get_item(val, index);
                 let instance_path = instance_path.push(index);
-                let val = self.encoder.load(&item, &instance_path)?;
+                let val = self.encoder.load(&item, &instance_path, ctx)?;
                 py_list_set_item(&result, index, val);
             }
             Ok(result.into_any())
         } else {
             invalid_type!("list", value, instance_path)
         }
+    }
+
+    fn is_sequence(&self) -> bool {
+        true
     }
 }
 
@@ -380,8 +399,6 @@ pub struct EntityEncoder {
     pub(crate) fields: Vec<Field>,
     pub(crate) create_object: Py<PyAny>,
     pub(crate) object_set_attr: Py<PyAny>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 #[derive(Debug, Clone)]
@@ -416,6 +433,7 @@ impl Encoder for EntityEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         let py_frozen_object_set_attr = self.object_set_attr.bind(value.py());
         if let Ok(val) = value.downcast::<PyDict>() {
@@ -428,7 +446,7 @@ impl Encoder for EntityEncoder {
                     Some(val) => {
                         let instance_path =
                             instance_path.push(field.dict_key.bind(value.py()).as_any());
-                        field.encoder.load(&val, &instance_path)?
+                        field.encoder.load(&val, &instance_path, ctx)?
                     }
                     None => match (&field.default, &field.default_factory) {
                         (Some(val), _) => val.bind(value.py()).clone(),
@@ -454,14 +472,30 @@ impl Encoder for EntityEncoder {
             invalid_type!("object", value, instance_path)
         }
     }
+
+    fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
+        Some(self)
+    }
+}
+
+impl ContainerEncoder for EntityEncoder {
+    fn get_fields(&self) -> QueryFields {
+        QueryFields::Object(
+            self.fields
+                .iter()
+                .map(|f| EncoderField {
+                    name: &f.dict_key,
+                    is_sequence: f.encoder.is_sequence(),
+                })
+                .collect(),
+        )
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct TypedDictEncoder {
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for TypedDictEncoder {
@@ -499,6 +533,7 @@ impl Encoder for TypedDictEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         let value = match value.downcast::<PyDict>() {
             Ok(val) => val,
@@ -519,17 +554,32 @@ impl Encoder for TypedDictEncoder {
                 }
             };
             let instance_path = instance_path.push(field.dict_key.bind(value.py()).as_any());
-            let dump_result = field.encoder.load(&field_val, &instance_path)?;
+            let dump_result = field.encoder.load(&field_val, &instance_path, ctx)?;
             py_dict_set_item(&dict, field.name.as_ptr(), dump_result)?;
         }
         Ok(dict.into_any())
+    }
+    fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
+        Some(self)
+    }
+}
+
+impl ContainerEncoder for TypedDictEncoder {
+    fn get_fields(&self) -> QueryFields {
+        QueryFields::Object(
+            self.fields
+                .iter()
+                .map(|f| EncoderField {
+                    name: &f.dict_key,
+                    is_sequence: f.encoder.is_sequence(),
+                })
+                .collect(),
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct UUIDEncoder {
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
     pub(crate) uuid_cls: Py<PyAny>,
 }
 
@@ -544,6 +594,7 @@ impl Encoder for UUIDEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyString>() {
             if Uuid::parse_str(val.to_str()?).is_ok() {
@@ -559,8 +610,6 @@ impl Encoder for UUIDEncoder {
 #[derive(Debug, Clone)]
 pub struct EnumEncoder {
     pub(crate) enum_items: Vec<(EnumItem, Py<PyAny>)>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for EnumEncoder {
@@ -575,6 +624,7 @@ impl Encoder for EnumEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         let val = if let Ok(val) = value.downcast::<PyString>() {
             EnumItem::String(val.to_str()?.to_owned())
@@ -589,20 +639,31 @@ impl Encoder for EnumEncoder {
         match index {
             Ok(index) => {
                 let (_, py_item) = &self.enum_items[index];
-                Ok(py_item.bind(value.py()).clone())
+                return Ok(py_item.bind(value.py()).clone());
             }
-            Err(_) => {
-                invalid_enum_item!((&self.enum_items).into(), value, instance_path);
+            Err(_) if ctx.try_cast_from_string => {
+                if let Ok(value) = value.downcast::<PyString>() {
+                    if let Ok(val) = value.to_str()?.parse::<i64>() {
+                        if let Ok(index) = self
+                            .enum_items
+                            .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
+                        {
+                            let (_, py_item) = &self.enum_items[index];
+                            return Ok(py_item.bind(value.py()).clone());
+                        }
+                    }
+                }
             }
+            _ => {}
         }
+
+        invalid_enum_item!((&self.enum_items).into(), value, instance_path);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct LiteralEncoder {
     pub(crate) enum_items: Vec<(EnumItem, Py<PyAny>)>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for LiteralEncoder {
@@ -616,6 +677,7 @@ impl Encoder for LiteralEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         let val = if let Ok(val) = value.downcast::<PyString>() {
             EnumItem::String(val.to_str()?.to_owned())
@@ -630,20 +692,31 @@ impl Encoder for LiteralEncoder {
         match index {
             Ok(index) => {
                 let (_, py_item) = &self.enum_items[index];
-                Ok(py_item.bind(value.py()).clone())
+                return Ok(py_item.bind(value.py()).clone());
             }
-            Err(_) => {
-                invalid_enum_item!((&self.enum_items).into(), value, instance_path);
+            Err(_) if ctx.try_cast_from_string => {
+                if let Ok(value) = value.downcast::<PyString>() {
+                    if let Ok(val) = value.to_str()?.parse::<i64>() {
+                        if let Ok(index) = self
+                            .enum_items
+                            .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
+                        {
+                            let (_, py_item) = &self.enum_items[index];
+                            return Ok(py_item.bind(value.py()).clone());
+                        }
+                    }
+                }
             }
+            _ => {}
         }
+
+        invalid_enum_item!((&self.enum_items).into(), value, instance_path);
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct OptionalEncoder {
     pub(crate) encoder: Box<TEncoder>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for OptionalEncoder {
@@ -661,20 +734,23 @@ impl Encoder for OptionalEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if value.is_none() {
             Ok(value.clone())
         } else {
-            self.encoder.load(value, instance_path)
+            self.encoder.load(value, instance_path, ctx)
         }
+    }
+
+    fn is_sequence(&self) -> bool {
+        self.encoder.is_sequence()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TupleEncoder {
     pub(crate) encoders: Vec<Box<TEncoder>>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for TupleEncoder {
@@ -701,6 +777,7 @@ impl Encoder for TupleEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Check sequence is not str
         if let Ok(seq) = value.downcast::<PySequence>() {
@@ -713,7 +790,7 @@ impl Encoder for TupleEncoder {
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
                 let instance_path = instance_path.push(index);
-                let val = self.encoders[index].load(&item, &instance_path)?;
+                let val = self.encoders[index].load(&item, &instance_path, ctx)?;
                 py_tuple_set_item(&result, index, val);
             }
             Ok(result.into_any())
@@ -721,14 +798,16 @@ impl Encoder for TupleEncoder {
             invalid_type!("sequence", value, instance_path)
         }
     }
+
+    fn is_sequence(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct UnionEncoder {
     pub(crate) encoders: Vec<Box<TEncoder>>,
     pub(crate) union_repr: String,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for UnionEncoder {
@@ -748,9 +827,10 @@ impl Encoder for UnionEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         for encoder in &self.encoders {
-            let result = encoder.load(value, instance_path);
+            let result = encoder.load(value, instance_path, ctx);
             if result.is_ok() {
                 return result;
             }
@@ -766,8 +846,6 @@ pub struct DiscriminatedUnionEncoder {
     pub(crate) load_discriminator: Py<PyString>,
     pub(crate) load_discriminator_rs: String,
     pub(crate) keys: Vec<String>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for DiscriminatedUnionEncoder {
@@ -797,6 +875,7 @@ impl Encoder for DiscriminatedUnionEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyDict>() {
             let key_any = match val.get_item(&self.load_discriminator) {
@@ -817,7 +896,7 @@ impl Encoder for DiscriminatedUnionEncoder {
                 let instance_path = instance_path.push(self.load_discriminator_rs.as_str());
                 no_encoder_for_discriminator(key_str, &self.keys, &instance_path)
             })?;
-            encoder.load(value, instance_path)
+            encoder.load(value, instance_path, ctx)
         } else {
             invalid_type!("dict", value, instance_path)
         }
@@ -825,10 +904,7 @@ impl Encoder for DiscriminatedUnionEncoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct TimeEncoder {
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
-}
+pub struct TimeEncoder {}
 
 impl Encoder for TimeEncoder {
     #[inline]
@@ -842,6 +918,7 @@ impl Encoder for TimeEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyString>() {
             if let Ok(result) = parse_time(value.py(), val.to_str()?) {
@@ -853,10 +930,7 @@ impl Encoder for TimeEncoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct DateTimeEncoder {
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
-}
+pub struct DateTimeEncoder {}
 
 impl Encoder for DateTimeEncoder {
     #[inline]
@@ -870,6 +944,7 @@ impl Encoder for DateTimeEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyString>() {
             if let Ok(result) = parse_datetime(value.py(), val.to_str()?) {
@@ -881,10 +956,7 @@ impl Encoder for DateTimeEncoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct DateEncoder {
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
-}
+pub struct DateEncoder {}
 
 impl Encoder for DateEncoder {
     #[inline]
@@ -903,6 +975,7 @@ impl Encoder for DateEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyString>() {
             if let Ok(result) = parse_date(value.py(), val.to_str()?) {
@@ -922,8 +995,6 @@ pub enum Encoders {
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
     pub(crate) inner: Arc<AtomicRefCell<Option<Encoders>>>,
-    #[allow(dead_code)]
-    pub(crate) ctx: Context,
 }
 
 impl Encoder for LazyEncoder {
@@ -945,11 +1016,12 @@ impl Encoder for LazyEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         match self.inner.borrow().as_ref() {
             Some(encoder) => match encoder {
-                Encoders::Entity(encoder) => encoder.load(value, instance_path),
-                Encoders::TypedDict(encoder) => encoder.load(value, instance_path),
+                Encoders::Entity(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::TypedDict(encoder) => encoder.load(value, instance_path, ctx),
             },
             None => Err(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
@@ -979,10 +1051,15 @@ impl Encoder for CustomEncoder {
         &self,
         value: &Bound<'a, PyAny>,
         instance_path: &InstancePath,
+        ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         match self.load {
             Some(ref load) => load.bind(value.py()).call1((value,)),
-            None => self.inner.load(value, instance_path),
+            None => self.inner.load(value, instance_path, ctx),
         }
+    }
+
+    fn is_sequence(&self) -> bool {
+        self.inner.is_sequence()
     }
 }
