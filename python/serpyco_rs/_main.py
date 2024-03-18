@@ -1,5 +1,5 @@
 import abc
-from typing import Annotated, Any, Generic, Mapping, TypeVar, Union, cast, overload
+from typing import Annotated, Any, Generic, Protocol, TypeVar, Union, cast, overload
 
 from ._describe import describe_type
 from ._impl import Serializer as _Serializer
@@ -7,22 +7,22 @@ from ._json_schema import get_json_schema
 from .metadata import CamelCase, ForceDefaultForOptional, OmitNone
 
 _T = TypeVar('_T', bound=Any)
-
-
-_S = TypeVar('_S', bound=str)
-_T_co = TypeVar('_T_co', covariant=True)
 _D = TypeVar('_D')
 
 
-class _MultiMapping(Mapping[_S, _T_co]):
+class _MultiMapping(Protocol[_T, _D]):
+
+    @abc.abstractmethod
+    def __getitem__(self, __key: str) -> _T: ...
+
     @overload
     @abc.abstractmethod
-    def getall(self, key: _S) -> list[_T_co]: ...
+    def getall(self, key: str) -> list[_T]: ...
     @overload
     @abc.abstractmethod
-    def getall(self, key: _S, default: _D) -> Union[list[_T_co], _D]: ...
+    def getall(self, key: str, default: _D) -> Union[list[_T], _D]: ...
     @abc.abstractmethod
-    def getall(self, key: _S, default: _D = ...) -> Union[list[_T_co], _D]: ...
+    def getall(self, key: str, default: _D = ...) -> Union[list[_T], _D]: ...
 
 
 class Serializer(Generic[_T]):
@@ -50,7 +50,7 @@ class Serializer(Generic[_T]):
     def load(self, data: Any) -> _T:
         return self._encoder.load(data)
 
-    def load_query_params(self, data: _MultiMapping[str, Any]) -> _T:
+    def load_query_params(self, data: _MultiMapping[Any, Any]) -> _T:
         return self._encoder.load_query_params(data)
 
     def get_json_schema(self) -> dict[str, Any]:

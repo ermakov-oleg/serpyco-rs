@@ -157,7 +157,7 @@ def test_load_query_params__tuple__invalid():
 def test_load_query_params__union():
     @dataclass
     class Foo:
-        f: int | bool
+        f: Union[int, bool]
 
     serializer = serpyco_rs.Serializer(Foo)
     assert serializer.load_query_params(MultiDict({'f': '1'})) == Foo(f=1)

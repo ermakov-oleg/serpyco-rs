@@ -41,7 +41,9 @@ class IntegerType(BaseType):
     min: int | None
     max: int | None
 
-    def __init__(self, min: int | None, max: int | None, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(
+        self, min: int | None = None, max: int | None = None, custom_encoder: CustomEncoder[Any, Any] | None = None
+    ): ...
 
 class FloatType(BaseType):
     min: float | None
@@ -60,7 +62,10 @@ class StringType(BaseType):
     max_length: int | None
 
     def __init__(
-        self, min_length: int | None, max_length: int | None, custom_encoder: CustomEncoder[Any, Any] | None
+        self,
+        min_length: int | None = None,
+        max_length: int | None = None,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
 class BooleanType(BaseType):
