@@ -1,4 +1,5 @@
 import os
+import sys
 
 import nox
 
@@ -72,6 +73,7 @@ def bench(session):
 
 @nox.session(python=False)
 def test_rc_leaks(session):
+    # uv don't resolve wheels when used python debug build
     build(session, use_pip=True)
     install(session, '-r', 'requirements/bench.txt', use_pip=True)
     session.run(
@@ -94,8 +96,7 @@ def bench_codespeed(session):
 def install(session, *args, use_pip: bool = False):
     if session._runner.global_config.no_install:
         return
-    python = session.run_always('which', 'python', silent=True).strip()
-    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', python]
+    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', sys.executable]
     session.run_always(*cmd, *args)
 
 
