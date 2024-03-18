@@ -1,7 +1,7 @@
 """Query params in most cases, field values are of string type"""
 
 from dataclasses import dataclass
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, TypedDict, Union
 from enum import Enum
 
 import pytest
@@ -129,7 +129,7 @@ def test_load_query_params__list__empty():
 def test_load_query_params__list__optional():
     @dataclass
     class Foo:
-        ids: list[int] | None = None
+        ids: Union[list[int], None] = None
 
     serializer = serpyco_rs.Serializer(Foo)
     assert serializer.load_query_params(MultiDict()) == Foo(ids=None)

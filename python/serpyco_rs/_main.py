@@ -1,5 +1,5 @@
 import abc
-from typing import Annotated, Any, Generic, Mapping, TypeVar, cast, overload
+from typing import Annotated, Any, Generic, Mapping, TypeVar, Union, cast, overload
 
 from ._describe import describe_type
 from ._impl import Serializer as _Serializer
@@ -20,9 +20,9 @@ class _MultiMapping(Mapping[_S, _T_co]):
     def getall(self, key: _S) -> list[_T_co]: ...
     @overload
     @abc.abstractmethod
-    def getall(self, key: _S, default: _D) -> list[_T_co] | _D: ...
+    def getall(self, key: _S, default: _D) -> Union[list[_T_co], _D]: ...
     @abc.abstractmethod
-    def getall(self, key: _S, default: _D = ...) -> list[_T_co] | _D: ...
+    def getall(self, key: _S, default: _D = ...) -> Union[list[_T_co], _D]: ...
 
 
 class Serializer(Generic[_T]):

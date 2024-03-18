@@ -61,7 +61,6 @@ def bench(session):
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
         '--verbose',
-        '--native',
         '--benchmark-min-time=0.5',
         '--benchmark-max-time=1',
         '--benchmark-disable-gc',
@@ -95,7 +94,6 @@ def bench_codespeed(session):
 def install(session, *args, use_pip: bool = False):
     if session._runner.global_config.no_install:
         return
-    use_pip = use_pip or _is_windows()
     python = session.run_always('which', 'python', silent=True).strip()
     cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', python]
     session.run_always(*cmd, *args)
@@ -103,7 +101,3 @@ def install(session, *args, use_pip: bool = False):
 
 def _is_ci() -> bool:
     return bool(os.environ.get('CI', None))
-
-
-def _is_windows() -> bool:
-    return os.name == 'nt'
