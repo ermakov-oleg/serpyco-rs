@@ -314,7 +314,12 @@ def _describe_entity(
         required = not (field.default != NOT_SET or field.default_factory != NOT_SET) or is_discriminator_field
 
         default = field.default
-        if required and none_as_default_for_optional and none_as_default_for_optional.use:
+        if (
+            isinstance(field_type, OptionalType)
+            and required
+            and none_as_default_for_optional
+            and none_as_default_for_optional.use
+        ):
             default = DefaultValue.some(None)
             required = False
 

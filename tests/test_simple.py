@@ -172,6 +172,18 @@ def test_nullable_without_default__force_none_as_default_for_optional():
     assert entity_serializer.load({}) == Entity(foo=None)
 
 
+def test_required__force_none_as_default_for_optional__required_field_not_changed():
+    @dataclass
+    class Entity:
+        foo: int
+
+    entity_serializer = Serializer(Entity, force_default_for_optional=True)
+
+    assert entity_serializer.load({'foo': 1}) == Entity(foo=1)
+    with pytest.raises(SchemaValidationError):
+        assert entity_serializer.load({})
+
+
 def test_required_and_nullable_list():
     @dataclass
     class Entity:
