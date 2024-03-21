@@ -236,9 +236,13 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
         raise RuntimeError('Supported only Literal[str | int, ...]')
 
     if t in {Union}:
-        if len(args) == 2 and _NoneType in args:
-            inner = args[1] if args[0] is _NoneType else args[0]
-            return OptionalType(inner=describe_type(annotation_wrapper(inner), meta), custom_encoder=None)
+        if _NoneType in args:
+            new_args = tuple(arg for arg in args if arg is not _NoneType)
+            new_t = Union[new_args] if len(new_args) > 1 else new_args[0]
+            return OptionalType(
+                inner=describe_type(annotation_wrapper(new_t), meta),
+                custom_encoder=None,
+            )
 
         discriminator = _find_metadata(metadata, Discriminator)
         if not discriminator:
