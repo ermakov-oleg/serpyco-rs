@@ -235,7 +235,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             return LiteralType(args=list(args), custom_encoder=custom_encoder)
         raise RuntimeError('Supported only Literal[str | int, ...]')
 
-    if t in {Union}:
+    if t is Union:
         if _NoneType in args:
             new_args = tuple(arg for arg in args if arg is not _NoneType)
             new_t = Union[new_args] if len(new_args) > 1 else new_args[0]
@@ -314,7 +314,12 @@ def _describe_entity(
         required = not (field.default != NOT_SET or field.default_factory != NOT_SET) or is_discriminator_field
 
         default = field.default
-        if required and none_as_default_for_optional and none_as_default_for_optional.use:
+        if (
+            isinstance(field_type, OptionalType)
+            and required
+            and none_as_default_for_optional
+            and none_as_default_for_optional.use
+        ):
             default = DefaultValue.some(None)
             required = False
 

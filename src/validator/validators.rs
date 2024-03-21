@@ -109,10 +109,12 @@ pub fn check_length(
     Ok(())
 }
 
+#[cold]
 pub fn missing_required_property(property: &str, instance_path: &InstancePath) -> PyErr {
+    let instance_path = instance_path.push(property);
     raise_error(
         format!(r#""{}" is a required property"#, property),
-        instance_path,
+        &instance_path,
     )
     .unwrap_err()
 }
