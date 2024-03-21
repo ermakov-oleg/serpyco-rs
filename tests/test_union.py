@@ -206,6 +206,18 @@ def test_load_union():
     assert serializer.load({'val': '123'}) == Bar(val='123')
 
 
+def test_load_optional_union():
+    @dataclass
+    class Foo:
+        val: int
+
+    serializer = Serializer(Union[Foo, list[Foo], None])
+
+    assert serializer.load({'val': 123}) == Foo(val=123)
+    assert serializer.load([{'val': 1}, {'val': 2}]) == [Foo(val=1), Foo(val=2)]
+    assert serializer.load(None) is None
+
+
 def test_load_union_simple_types__invalid_type():
     serializer = Serializer(Union[int, str])
     with pytest.raises(SchemaValidationError) as exc_info:
