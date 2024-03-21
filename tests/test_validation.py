@@ -163,7 +163,7 @@ def test_dataclass_validation__missing_field():
         a: int
 
     s = Serializer(A)
-    _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='')])
+    _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='a')])
 
 
 def test_dataclass_validation__missing_field__with_instance_path():
@@ -176,7 +176,7 @@ def test_dataclass_validation__missing_field__with_instance_path():
         foo: Foo
 
     s = Serializer(Bar)
-    _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo')])
+    _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo/a')])
 
 
 def test_typed_dict_validation__invalid_type():
@@ -195,7 +195,7 @@ def test_typed_dict_validation__missing_field():
         a: int
 
     s = Serializer(A)
-    _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='')])
+    _check_errors(s, {}, [ErrorItem(message='"a" is a required property', instance_path='a')])
 
 
 def test_typed_dict_validation__missing_field__with_instance_path():
@@ -206,7 +206,7 @@ def test_typed_dict_validation__missing_field__with_instance_path():
         foo: Foo
 
     s = Serializer(Bar)
-    _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo')])
+    _check_errors(s, {'foo': {}}, [ErrorItem(message='"a" is a required property', instance_path='foo/a')])
 
 
 def test_list_validation__invalid_type():
@@ -316,7 +316,7 @@ def test_tagged_union_validation__discriminator_missing():
     with pytest.raises(SchemaValidationError) as e:
         s.load({})
 
-    assert e.value.errors == [ErrorItem(message='"type" is a required property', instance_path='')]
+    assert e.value.errors == [ErrorItem(message='"type" is a required property', instance_path='type')]
 
 
 def test_dump_tagged_union_validation__discriminator_missing():
@@ -324,7 +324,7 @@ def test_dump_tagged_union_validation__discriminator_missing():
     with pytest.raises(SchemaValidationError) as e:
         s.dump({})
 
-    assert e.value.errors == [ErrorItem(message='"type" is a required property', instance_path='')]
+    assert e.value.errors == [ErrorItem(message='"type" is a required property', instance_path='type')]
 
 
 def test_literal_validation__invalid_value():
@@ -352,5 +352,5 @@ def test_instance_path():
     _check_errors(
         s,
         {'bar': [{'foo': [{'a': 1}]}, {'foo': [{'b': 1}]}]},
-        [ErrorItem(message='"a" is a required property', instance_path='bar/1/foo/0')],
+        [ErrorItem(message='"a" is a required property', instance_path='bar/1/foo/0/a')],
     )

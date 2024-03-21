@@ -235,7 +235,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             return LiteralType(args=list(args), custom_encoder=custom_encoder)
         raise RuntimeError('Supported only Literal[str | int, ...]')
 
-    if t in {Union}:
+    if t is Union:
         if _NoneType in args:
             new_args = tuple(arg for arg in args if arg is not _NoneType)
             new_t = Union[new_args] if len(new_args) > 1 else new_args[0]

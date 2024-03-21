@@ -553,7 +553,7 @@ impl Encoder for TypedDictEncoder {
                     }
                 }
             };
-            let instance_path = instance_path.push(field.dict_key.bind(value.py()).as_any());
+            let instance_path = instance_path.push(field.dict_key_rs.as_str());
             let dump_result = field.encoder.load(&field_val, &instance_path, ctx)?;
             py_dict_set_item(&dict, field.name.as_ptr(), dump_result)?;
         }
