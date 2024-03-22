@@ -180,3 +180,17 @@ def test_generics__swagger_schema():
             }
         },
     }
+
+
+def test_generics_inheritance():
+
+    @dataclass
+    class Parent(Generic[T]):
+        value: T
+
+    @dataclass
+    class Child(Parent[bool]):
+        pass
+
+    serializer = Serializer(Child)
+    assert serializer.dump(Child(42)) == {'value': 42}

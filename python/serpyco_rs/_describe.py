@@ -22,6 +22,7 @@ from uuid import UUID
 
 from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
+from typing_inspect import get_generic_bases, is_generic_type
 
 from ._impl import (
     NOT_SET,
@@ -97,6 +98,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
     parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
+    original_t = t
     type_repr = repr(t)
     if get_origin(t) == Annotated:  # unwrap annotated
         t = t.__origin__
@@ -119,8 +121,8 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
         meta = Meta(globals=_get_globals(t), state={})
 
     t = _evaluate_forwardref(t, meta)
+    generics = _get_generics(original_t, args, parameters)
 
-    generics = tuple((k, v) for k, v in sorted(zip(parameters, args), key=lambda x: repr(x[0])))
     filed_format = _find_metadata(metadata, FieldFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
     none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional, KeepDefaultForOptional)
@@ -405,6 +407,16 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
         ]
 
     raise RuntimeError(f"Unsupported type '{t}'")
+
+
+def _get_generics(t: Any, args: tuple[Any, ...], parameters: tuple[Any, ...]) -> tuple[tuple[TypeVar, Any], ...]:
+    if is_generic_type(t):
+        for base in get_generic_bases(t):
+            origin = getattr(base, '__origin__', None)
+            if origin and hasattr(origin, '__parameters__'):
+                args += base.__args__
+                parameters += origin.__parameters__
+    return tuple((k, v) for k, v in sorted(zip(parameters, args), key=lambda x: repr(x[0])))
 
 
 def _replace_generics(t: Any, generics: Sequence[tuple[TypeVar, Any]]) -> Any:
