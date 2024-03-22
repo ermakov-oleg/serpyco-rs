@@ -673,7 +673,7 @@ def test_describe__typed_dict():
         bar_field: Annotated[NotRequired[str], Alias('barField')]
         generic_field: T
 
-    assert describe_type(Entity[bool]) == TypedDictType(
+    assert describe_type(Entity) == TypedDictType(
         name=mock.ANY,
         fields=[
             EntityField(
