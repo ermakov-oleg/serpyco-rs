@@ -17,8 +17,6 @@ from typing import (
     get_origin,
     overload,
 )
-
-from ._type_utils import get_type_hints
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
@@ -54,6 +52,7 @@ from ._impl import (
     UUIDType,
 )
 from ._meta import Meta, MetaStateKey
+from ._type_utils import get_type_hints
 from ._utils import to_camelcase
 from .metadata import (
     Alias,
@@ -214,7 +213,6 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             return EnumType(cls=t, items=list(t), custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
-            print('original_t =', original_t)
             meta.add_to_state(meta_key, None)
             entity_type = _describe_entity(
                 t=t,

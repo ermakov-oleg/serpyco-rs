@@ -1,16 +1,35 @@
+# Uses code from https://github.com/python/cpython/pull/111515
 import collections.abc
 import functools
 import operator
 import sys
-from collections import defaultdict
-from typing import _GenericAlias, get_args, get_origin, is_typeddict, ForwardRef, _eval_type, \
-    TypeVarTuple, _is_typevar_like, Any, Generic, Required, NotRequired, _AnnotatedAlias
-from types import GenericAlias
 import types
+from collections import defaultdict
+from types import GenericAlias
+from typing import (
+    Any,
+    ForwardRef,
+    Generic,
+    TypeVar,
+    _AnnotatedAlias,
+    _eval_type,
+    _GenericAlias,
+    get_args,
+    get_origin,
+)
 
-_allowed_types = (types.FunctionType, types.BuiltinFunctionType,
-                  types.MethodType, types.ModuleType,
-                  types.WrapperDescriptorType, types.MethodWrapperType, types.MethodDescriptorType)
+from typing_extensions import NotRequired, ParamSpec, Required, TypeVarTuple, is_typeddict
+
+_allowed_types = (
+    types.FunctionType,
+    types.BuiltinFunctionType,
+    types.MethodType,
+    types.ModuleType,
+    types.WrapperDescriptorType,
+    types.MethodWrapperType,
+    types.MethodDescriptorType,
+)
+
 
 def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
     """Return type hints for an object.
@@ -135,9 +154,8 @@ def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
         # Return empty annotations for something that _could_ have them.
         if isinstance(obj, _allowed_types):
             return {}
-        else:
-            raise TypeError('{!r} is not a module, class, method, '
-                            'or function.'.format(obj))
+        else:  # noqa: RET505
+            raise TypeError(f'{obj!r} is not a module, class, method, ' 'or function.')
     hints = dict(hints)
     for name, value in hints.items():
         if value is None:
@@ -154,8 +172,7 @@ def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
     return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
 
 
-
-def _substitute_type_hints(substitutions: "list[tuple[Any, ...]]", hints: "dict[str, Any]"):
+def _substitute_type_hints(substitutions: 'list[tuple[Any, ...]]', hints: 'dict[str, Any]'):
     # nothing to substitute
     if len(substitutions) < 2:
         return {}
@@ -206,11 +223,10 @@ def _copy_with(t, new_args):
         return t
     if isinstance(t, GenericAlias):
         return GenericAlias(t.__origin__, new_args)
-    if isinstance(t, types.UnionType):
+    if hasattr(types, 'UnionType') and isinstance(t, types.UnionType):
         return functools.reduce(operator.or_, new_args)
-    else:
+    else:  # noqa: RET505
         return t.copy_with(new_args)
-
 
 
 def _make_substitution(origin, args, new_arg_by_param):
@@ -306,7 +322,7 @@ def _repack_args(reference, params):
         type_var_tuple_params = params[tuple_start:tuple_end]
 
         # if params might contain typevartuple args
-        if len(params) > tuple_start:
+        if len(params) > tuple_start:  # noqa: SIM102
             # if params[tuple_start] is *Ts keep it as-is
             if _is_unpacked_typevartuple(params[tuple_start]):
                 type_var_tuple_params = params[tuple_start]
@@ -318,7 +334,7 @@ def _repack_args(reference, params):
                 return (type_var_tuple_params, *params[tuple_end:])
             return (type_var_tuple_params,)
         # if it's at the end
-        elif tuple_end is None:
+        elif tuple_end is None:  # noqa: RET505
             return (*params[:tuple_start], type_var_tuple_params)
         # if it's in the middle
         return (*params[:tuple_start], type_var_tuple_params, *params[tuple_end:])
@@ -326,8 +342,11 @@ def _repack_args(reference, params):
 
 
 def _is_unpacked_typevartuple(x: Any) -> bool:
-    return ((not isinstance(x, type)) and
-            getattr(x, '__typing_is_unpacked_typevartuple__', False))
+    return (not isinstance(x, type)) and getattr(x, '__typing_is_unpacked_typevartuple__', False)
+
+
+def _is_typevar_like(x: Any) -> bool:
+    return isinstance(x, (TypeVar, ParamSpec)) or _is_unpacked_typevartuple(x)
 
 
 def _get_all_bases(cls):
@@ -398,7 +417,7 @@ def _track_parameter_changes(base):
         type_vars_for_generic = _collect_parameters(orig_bases)
 
         # this may be empty if obj is
-        # class Bar(Foo[str]): ...
+        # class Bar(Foo[str]): ...
         # we can skip adding typevars here.
         if type_vars_for_generic:
             yield base, type_vars_for_generic
@@ -438,7 +457,7 @@ def _strip_annotations(t):
     """Strip the annotations from a given type."""
     if isinstance(t, _AnnotatedAlias):
         return _strip_annotations(t.__origin__)
-    if hasattr(t, "__origin__") and t.__origin__ in (Required, NotRequired):
+    if hasattr(t, '__origin__') and t.__origin__ in (Required, NotRequired):
         return _strip_annotations(t.__args__[0])
     if isinstance(t, _GenericAlias):
         stripped_args = tuple(_strip_annotations(a) for a in t.__args__)
@@ -450,11 +469,10 @@ def _strip_annotations(t):
         if stripped_args == t.__args__:
             return t
         return GenericAlias(t.__origin__, stripped_args)
-    if isinstance(t, types.UnionType):
+    if hasattr(types, 'UnionType') and isinstance(t, types.UnionType):
         stripped_args = tuple(_strip_annotations(a) for a in t.__args__)
         if stripped_args == t.__args__:
             return t
         return functools.reduce(operator.or_, stripped_args)
 
     return t
-
