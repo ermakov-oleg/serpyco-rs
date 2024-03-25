@@ -15,14 +15,14 @@ from typing import (
     Union,
     cast,
     get_origin,
-    get_type_hints,
     overload,
 )
+
+from ._type_utils import get_type_hints
 from uuid import UUID
 
 from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
-from typing_inspect import get_generic_bases, is_generic_type
 
 from ._impl import (
     NOT_SET,
@@ -95,17 +95,15 @@ _T = TypeVar('_T')
 
 
 def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
-    parameters: tuple[Any, ...] = ()
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
-    original_t = t
     type_repr = repr(t)
     if get_origin(t) == Annotated:  # unwrap annotated
         t = t.__origin__
+    original_t = t
     if get_origin(t) in {Required, NotRequired}:  # unwrap TypedDict special forms
         t = t.__args__[0]
     if hasattr(t, '__origin__'):
-        parameters = getattr(t.__origin__, '__parameters__', ())
         args = t.__args__
         t = t.__origin__
     # StdUnionType has no __origin__
@@ -114,14 +112,12 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
         t = Union
     elif hasattr(t, '__parameters__'):
         # Если передан generic-класс без type-параметров, значит по PEP-484 заменяем все параметры на Any
-        parameters = t.__parameters__
-        args = (Any,) * len(parameters)
+        args = (Any,) * len(t.__parameters__)
 
     if not meta:
         meta = Meta(globals=_get_globals(t), state={})
 
     t = _evaluate_forwardref(t, meta)
-    generics = _get_generics(original_t, args, parameters)
 
     filed_format = _find_metadata(metadata, FieldFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
@@ -130,16 +126,15 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
     annotation_wrapper = _wrap_annotated([filed_format, none_format, none_as_default_for_optional])
 
     meta_key = MetaStateKey(
-        cls=t,
+        cls=original_t,
         field_format=filed_format,
         none_format=none_format,
         none_as_default_for_optional=none_as_default_for_optional,
-        generics=generics,
     )
 
     if meta.has_in_state(meta_key):
         return RecursionHolder(
-            name=_generate_name(t, filed_format, none_format, none_as_default_for_optional, generics),
+            name=_generate_name(original_t, filed_format, none_format, none_as_default_for_optional),
             state_key=meta_key,
             meta=meta,
             custom_encoder=None,
@@ -219,10 +214,11 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             return EnumType(cls=t, items=list(t), custom_encoder=custom_encoder)
 
         if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
+            print('original_t =', original_t)
             meta.add_to_state(meta_key, None)
             entity_type = _describe_entity(
                 t=t,
-                generics=generics,
+                original_t=original_t,
                 cls_filed_format=filed_format,
                 cls_none_format=none_format,
                 custom_encoder=custom_encoder,
@@ -286,7 +282,7 @@ class _Field(Generic[_T]):
 
 def _describe_entity(
     t: Any,
-    generics: Sequence[tuple[TypeVar, Any]],
+    original_t: Any,
     cls_filed_format: FieldFormat,
     cls_none_format: NoneFormat,
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
@@ -295,7 +291,7 @@ def _describe_entity(
 ) -> Union[EntityType, TypedDictType]:
     docs = get_attributes_doc(t)
     try:
-        types = get_type_hints(t, include_extras=True)
+        types = get_type_hints(original_t, include_extras=True)
     except Exception:  # pylint: disable=broad-except
         types = {}
 
@@ -304,7 +300,7 @@ def _describe_entity(
 
     fields = []
     for field in _get_entity_fields(t):
-        type_ = _replace_generics(types.get(field.name, field.type), generics)
+        type_ = types.get(field.name, field.type)
         type_ = Annotated[type_, cls_filed_format, cls_none_format, cls_none_as_default_for_optional]
 
         metadata = _get_annotated_metadata(type_)
@@ -340,21 +336,19 @@ def _describe_entity(
 
     if is_typeddict(t):
         return TypedDictType(
-            name=_generate_name(t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional, generics),
+            name=_generate_name(original_t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional),
             fields=fields,
             omit_none=cls_none_format is OmitNone,
-            generics=generics,
             doc=t.__doc__,
             custom_encoder=custom_encoder,
         )
 
     return EntityType(
         cls=t,
-        name=_generate_name(t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional, generics),
+        name=_generate_name(original_t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional),
         fields=fields,
         omit_none=cls_none_format is OmitNone,
         is_frozen=_is_frozen_dataclass(t, fields[0]) if fields else False,
-        generics=generics,
         doc=_get_dataclass_doc(t),
         custom_encoder=custom_encoder,
     )
@@ -409,28 +403,6 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
     raise RuntimeError(f"Unsupported type '{t}'")
 
 
-def _get_generics(t: Any, args: tuple[Any, ...], parameters: tuple[Any, ...]) -> tuple[tuple[TypeVar, Any], ...]:
-    if is_generic_type(t):
-        for base in get_generic_bases(t):
-            origin = getattr(base, '__origin__', None)
-            if origin and hasattr(origin, '__parameters__'):
-                args += base.__args__
-                parameters += origin.__parameters__
-    return tuple((k, v) for k, v in sorted(zip(parameters, args), key=lambda x: repr(x[0])))
-
-
-def _replace_generics(t: Any, generics: Sequence[tuple[TypeVar, Any]]) -> Any:
-    try:
-        generics_map = dict(generics)
-        if parameters := getattr(t, '__parameters__', None):
-            t = t[tuple(generics_map[parameter] for parameter in parameters)]
-        if isinstance(t, TypeVar):
-            t = generics_map[t]
-    except KeyError as exc:
-        raise RuntimeError(f'Unfilled TypeVar: {exc.args[0]}') from exc
-    return t
-
-
 @overload
 def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T) -> _T: ...
 
@@ -471,15 +443,11 @@ def _generate_name(
     field_format: FieldFormat,
     none_format: NoneFormat,
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
-    generics: Sequence[tuple[TypeVar, Any]],
 ) -> str:
-    name = cls.__name__
-    if generics:
-        cls = _replace_generics(cls, generics)
-        name = repr(cls)
+    name = repr(cls).removeprefix("<class '").removesuffix("'>")
     nones = 'omit_nones' if none_format.omit else 'keep_nones'
     force_none = ',force_none' if cls_none_as_default_for_optional.use else ''
-    return f'{cls.__module__}.{name}[{field_format.format.value},{nones}{force_none}]'
+    return f'{name}[{field_format.format.value},{nones}{force_none}]'
 
 
 def _get_globals(t: Any) -> dict[str, Any]:

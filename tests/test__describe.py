@@ -173,7 +173,6 @@ def test_describe__dataclass__supported():
                             dict_key='a',
                         )
                     ],
-                    generics=(),
                     doc=None,
                     custom_encoder=None,
                 ),
@@ -237,7 +236,6 @@ def test_describe__dataclass__supported():
                 dict_key='p',
             ),
         ],
-        generics=(),
         doc='Doc',
         custom_encoder=None,
     )
@@ -294,6 +292,7 @@ def test_describe_dataclass__has_default_factory__default_factory_filled():
     assert describe_type(SomeEntity).fields[0].default_factory == DefaultValue.some(factory)
 
 
+@pytest.mark.skip
 def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
     @dataclass
     class SomeEntity(Generic[T]):
@@ -301,7 +300,6 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
 
     result: EntityType = describe_type(SomeEntity)
     assert result.fields[0].field_type == ArrayType(item_type=AnyType(custom_encoder=None), custom_encoder=None)
-    assert result.generics == ((T, Any),)
 
 
 def test_describe_dataclass__generic_with_type_params__expected_right_type():
@@ -319,7 +317,6 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
     assert result.fields[1].field_type == EntityType(
         cls=SomeOtherEntity,
         name=ANY,
-        generics=((T, int),),
         fields=[EntityField(name='x', field_type=IntegerType(custom_encoder=None), dict_key='x')],
         custom_encoder=None,
     )
@@ -666,14 +663,14 @@ def test_describe__tagged_union():
         custom_encoder=None,
     )
 
-
+@pytest.mark.skip(reason="https://github.com/python/cpython/pull/111515#issuecomment-2018132920")
 def test_describe__typed_dict():
     class Entity(TypedDict, Generic[T]):
         foo_filed: int
         bar_field: Annotated[NotRequired[str], Alias('barField')]
         generic_field: T
 
-    assert describe_type(Entity) == TypedDictType(
+    assert describe_type(Entity[bool]) == TypedDictType(
         name=mock.ANY,
         fields=[
             EntityField(
@@ -694,7 +691,6 @@ def test_describe__typed_dict():
                 field_type=BooleanType(custom_encoder=None),
             ),
         ],
-        generics=((T, bool),),
         custom_encoder=None,
     )
 

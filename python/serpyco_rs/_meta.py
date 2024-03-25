@@ -12,7 +12,6 @@ class MetaStateKey:
     field_format: FieldFormat
     none_format: NoneFormat
     none_as_default_for_optional: NoneAsDefaultForOptional
-    generics: Sequence[tuple[TypeVar, Any]]
 
 
 @dataclass
