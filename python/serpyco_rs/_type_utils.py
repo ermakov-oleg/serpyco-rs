@@ -1,4 +1,5 @@
 # Uses code from https://github.com/python/cpython/pull/111515
+# type: ignore
 import collections.abc
 import functools
 import operator
@@ -11,9 +12,11 @@ from typing import (
     ForwardRef,
     Generic,
     TypeVar,
+    Union,
     _AnnotatedAlias,
     _eval_type,
     _GenericAlias,
+    _type_check,
     get_args,
     get_origin,
 )
@@ -31,7 +34,12 @@ _allowed_types = (
 )
 
 
-def get_type_hints(obj, globalns=None, localns=None, include_extras=False):
+def get_type_hints(
+    obj: Any,
+    globalns: Union[dict[str, Any], None] = None,
+    localns: Union[dict[str, Any], None] = None,
+    include_extras: bool = False,
+) -> dict[str, Any]:
     """Return type hints for an object.
 
     This is often the same as obj.__annotations__, but it handles
@@ -240,6 +248,8 @@ def _make_substitution(origin, args, new_arg_by_param):
         substfunc = getattr(old_arg, '__typing_subst__', None)
         if substfunc:
             new_arg = substfunc(new_arg_by_param[old_arg])
+        elif isinstance(old_arg, TypeVar) and sys.version_info[:2] <= (3, 10):
+            new_arg = _typevar_subst(new_arg_by_param[old_arg])
         else:
             subparams = getattr(old_arg, '__parameters__', ())
             if not subparams:
@@ -476,3 +486,12 @@ def _strip_annotations(t):
         return functools.reduce(operator.or_, stripped_args)
 
     return t
+
+
+# python 3.9 / 3.10 compatibility
+
+
+def _typevar_subst(arg):
+    msg = 'Parameters to generic types must be types.'
+    arg = _type_check(arg, msg, is_argument=True)
+    return arg

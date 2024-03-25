@@ -52,7 +52,7 @@ from ._impl import (
     UUIDType,
 )
 from ._meta import Meta, MetaStateKey
-from ._type_utils import get_type_hints
+from ._type_utils import get_type_hints  # type: ignore[attr-defined]
 from ._utils import to_camelcase
 from .metadata import (
     Alias,
@@ -234,7 +234,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
     if t is Union:
         if _NoneType in args:
             new_args = tuple(arg for arg in args if arg is not _NoneType)
-            new_t = Union[new_args] if len(new_args) > 1 else new_args[0]
+            new_t = Union[new_args] if len(new_args) > 1 else new_args[0]  # type: ignore[unused-ignore]
             return OptionalType(
                 inner=describe_type(annotation_wrapper(new_t), meta),
                 custom_encoder=None,
