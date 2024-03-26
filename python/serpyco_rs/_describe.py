@@ -287,6 +287,11 @@ def _describe_entity(
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: Meta,
 ) -> Union[EntityType, TypedDictType]:
+
+    # PEP-484: Replace all unfilled type parameters with Any
+    if not hasattr(original_t, '__origin__') and getattr(original_t, '__parameters__', None):
+        original_t = original_t[(Any,) * len(t.__parameters__)]
+
     docs = get_attributes_doc(t)
     try:
         types = get_type_hints(original_t, include_extras=True)
