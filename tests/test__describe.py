@@ -664,7 +664,6 @@ def test_describe__tagged_union():
     )
 
 
-@pytest.mark.skip(reason="https://github.com/python/cpython/pull/111515#issuecomment-2018132920")
 def test_describe__typed_dict():
     class Entity(TypedDict, Generic[T]):
         foo_filed: int

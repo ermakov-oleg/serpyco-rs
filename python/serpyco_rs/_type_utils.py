@@ -231,6 +231,8 @@ def _copy_with(t, new_args):
         return t
     if isinstance(t, GenericAlias):
         return GenericAlias(t.__origin__, new_args)
+    if isinstance(t, _AnnotatedAlias):  # https://github.com/python/cpython/pull/111515#issuecomment-2018132920
+        return t.copy_with(new_args[:1])
     if hasattr(types, 'UnionType') and isinstance(t, types.UnionType):
         return functools.reduce(operator.or_, new_args)
     else:  # noqa: RET505
