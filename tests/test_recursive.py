@@ -4,7 +4,6 @@ from unittest.mock import ANY
 
 from serpyco_rs import Serializer
 from serpyco_rs._describe import (
-    NOT_SET,
     EntityField,
     EntityType,
     OptionalType,

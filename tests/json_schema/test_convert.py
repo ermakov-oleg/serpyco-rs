@@ -60,11 +60,11 @@ def test_to_json_schema():
     serializer = Serializer(Data)
 
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.Data[no_format,keep_nones]',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.Data[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema.<locals>.Data[no_format,keep_nones]': {
                     'description': 'Docs',
                     'properties': {
                         'a': {
@@ -90,7 +90,7 @@ def test_to_json_schema():
                         },
                         'i': {'enum': ['a']},
                         'j': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.InnerData[no_format,keep_nones]'
+                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[no_format,keep_nones]'
                         },
                         'k': {'items': {'type': 'integer'}, 'type': 'array'},
                         'l': {
@@ -100,7 +100,7 @@ def test_to_json_schema():
                                 {'type': 'integer'},
                                 {'type': 'string'},
                                 {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.InnerData[no_format,keep_nones]'
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[no_format,keep_nones]'
                                 },
                             ],
                             'type': 'array',
@@ -108,13 +108,13 @@ def test_to_json_schema():
                         'm': {'additionalProperties': {'type': 'integer'}, 'type': 'object'},
                         'n': {},
                         'p': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.OtherInnerData[no_format,omit_nones]'
+                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.OtherInnerData[no_format,omit_nones]'
                         },
                         'o': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.InnerData[camel_case,keep_nones]'
+                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[camel_case,keep_nones]'
                         },
                         'q': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.AnotherInnerData[no_format,keep_nones]'
+                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.AnotherInnerData[no_format,keep_nones]'
                         },
                         'fooFiled': {'type': 'string'},
                     },
@@ -140,39 +140,39 @@ def test_to_json_schema():
                     ],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.InnerData[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[no_format,keep_nones]': {
                     'description': 'Some important entity',
                     'properties': {'foo_filed': {'type': 'string'}},
                     'required': ['foo_filed'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.InnerData[no_format,omit_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[no_format,omit_nones]': {
                     'description': 'Some important entity',
                     'properties': {'foo_filed': {'type': 'string'}},
                     'required': ['foo_filed'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.InnerData[camel_case,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[camel_case,keep_nones]': {
                     'description': 'Some important entity',
                     'properties': {'fooFiled': {'type': 'string'}},
                     'required': ['fooFiled'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.OtherInnerData[no_format,omit_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema.<locals>.OtherInnerData[no_format,omit_nones]': {
                     'description': 'OtherInnerData',
                     'properties': {
                         'optional_filed': {
                             'anyOf': [
                                 {'type': 'null'},
                                 {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.InnerData[no_format,omit_nones]'
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[no_format,omit_nones]'
                                 },
                             ]
                         }
                     },
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.AnotherInnerData[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema.<locals>.AnotherInnerData[no_format,keep_nones]': {
                     'description': 'AnotherInnerData',
                     'properties': {'bar': {'type': 'string'}},
                     'required': ['bar'],
@@ -195,10 +195,10 @@ def test_to_json_schema__new_union_syntax():
 
     assert serializer.get_json_schema() == {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__new_union_syntax.<locals>.Data[no_format,keep_nones]',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.Data[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__new_union_syntax.<locals>.Data[no_format,keep_nones]': {
                     'description': 'Docs',
                     'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]}},
                     'required': ['a'],
@@ -280,31 +280,31 @@ def test_to_json_schema__tagged_union():
 
     serializer = Serializer(Base)
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.Base[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Base[no_format,keep_nones]',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.Bar[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Bar[no_format,keep_nones]': {
                     'properties': {'type': {'enum': ['bar']}, 'val': {'type': 'string'}},
                     'required': ['val', 'type'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.Base[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Base[no_format,keep_nones]': {
                     'properties': {
                         'field': {
                             'discriminator': {
                                 'mapping': {
-                                    'bar': '#/components/schemas/tests.json_schema.test_convert.Bar[no_format,keep_nones]',
-                                    'foo': '#/components/schemas/tests.json_schema.test_convert.Foo[no_format,keep_nones]',
+                                    'bar': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Bar[no_format,keep_nones]',
+                                    'foo': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Foo[no_format,keep_nones]',
                                 },
                                 'propertyName': 'type',
                             },
                             'oneOf': [
                                 {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.Foo[no_format,keep_nones]'
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Foo[no_format,keep_nones]'
                                 },
                                 {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.Bar[no_format,keep_nones]'
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Bar[no_format,keep_nones]'
                                 },
                             ],
                         }
@@ -312,7 +312,7 @@ def test_to_json_schema__tagged_union():
                     'required': ['field'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.Foo[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Foo[no_format,keep_nones]': {
                     'properties': {'type': {'enum': ['foo']}, 'val': {'type': 'integer'}},
                     'required': ['val', 'type'],
                     'type': 'object',
@@ -337,24 +337,24 @@ def test_to_json_schema__union():
 
     serializer = Serializer(Base)
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.Base[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Base[no_format,keep_nones]',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.Bar[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Bar[no_format,keep_nones]': {
                     'properties': {'val': {'type': 'string'}},
                     'required': ['val'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.Base[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Base[no_format,keep_nones]': {
                     'properties': {
                         'field': {
                             'oneOf': [
                                 {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.Foo[no_format,keep_nones]'
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Foo[no_format,keep_nones]'
                                 },
                                 {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.Bar[no_format,keep_nones]'
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Bar[no_format,keep_nones]'
                                 },
                                 {'type': 'string'},
                             ],
@@ -363,7 +363,7 @@ def test_to_json_schema__union():
                     'required': ['field'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.Foo[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Foo[no_format,keep_nones]': {
                     'properties': {'val': {'type': 'integer'}},
                     'required': ['val'],
                     'type': 'object',
@@ -380,11 +380,11 @@ def test_to_json_schema__force_none_as_default_for_optional():
 
     serializer = Serializer(Data, force_default_for_optional=True)
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones,force_none]',
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__force_none_as_default_for_optional.<locals>.Data[no_format,keep_nones,force_none]',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.Data[no_format,keep_nones,force_none]': {
+                'tests.json_schema.test_convert.test_to_json_schema__force_none_as_default_for_optional.<locals>.Data[no_format,keep_nones,force_none]': {
                     'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]}},
                     'type': 'object',
                 }
@@ -400,11 +400,11 @@ def test_to_json_schema__bytes():
 
     serializer = Serializer(Data)
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.Data[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__bytes.<locals>.Data[no_format,keep_nones]',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.Data[no_format,keep_nones]': {
+                'tests.json_schema.test_convert.test_to_json_schema__bytes.<locals>.Data[no_format,keep_nones]': {
                     'properties': {'a': {'type': 'string', 'format': 'binary'}},
                     'type': 'object',
                     'required': ['a'],

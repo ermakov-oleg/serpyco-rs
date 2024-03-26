@@ -173,7 +173,6 @@ def test_describe__dataclass__supported():
                             dict_key='a',
                         )
                     ],
-                    generics=(),
                     doc=None,
                     custom_encoder=None,
                 ),
@@ -237,7 +236,6 @@ def test_describe__dataclass__supported():
                 dict_key='p',
             ),
         ],
-        generics=(),
         doc='Doc',
         custom_encoder=None,
     )
@@ -301,7 +299,6 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
 
     result: EntityType = describe_type(SomeEntity)
     assert result.fields[0].field_type == ArrayType(item_type=AnyType(custom_encoder=None), custom_encoder=None)
-    assert result.generics == ((T, Any),)
 
 
 def test_describe_dataclass__generic_with_type_params__expected_right_type():
@@ -319,7 +316,6 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
     assert result.fields[1].field_type == EntityType(
         cls=SomeOtherEntity,
         name=ANY,
-        generics=((T, int),),
         fields=[EntityField(name='x', field_type=IntegerType(custom_encoder=None), dict_key='x')],
         custom_encoder=None,
     )
@@ -694,7 +690,6 @@ def test_describe__typed_dict():
                 field_type=BooleanType(custom_encoder=None),
             ),
         ],
-        generics=((T, bool),),
         custom_encoder=None,
     )
 
@@ -719,6 +714,92 @@ def test_describe__typed_dict__total_false():
                 dict_key='bar',
                 field_type=StringType(custom_encoder=None),
             ),
+        ],
+        custom_encoder=None,
+    )
+
+
+def test_describe__dataclass__partial_typevars():
+    @dataclass
+    class Foo(Generic[T, U]):
+        arr: list[T]
+        key: U
+
+    @dataclass
+    class Bar(Foo[str, U]):
+        pass
+
+    assert describe_type(Bar) == EntityType(
+        cls=Bar,
+        name=ANY,
+        fields=[
+            EntityField(
+                name='arr',
+                dict_key='arr',
+                field_type=ArrayType(item_type=StringType(custom_encoder=None), custom_encoder=None),
+            ),
+            EntityField(name='key', dict_key='key', field_type=AnyType(custom_encoder=None)),
+        ],
+        custom_encoder=None,
+    )
+    assert describe_type(Bar[bool]) == EntityType(
+        cls=Bar,
+        name=ANY,
+        fields=[
+            EntityField(
+                name='arr',
+                dict_key='arr',
+                field_type=ArrayType(item_type=StringType(custom_encoder=None), custom_encoder=None),
+            ),
+            EntityField(name='key', dict_key='key', field_type=BooleanType(custom_encoder=None)),
+        ],
+        custom_encoder=None,
+    )
+
+
+def test_describe__dataclass__multiple_generic_inheritance():
+    @dataclass
+    class Foo(Generic[T, U]):
+        arr: list[T]
+        key: U
+
+    @dataclass
+    class Bar(Generic[T]):
+        beer: T
+
+    @dataclass
+    class Baz(Foo[T, U], Bar[T], Generic[T, U]):
+        pass
+
+    @dataclass
+    class Baz2(Foo[T, U], Bar[T]):
+        pass
+
+    assert describe_type(Baz[int, bool]) == EntityType(
+        cls=Baz,
+        name=ANY,
+        fields=[
+            EntityField(name='beer', dict_key='beer', field_type=IntegerType(custom_encoder=None)),
+            EntityField(
+                name='arr',
+                dict_key='arr',
+                field_type=ArrayType(item_type=IntegerType(custom_encoder=None), custom_encoder=None),
+            ),
+            EntityField(name='key', dict_key='key', field_type=BooleanType(custom_encoder=None)),
+        ],
+        custom_encoder=None,
+    )
+    assert describe_type(Baz2[int, bool]) == EntityType(
+        cls=Baz2,
+        name=ANY,
+        fields=[
+            EntityField(name='beer', dict_key='beer', field_type=IntegerType(custom_encoder=None)),
+            EntityField(
+                name='arr',
+                dict_key='arr',
+                field_type=ArrayType(item_type=IntegerType(custom_encoder=None), custom_encoder=None),
+            ),
+            EntityField(name='key', dict_key='key', field_type=BooleanType(custom_encoder=None)),
         ],
         custom_encoder=None,
     )

@@ -3,7 +3,7 @@ use pyo3::intern;
 use std::fmt;
 
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyLong, PyNone, PyString, PyTuple};
+use pyo3::types::{PyList, PyLong, PyNone, PyString};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -395,15 +395,13 @@ pub struct EntityType {
     #[pyo3(get)]
     pub is_frozen: bool,
     #[pyo3(get)]
-    pub generics: Py<PyAny>,
-    #[pyo3(get)]
     pub doc: Py<PyAny>,
 }
 
 #[pymethods]
 impl EntityType {
     #[new]
-    #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, generics=None, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, doc=None, custom_encoder=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         cls: &Bound<'_, PyAny>,
@@ -411,7 +409,6 @@ impl EntityType {
         fields: Vec<EntityField>,
         omit_none: bool,
         is_frozen: bool,
-        generics: Option<&Bound<'_, PyAny>>,
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
@@ -423,9 +420,6 @@ impl EntityType {
                 fields,
                 omit_none,
                 is_frozen,
-                generics: generics.map_or(PyTuple::empty_bound(py).into_any().unbind(), |x| {
-                    x.clone().unbind()
-                }),
                 doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
             },
             BaseType::new(custom_encoder),
@@ -445,7 +439,6 @@ impl EntityType {
                 .zip(other.fields.iter())
                 .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
             && self_.omit_none == other.omit_none
-            && py_eq!(self_.generics, other.generics, py)
             && py_eq!(self_.doc, other.doc, py))
     }
 
@@ -457,12 +450,11 @@ impl EntityType {
             .collect::<Vec<String>>()
             .join(", ");
         format!(
-            "<EntityType: cls={:?}, name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
+            "<EntityType: cls={:?}, name={:?}, fields=[{:?}], omit_none={:?}, doc={:?}>",
             self.cls.to_string(),
             self.name.to_string(),
             fields,
             self.omit_none,
-            self.generics.to_string(),
             self.doc.to_string()
         )
     }
@@ -478,20 +470,17 @@ pub struct TypedDictType {
     #[pyo3(get)]
     pub omit_none: bool,
     #[pyo3(get)]
-    pub generics: Py<PyAny>,
-    #[pyo3(get)]
     pub doc: Py<PyAny>,
 }
 
 #[pymethods]
 impl TypedDictType {
     #[new]
-    #[pyo3(signature = (name, fields, omit_none=false, generics=None, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (name, fields, omit_none=false, doc=None, custom_encoder=None))]
     fn new(
         name: &Bound<'_, PyAny>,
         fields: Vec<EntityField>,
         omit_none: bool,
-        generics: Option<&Bound<'_, PyAny>>,
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
@@ -501,9 +490,6 @@ impl TypedDictType {
                 name: name.clone().unbind(),
                 fields,
                 omit_none,
-                generics: generics.map_or(PyTuple::empty_bound(py).into_any().unbind(), |x| {
-                    x.clone().unbind()
-                }),
                 doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
             },
             BaseType::new(custom_encoder),
@@ -522,7 +508,6 @@ impl TypedDictType {
                 .zip(other.fields.iter())
                 .all(|(a, b)| a.__eq__(b, py).is_ok_and(|x| x))
             && self_.omit_none == other.omit_none
-            && py_eq!(self_.generics, other.generics, py)
             && py_eq!(self_.doc, other.doc, py))
     }
 
@@ -534,11 +519,10 @@ impl TypedDictType {
             .collect::<Vec<String>>()
             .join(", ");
         format!(
-            "<TypedDictType: name={:?}, fields=[{:?}], omit_none={:?}, generics={:?}, doc={:?}>",
+            "<TypedDictType: name={:?}, fields=[{:?}], omit_none={:?}, doc={:?}>",
             self.name.to_string(),
             fields,
             self.omit_none,
-            self.generics.to_string(),
             self.doc.to_string()
         )
     }

@@ -120,7 +120,6 @@ class EntityType(BaseType):
     fields: Sequence[EntityField]
     omit_none: bool
     is_frozen: bool
-    generics: Sequence[tuple[TypeVar, Any]]
     doc: str | None
 
     def __init__(
@@ -130,7 +129,6 @@ class EntityType(BaseType):
         fields: Sequence[EntityField],
         omit_none: bool = False,
         is_frozen: bool = False,
-        generics: Sequence[tuple[TypeVar, Any]] | None = None,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
@@ -139,7 +137,6 @@ class TypedDictType(BaseType):
     name: str
     fields: Sequence[EntityField]
     omit_none: bool
-    generics: Sequence[tuple[TypeVar, Any]]
     doc: str | None
 
     def __init__(
@@ -147,7 +144,6 @@ class TypedDictType(BaseType):
         name: str,
         fields: Sequence[EntityField],
         omit_none: bool = False,
-        generics: Sequence[tuple[TypeVar, Any]] | None = None,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
