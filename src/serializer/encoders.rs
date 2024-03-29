@@ -7,15 +7,17 @@ use dyn_clone::{clone_trait_object, DynClone};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{
-    PyBool, PyBytes, PyDateTime, PyDict, PyFloat, PyList, PyLong, PySequence, PyString,
+    PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyList, PyLong, PySequence, PyString,
+    PyTime,
 };
 use pyo3::{intern, Bound, Py, PyAny, PyResult};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::python::{
-    create_py_dict_known_size, create_py_list, create_py_tuple, parse_date, parse_datetime,
-    parse_time, py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item,
+    create_py_dict_known_size, create_py_list, create_py_tuple, dump_date, dump_datetime,
+    dump_time, parse_date, parse_datetime, parse_time, py_dict_set_item, py_list_get_item,
+    py_list_set_item, py_tuple_set_item,
 };
 use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
@@ -909,8 +911,9 @@ pub struct TimeEncoder {}
 impl Encoder for TimeEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let isoformat = intern!(value.py(), "isoformat");
-        value.call_method0(isoformat)
+        let py_time = value.downcast::<PyTime>()?;
+        let result = dump_time(py_time)?;
+        Ok(result.into_py(value.py()).into_bound(value.py()))
     }
 
     #[inline]
@@ -930,13 +933,16 @@ impl Encoder for TimeEncoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct DateTimeEncoder {}
+pub struct DateTimeEncoder {
+    pub(crate) naive_datetime_to_utc: bool,
+}
 
 impl Encoder for DateTimeEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let isoformat = intern!(value.py(), "isoformat");
-        value.call_method0(isoformat)
+        let py_datetime = value.downcast::<PyDateTime>()?;
+        let result = dump_datetime(py_datetime, self.naive_datetime_to_utc)?;
+        Ok(result.into_py(value.py()).into_bound(value.py()))
     }
 
     #[inline]
@@ -961,13 +967,9 @@ pub struct DateEncoder {}
 impl Encoder for DateEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let date = if let Ok(datetime) = value.downcast::<PyDateTime>() {
-            datetime.call_method("date", (), None)?
-        } else {
-            value.clone()
-        };
-        let isoformat = intern!(value.py(), "isoformat");
-        date.call_method0(isoformat)
+        let py_date = value.downcast::<PyDate>()?;
+        let result = dump_date(py_date)?;
+        Ok(result.into_py(value.py()).into_bound(value.py()))
     }
 
     #[inline]
