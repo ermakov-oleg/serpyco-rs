@@ -106,7 +106,7 @@ def test_tuple():
         (datetime(2022, 10, 10, 14, 23, 43, 123456), '2022-10-10T14:23:43.123456'),
         (
             datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone.utc),
-            '2022-10-10T14:23:43+00:00',
+            '2022-10-10T14:23:43Z',
         ),
         (
             datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone(timedelta(hours=1))),
@@ -123,6 +123,11 @@ def test_datetime_dump(value, expected):
     assert serializer.dump(value) == expected
 
 
+def test_datetime_dump__naive_datetime_to_utc__expect_utc():
+    serializer = Serializer(datetime, naive_datetime_to_utc=True)
+    assert serializer.dump(datetime(2022, 10, 10, 14, 23, 43)) == '2022-10-10T14:23:43Z'
+
+
 @pytest.mark.parametrize(
     ['value', 'expected'],
     (
@@ -130,6 +135,10 @@ def test_datetime_dump(value, expected):
         ('2022-10-10T14:23:43.123456', datetime(2022, 10, 10, 14, 23, 43, 123456)),
         (
             '2022-10-10T14:23:43+00:00',
+            datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone.utc),
+        ),
+        (
+            '2022-10-10T14:23:43Z',
             datetime(2022, 10, 10, 14, 23, 43, tzinfo=timezone.utc),
         ),
         (
@@ -171,7 +180,7 @@ def test_time_load(value, expected):
         (time(12, 34, tzinfo=tzoffset(None, 10800)), '12:34:00+03:00'),
         (time(12, 34, 56), '12:34:56'),
         (time(12, 34, 56, 78), '12:34:56.000078'),
-        (time(12, 34, tzinfo=timezone.utc), '12:34:00+00:00'),
+        (time(12, 34, tzinfo=timezone.utc), '12:34:00Z'),
         (time(12, 34, tzinfo=timezone(timedelta(hours=1))), '12:34:00+01:00'),
     ],
 )

@@ -35,12 +35,17 @@ pub struct Serializer {
 #[pymethods]
 impl Serializer {
     #[new]
-    fn new(type_info: &Bound<'_, PyAny>) -> PyResult<Self> {
+    fn new(type_info: &Bound<'_, PyAny>, naive_datetime_to_utc: bool) -> PyResult<Self> {
         let obj_type = get_object_type(type_info)?;
         let mut encoder_state: HashMap<usize, EncoderStateValue> = HashMap::new();
 
         let serializer = Self {
-            encoder: get_encoder(type_info.py(), obj_type, &mut encoder_state)?,
+            encoder: get_encoder(
+                type_info.py(),
+                obj_type,
+                &mut encoder_state,
+                naive_datetime_to_utc,
+            )?,
         };
         Ok(serializer)
     }
@@ -120,6 +125,7 @@ pub fn get_encoder(
     py: Python<'_>,
     obj_type: Type,
     encoder_state: &mut HashMap<usize, EncoderStateValue>,
+    naive_datetime_to_utc: bool,
 ) -> PyResult<Box<TEncoder>> {
     let encoder: Box<TEncoder> = match obj_type {
         Type::Integer(type_info, base_type) => {
@@ -165,7 +171,9 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::DateTime(_, base_type) => {
-            let encoder = DateTimeEncoder {};
+            let encoder = DateTimeEncoder {
+                naive_datetime_to_utc,
+            };
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::Date(_, base_type) => {
@@ -186,15 +194,15 @@ pub fn get_encoder(
         )?,
         Type::Optional(type_info, base_type) => {
             let inner = get_object_type(type_info.get().inner.bind(py))?;
-            let encoder = get_encoder(py, inner, encoder_state)?;
+            let encoder = get_encoder(py, inner, encoder_state, naive_datetime_to_utc)?;
             wrap_with_custom_encoder(py, base_type, Box::new(OptionalEncoder { encoder }))?
         }
         Type::Dictionary(type_info, base_type) => {
             let key_type = get_object_type(type_info.get().key_type.bind(py))?;
             let value_type = get_object_type(type_info.get().value_type.bind(py))?;
 
-            let key_encoder = get_encoder(py, key_type, encoder_state)?;
-            let value_encoder = get_encoder(py, value_type, encoder_state)?;
+            let key_encoder = get_encoder(py, key_type, encoder_state, naive_datetime_to_utc)?;
+            let value_encoder = get_encoder(py, value_type, encoder_state, naive_datetime_to_utc)?;
 
             wrap_with_custom_encoder(
                 py,
@@ -208,14 +216,19 @@ pub fn get_encoder(
         }
         Type::Array(type_info, base_type) => {
             let item_type = get_object_type(type_info.get().item_type.bind(py))?;
-            let encoder = get_encoder(py, item_type, encoder_state)?;
+            let encoder = get_encoder(py, item_type, encoder_state, naive_datetime_to_utc)?;
             wrap_with_custom_encoder(py, base_type, Box::new(ArrayEncoder { encoder }))?
         }
         Type::Tuple(type_info, base_type) => {
             let mut encoders = vec![];
             for item_type in &type_info.get().item_types {
                 let item_type = item_type.bind(py);
-                let encoder = get_encoder(py, get_object_type(item_type)?, encoder_state)?;
+                let encoder = get_encoder(
+                    py,
+                    get_object_type(item_type)?,
+                    encoder_state,
+                    naive_datetime_to_utc,
+                )?;
                 encoders.push(encoder);
             }
             wrap_with_custom_encoder(py, base_type, Box::new(TupleEncoder { encoders }))?
@@ -226,7 +239,12 @@ pub fn get_encoder(
             let mut encoders = vec![];
 
             for value in item_types.iter() {
-                let encoder = get_encoder(py, get_object_type(&value)?, encoder_state)?;
+                let encoder = get_encoder(
+                    py,
+                    get_object_type(&value)?,
+                    encoder_state,
+                    naive_datetime_to_utc,
+                )?;
                 encoders.push(encoder);
             }
 
@@ -259,7 +277,12 @@ pub fn get_encoder(
 
             for (key, value) in item_types.iter() {
                 let key = key.downcast::<PyString>()?;
-                let encoder = get_encoder(py, get_object_type(&value)?, encoder_state)?;
+                let encoder = get_encoder(
+                    py,
+                    get_object_type(&value)?,
+                    encoder_state,
+                    naive_datetime_to_utc,
+                )?;
                 let rs_key: String = key.to_string_lossy().into();
                 keys.push(rs_key.clone());
                 encoders.insert(rs_key, encoder);
@@ -279,7 +302,8 @@ pub fn get_encoder(
         }
         Type::Entity(type_info, base_type, python_object_id) => {
             let type_info = type_info.get();
-            let fields = iterate_on_fields(py, &type_info.fields, encoder_state)?;
+            let fields =
+                iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
             let builtins = PyModule::import_bound(py, intern!(py, "builtins"))?;
             let object = builtins.getattr(intern!(py, "object"))?;
@@ -300,7 +324,12 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::TypedDict(type_info, base_type, python_object_id) => {
-            let fields = iterate_on_fields(py, &type_info.get().fields, encoder_state)?;
+            let fields = iterate_on_fields(
+                py,
+                &type_info.get().fields,
+                encoder_state,
+                naive_datetime_to_utc,
+            )?;
 
             let encoder = TypedDictEncoder {
                 fields,
@@ -361,6 +390,7 @@ fn iterate_on_fields(
     py: Python<'_>,
     entity_fields: &Vec<EntityField>,
     encoder_state: &mut HashMap<usize, EncoderStateValue>,
+    naive_datetime_to_utc: bool,
 ) -> PyResult<Vec<Field>> {
     let mut fields = vec![];
     for field in entity_fields {
@@ -372,7 +402,7 @@ fn iterate_on_fields(
             name: f_name.clone().unbind(),
             dict_key: dict_key.clone().unbind(),
             dict_key_rs: dict_key.to_string_lossy().into(),
-            encoder: get_encoder(py, f_type, encoder_state)?,
+            encoder: get_encoder(py, f_type, encoder_state, naive_datetime_to_utc)?,
             required: field.required,
             default: field.default.clone().into(),
             default_factory: field.default_factory.clone().into(),

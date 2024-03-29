@@ -1,6 +1,5 @@
-from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional
 
 from serpyco_rs._impl import BaseType
 from serpyco_rs.metadata import FieldFormat, NoneAsDefaultForOptional, NoneFormat

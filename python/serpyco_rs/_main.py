@@ -11,6 +11,7 @@ _D = TypeVar('_D')
 
 
 class _MultiMapping(Protocol[_T, _D]):
+    """Protocol for a multi-mapping type."""
 
     @abc.abstractmethod
     def __getitem__(self, __key: str) -> _T: ...
@@ -33,7 +34,17 @@ class Serializer(Generic[_T]):
         camelcase_fields: bool = False,
         omit_none: bool = False,
         force_default_for_optional: bool = False,
+        naive_datetime_to_utc: bool = False,
     ) -> None:
+        """
+        Create a serializer for the given type.
+
+        :param t: The type to serialize/deserialize.
+        :param camelcase_fields: If True, the serializer will convert field names to camelCase.
+        :param omit_none: If True, the serializer will omit None values from the output.
+        :param force_default_for_optional: If True, the serializer will force default values for optional fields.
+        :param naive_datetime_to_utc: If True, the serializer will convert naive datetimes to UTC.
+        """
         if camelcase_fields:
             t = cast(type[_T], Annotated[t, CamelCase])
         if omit_none:
@@ -42,16 +53,29 @@ class Serializer(Generic[_T]):
             t = cast(type(_T), Annotated[t, ForceDefaultForOptional])  # type: ignore
         type_info = describe_type(t)
         self._schema = get_json_schema(type_info)
-        self._encoder: _Serializer[_T] = _Serializer(type_info)
+        self._encoder: _Serializer[_T] = _Serializer(type_info, naive_datetime_to_utc)
 
     def dump(self, value: _T) -> Any:
+        """Serialize the given value to a JSON-serializable object.
+
+        :param value: The value to serialize.
+        """
         return self._encoder.dump(value)
 
     def load(self, data: Any) -> _T:
+        """Deserialize the given JSON-serializable object to the target type.
+
+        :param data: The data to deserialize.
+        """
         return self._encoder.load(data)
 
     def load_query_params(self, data: _MultiMapping[Any, Any]) -> _T:
+        """Deserialize the given query parameters to the target type.
+
+        :param data: The query parameters to deserialize.
+        """
         return self._encoder.load_query_params(data)
 
     def get_json_schema(self) -> dict[str, Any]:
+        """Get the JSON schema for the target type."""
         return self._schema
