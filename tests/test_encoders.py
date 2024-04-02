@@ -149,6 +149,10 @@ def test_datetime_dump__naive_datetime_to_utc__expect_utc():
             '2022-10-10T14:23:43+02:00',
             datetime(2022, 10, 10, 14, 23, 43, tzinfo=ZoneInfo('Europe/Berlin')),
         ),
+        (
+            '2024-04-02T12:21:53.725421224',
+            datetime(2024, 4, 2, 12, 21, 53, 725421),
+        ),
     ),
 )
 def test_datetime_load(value, expected):
@@ -162,6 +166,7 @@ def test_datetime_load(value, expected):
         ('12:34', time(12, 34)),
         ('12:34:56', time(12, 34, 56)),
         ('12:34:56.000078', time(12, 34, 56, 78)),
+        ('12:34:57.000095987', time(12, 34, 57, 95)),
         (
             '12:34:56.000078+03:00',
             time(12, 34, 56, 78, tzinfo=tzoffset(None, timedelta(hours=3))),

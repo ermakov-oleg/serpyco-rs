@@ -5,16 +5,24 @@ use pyo3::types::{
 };
 use pyo3::{Bound, PyErr, PyResult, Python};
 use pyo3_ffi::PyTimeZone_FromOffset;
-use speedate::{Date, DateTime, ParseError, Time};
+use speedate::{
+    Date, DateTime, MicrosecondsPrecisionOverflowBehavior, ParseError, Time, TimeConfig,
+};
 
 use crate::errors::{ToPyErr, ValidationError};
+
+const TIME_CONFIG: TimeConfig = TimeConfig {
+    microseconds_precision_overflow_behavior: MicrosecondsPrecisionOverflowBehavior::Truncate,
+    unix_timestamp_offset: None,
+};
 
 #[inline]
 pub(crate) fn parse_datetime<'py>(
     py: Python<'py>,
     value: &str,
 ) -> PyResult<Bound<'py, PyDateTime>> {
-    let datetime = DateTime::parse_str(value).map_err(InnerParseError::from)?;
+    let datetime = DateTime::parse_bytes_rfc3339_with_config(value.as_ref(), &TIME_CONFIG)
+        .map_err(InnerParseError::from)?;
     PyDateTime::new_bound(
         py,
         datetime.date.year.into(),
@@ -30,7 +38,8 @@ pub(crate) fn parse_datetime<'py>(
 
 #[inline]
 pub(crate) fn parse_time<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyTime>> {
-    let time = Time::parse_str(value).map_err(InnerParseError::from)?;
+    let time = Time::parse_bytes_with_config(value.as_ref(), &TIME_CONFIG)
+        .map_err(InnerParseError::from)?;
     PyTime::new_bound(
         py,
         time.hour,
