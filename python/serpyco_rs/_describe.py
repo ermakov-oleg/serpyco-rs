@@ -19,7 +19,6 @@ from typing import (
 )
 from uuid import UUID
 
-from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
 from ._impl import (
@@ -53,7 +52,7 @@ from ._impl import (
 )
 from ._meta import Meta, MetaStateKey
 from ._type_utils import get_type_hints  # type: ignore[attr-defined]
-from ._utils import to_camelcase
+from ._utils import get_attributes_doc, to_camelcase
 from .metadata import (
     Alias,
     Discriminator,

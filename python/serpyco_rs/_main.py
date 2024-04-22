@@ -1,7 +1,7 @@
 import abc
 from typing import Annotated, Any, Generic, Protocol, TypeVar, Union, cast, overload
 
-from ._describe import describe_type
+from ._describe import BaseType, describe_type
 from ._impl import Serializer as _Serializer
 from ._json_schema import get_json_schema
 from .metadata import CamelCase, ForceDefaultForOptional, OmitNone
@@ -27,6 +27,9 @@ class _MultiMapping(Protocol[_T, _D]):
 
 
 class Serializer(Generic[_T]):
+
+    _type_info: BaseType
+
     def __init__(
         self,
         t: type[_T],
@@ -51,9 +54,9 @@ class Serializer(Generic[_T]):
             t = cast(type(_T), Annotated[t, OmitNone])  # type: ignore
         if force_default_for_optional:
             t = cast(type(_T), Annotated[t, ForceDefaultForOptional])  # type: ignore
-        type_info = describe_type(t)
-        self._schema = get_json_schema(type_info)
-        self._encoder: _Serializer[_T] = _Serializer(type_info, naive_datetime_to_utc)
+        self._type_info = describe_type(t)
+        self._schema = get_json_schema(self._type_info)
+        self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc)
 
     def dump(self, value: _T) -> Any:
         """Serialize the given value to a JSON-serializable object.

@@ -5,17 +5,24 @@ from typing import Any
 
 
 @dataclass
+class Config:
+    ref_prefix: str = '#/components/schemas'
+
+
+@dataclass
 class Schema:
+    config: Config
+
     type: str | None = None
     title: str | None = None
     description: str | None = None
     default: Any | None = None
-    deprecated: bool | None = None
     enum: list[Any] | None = None
 
     allOf: list[Schema] | None = None
     anyOf: list[Schema] | None = None
     oneOf: list[Schema] | None = None
+    additionalArgs: dict[str, Any] | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = {
@@ -23,11 +30,11 @@ class Schema:
             'title': self.title,
             'description': self.description,
             'default': self.default,
-            'deprecated': self.deprecated,
             'enum': self.enum,
             'allOf': [item.dump(definitions) for item in self.allOf] if self.allOf else None,
             'anyOf': [item.dump(definitions) for item in self.anyOf] if self.anyOf else None,
             'oneOf': [item.dump(definitions) for item in self.oneOf] if self.oneOf else None,
+            **(self.additionalArgs or {}),
         }
         return {k: v for k, v in data.items() if v is not None}
 
@@ -47,16 +54,13 @@ class StringType(Schema):
     type: str = 'string'  # pyright: ignore[reportIncompatibleVariableOverride]
     minLength: int | None = None
     maxLength: int | None = None
-    pattern: str | None = None
     format: str | None = None
-    # TODO: enum https://json-schema.org/understanding-json-schema/reference/string.html#built-in-formats
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
             'minLength': self.minLength,
             'maxLength': self.maxLength,
-            'pattern': self.pattern,
             'format': self.format,
             **data,
         }
@@ -66,7 +70,6 @@ class StringType(Schema):
 @dataclass
 class NumberType(Schema):
     type: str = 'number'  # pyright: ignore[reportIncompatibleVariableOverride]
-    multipleOf: int | None = None
     minimum: float | None = None
     maximum: float | None = None
     format: str | None = None
@@ -74,7 +77,6 @@ class NumberType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         data = {
-            'multipleOf': self.multipleOf,
             'minimum': self.minimum,
             'maximum': self.maximum,
             'format': self.format,
@@ -98,7 +100,7 @@ class ObjectType(Schema):
 
     @property
     def ref(self) -> str:
-        return f'#/components/schemas/{self.name}'
+        return f'{self.config.ref_prefix}/{self.name}'
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
@@ -128,7 +130,6 @@ class ArrayType(Schema):
     prefixItems: list[Schema] | None = None
     minItems: int | None = None
     maxItems: int | None = None
-    uniqueItems: bool | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
@@ -137,7 +138,6 @@ class ArrayType(Schema):
             'prefixItems': [i.dump(definitions) for i in self.prefixItems] if self.prefixItems else None,
             'minItems': self.minItems,
             'maxItems': self.maxItems,
-            'uniqueItems': self.uniqueItems,
             **data,
         }
         return {k: v for k, v in data.items() if v is not None}
@@ -145,7 +145,11 @@ class ArrayType(Schema):
 
 @dataclass
 class RefType(Schema):
-    ref: str | None = None
+    name: str | None = None
+
+    @property
+    def ref(self) -> str:
+        return f'{self.config.ref_prefix}/{self.name}'
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)

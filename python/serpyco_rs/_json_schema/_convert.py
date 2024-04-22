@@ -1,6 +1,9 @@
 import sys
+import typing
 from functools import singledispatch
 from typing import Any, Optional, Union, cast
+
+from .._utils import get_attributes_doc
 
 if sys.version_info >= (3, 10):
     from typing import TypeGuard
@@ -11,6 +14,7 @@ from .. import _describe as describe
 from ._entities import (
     ArrayType,
     Boolean,
+    Config,
     DiscriminatedUnionType,
     Discriminator,
     IntegerType,
@@ -22,9 +26,30 @@ from ._entities import (
     StringType,
 )
 
+if typing.TYPE_CHECKING:
+    from .._main import Serializer
+
+
+class JsonSchemaBuilder:
+    def __init__(self, add_dialect_uri: bool = False, ref_prefix: str = '#/components/schemas'):
+        self._definitions: dict[str, Any] = {}
+        self._ref_prefix = ref_prefix.rstrip('/')
+        self._add_dialect_uri = add_dialect_uri
+        self._config = Config(ref_prefix=ref_prefix)
+
+    def build(self, serializer: 'Serializer') -> dict[str, Any]:
+        schema = to_json_schema(serializer._type_info, config=self._config)
+        schema_def = schema.dump(self._definitions)
+        if self._add_dialect_uri:
+            schema_def['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
+        return schema_def
+
+    def get_definitions(self) -> dict[str, Any]:
+        return self._definitions
+
 
 def get_json_schema(t: describe.BaseType) -> dict[str, Any]:
-    schema = to_json_schema(t)
+    schema = to_json_schema(t, config=Config())
     definitions: dict[str, Any] = {}
     schema_def = schema.dump(definitions)
     components = {'components': {'schemas': definitions}} if definitions else {}
@@ -36,194 +61,176 @@ def get_json_schema(t: describe.BaseType) -> dict[str, Any]:
 
 
 @singledispatch
-def to_json_schema(_: Any, doc: Optional[str] = None) -> Schema:
-    return Schema(description=doc)
+def to_json_schema(_: Any, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Schema(description=doc, config=config)
 
 
 @to_json_schema.register
-def _(arg: describe.StringType, doc: Optional[str] = None) -> Schema:
-    return StringType(
-        minLength=arg.min_length,
-        maxLength=arg.max_length,
-        description=doc,
-    )
+def _(arg: describe.StringType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(minLength=arg.min_length, maxLength=arg.max_length, description=doc, config=config)
 
 
 @to_json_schema.register
-def _(arg: describe.IntegerType, doc: Optional[str] = None) -> Schema:
-    return IntegerType(
-        minimum=arg.min,
-        maximum=arg.max,
-        description=doc,
-    )
+def _(arg: describe.IntegerType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return IntegerType(minimum=arg.min, maximum=arg.max, description=doc, config=config)
 
 
 @to_json_schema.register
-def _(_: describe.BytesType, doc: Optional[str] = None) -> Schema:
-    return StringType(
-        format='binary',
-        description=doc,
-    )
+def _(_: describe.BytesType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='binary', description=doc, config=config)
 
 
 @to_json_schema.register
-def _(arg: describe.FloatType, doc: Optional[str] = None) -> Schema:
-    return NumberType(
-        minimum=arg.min,
-        maximum=arg.max,
-        description=doc,
-    )
+def _(arg: describe.FloatType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return NumberType(minimum=arg.min, maximum=arg.max, description=doc, config=config)
 
 
 @to_json_schema.register
-def _(_: describe.DecimalType, doc: Optional[str] = None) -> Schema:
+def _(_: describe.DecimalType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    # todo: support min/max
     return Schema(
         oneOf=[
-            StringType(
-                format='decimal',
-            ),
-            NumberType(
-                format='decimal',
-            ),
+            StringType(format='decimal', config=config),
+            NumberType(format='decimal', config=config),
         ],
         description=doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(_: describe.BooleanType, doc: Optional[str] = None) -> Schema:
-    return Boolean()
+def _(_: describe.BooleanType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Boolean(config=config)
 
 
 @to_json_schema.register
-def _(_: describe.UUIDType, doc: Optional[str] = None) -> Schema:
-    return StringType(
-        format='uuid',
-        description=doc,
-    )
+def _(_: describe.UUIDType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='uuid', description=doc, config=config)
 
 
 @to_json_schema.register
-def _(_: describe.TimeType, doc: Optional[str] = None) -> Schema:
-    return StringType(
-        format='time',
-        description=doc,
-    )
+def _(_: describe.TimeType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='time', description=doc, config=config)
 
 
 @to_json_schema.register
-def _(_: describe.DateTimeType, doc: Optional[str] = None) -> Schema:
-    return StringType(
-        format='date-time',
-        description=doc,
-    )
+def _(_: describe.DateTimeType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='date-time', description=doc, config=config)
 
 
 @to_json_schema.register
-def _(_: describe.DateType, doc: Optional[str] = None) -> Schema:
-    return StringType(
-        format='date',
-        description=doc,
-    )
+def _(_: describe.DateType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='date', description=doc, config=config)
 
 
 @to_json_schema.register
-def _(arg: describe.EnumType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.EnumType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    docs = get_attributes_doc(arg.cls)
+    enum_values = [item.value for item in arg.items]
+    type_ = None
+    if (types := {type(item.value) for item in arg.items}) and len(types) == 1:
+        type_ = {int: 'integer', str: 'string'}.get(types.pop(), None)
+
     return Schema(
-        enum=[item.value for item in arg.cls],
+        type=type_,
+        enum=enum_values,
         description=doc,
+        config=config,
+        additionalArgs={f'x-{item.value}': docs.get(item.name) for item in arg.items},
     )
 
 
 @to_json_schema.register
-def _(arg: describe.OptionalType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.OptionalType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return Schema(
         anyOf=[
-            Null(),
-            to_json_schema(arg.inner),
+            Null(config=config),
+            to_json_schema(arg.inner, config=config),
         ],
         description=doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(arg: describe.EntityType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return ObjectType(
-        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc) for prop in arg.fields},
+        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,
         name=arg.name,
         description=arg.doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(arg: describe.TypedDictType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return ObjectType(
-        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc) for prop in arg.fields},
+        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,
         name=arg.name,
         description=arg.doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(arg: describe.ArrayType, doc: Optional[str] = None) -> Schema:
-    return ArrayType(
-        items=to_json_schema(arg.item_type),
-        description=doc,
-    )
+def _(arg: describe.ArrayType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return ArrayType(items=to_json_schema(arg.item_type, config=config), description=doc, config=config)
 
 
 @to_json_schema.register
-def _(arg: describe.DictionaryType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.DictionaryType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return ObjectType(
-        additionalProperties=to_json_schema(arg.value_type),
-        description=doc,
+        additionalProperties=to_json_schema(arg.value_type, config=config), description=doc, config=config
     )
 
 
 @to_json_schema.register
-def _(arg: describe.TupleType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.TupleType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return ArrayType(
-        prefixItems=[to_json_schema(item) for item in arg.item_types],
+        prefixItems=[to_json_schema(item, config=config) for item in arg.item_types],
         minItems=len(arg.item_types),
         maxItems=len(arg.item_types),
         description=doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(_: describe.AnyType, doc: Optional[str] = None) -> Schema:
-    return Schema(description=doc)
+def _(_: describe.AnyType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Schema(description=doc, config=config)
 
 
 @to_json_schema.register
-def _(holder: describe.RecursionHolder, doc: Optional[str] = None) -> Schema:
-    return RefType(description=doc, ref=f'#/components/schemas/{holder.name}')
+def _(holder: describe.RecursionHolder, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return RefType(description=doc, name=holder.name, config=config)
 
 
 @to_json_schema.register
-def _(arg: describe.LiteralType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.LiteralType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return Schema(
         enum=list(arg.args),
         description=doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(arg: describe.UnionType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.UnionType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return Schema(
-        oneOf=[to_json_schema(t) for t in arg.item_types],
+        oneOf=[to_json_schema(t, config=config) for t in arg.item_types],
         description=doc,
+        config=config,
     )
 
 
 @to_json_schema.register
-def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None) -> Schema:
+def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None, *, config: Config) -> Schema:
     objects = {
         name: schema
         for name, t in arg.item_types.items()
-        if (schema := to_json_schema(t)) and _check_unions_schema_types(schema)
+        if (schema := to_json_schema(t, config=config)) and _check_unions_schema_types(schema)
     }
 
     return DiscriminatedUnionType(
@@ -233,6 +240,7 @@ def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None) -> Schema
             mapping={name: cast(str, val.ref) for name, val in objects.items()},
         ),
         description=doc,
+        config=config,
     )
 
 
