@@ -4,6 +4,8 @@ from functools import singledispatch
 from typing import Any, Optional, Union, cast
 
 from .._utils import get_attributes_doc
+from ._consts import DEFAULT_REF_PREFIX, SCHEMA_VERSION
+
 
 if sys.version_info >= (3, 10):
     from typing import TypeGuard
@@ -26,22 +28,23 @@ from ._entities import (
     StringType,
 )
 
+
 if typing.TYPE_CHECKING:
     from .._main import Serializer
 
 
 class JsonSchemaBuilder:
-    def __init__(self, add_dialect_uri: bool = False, ref_prefix: str = '#/components/schemas'):
+    def __init__(self, add_dialect_uri: bool = False, ref_prefix: str = DEFAULT_REF_PREFIX):
         self._definitions: dict[str, Any] = {}
         self._ref_prefix = ref_prefix.rstrip('/')
         self._add_dialect_uri = add_dialect_uri
         self._config = Config(ref_prefix=ref_prefix)
 
-    def build(self, serializer: 'Serializer') -> dict[str, Any]:
+    def build(self, serializer: 'Serializer[Any]') -> dict[str, Any]:
         schema = to_json_schema(serializer._type_info, config=self._config)
         schema_def = schema.dump(self._definitions)
         if self._add_dialect_uri:
-            schema_def['$schema'] = 'https://json-schema.org/draft/2020-12/schema'
+            schema_def['$schema'] = SCHEMA_VERSION
         return schema_def
 
     def get_definitions(self) -> dict[str, Any]:
@@ -54,7 +57,7 @@ def get_json_schema(t: describe.BaseType) -> dict[str, Any]:
     schema_def = schema.dump(definitions)
     components = {'components': {'schemas': definitions}} if definitions else {}
     return {
-        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        '$schema': SCHEMA_VERSION,
         **schema_def,
         **components,
     }
@@ -237,7 +240,7 @@ def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None, *, config
         oneOf=list(objects.values()),
         discriminator=Discriminator(
             property_name=arg.load_discriminator,
-            mapping={name: cast(str, val.ref) for name, val in objects.items()},
+            mapping={name: val.ref for name, val in objects.items()},
         ),
         description=doc,
         config=config,

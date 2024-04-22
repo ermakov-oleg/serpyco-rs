@@ -3,6 +3,7 @@ from functools import lru_cache
 
 from attributes_doc import get_attributes_doc as _get_attributes_doc
 
+
 CAMELCASE_RE = re.compile(r'(?!^)_([a-zA-Z])')
 
 

@@ -70,6 +70,7 @@ from .metadata import (
     OmitNone,
 )
 
+
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType as StdUnionType
 else:  # pragma: no cover
@@ -286,7 +287,6 @@ def _describe_entity(
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: Meta,
 ) -> Union[EntityType, TypedDictType]:
-
     # PEP-484: Replace all unfilled type parameters with Any
     if not hasattr(original_t, '__origin__') and getattr(original_t, '__parameters__', None):
         original_t = original_t[(Any,) * len(t.__parameters__)]
@@ -388,8 +388,7 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                 default=(
                     DefaultValue.some(f.default)
                     if (
-                        f.default is not attr.NOTHING
-                        and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
+                        f.default is not attr.NOTHING and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
                     )
                     else NOT_SET
                 ),

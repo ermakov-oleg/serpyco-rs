@@ -444,7 +444,6 @@ def test_enum_multiply_types():
 
 
 class TestJsonSchemaBuilder:
-
     def test_build__use_custom_ref_prefix(self):
         @dataclass
         class Data:
@@ -468,7 +467,6 @@ class TestJsonSchemaBuilder:
         }
 
     def test_build__add_dialect_uri(self):
-
         serializer = Serializer(int)
         schema_builder = JsonSchemaBuilder(add_dialect_uri=True)
         schema = schema_builder.build(serializer)

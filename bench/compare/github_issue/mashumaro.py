@@ -14,36 +14,36 @@ class BaseModel(DataClassDictMixin):
         lazy_compilation = True
         serialize_by_alias = True
         serialization_strategy = {
-            str: {"deserialize": str, "serialize": pass_through},
-            int: {"serialize": pass_through},
+            str: {'deserialize': str, 'serialize': pass_through},
+            int: {'serialize': pass_through},
         }
 
 
 class IssueState(Enum):
-    OPEN = "open"
-    CLOSED = "closed"
+    OPEN = 'open'
+    CLOSED = 'closed'
 
 
 class MilestoneState(Enum):
-    OPEN = "open"
-    CLOSED = "closed"
+    OPEN = 'open'
+    CLOSED = 'closed'
 
 
 class IssueStateReason(Enum):
-    COMPLETED = "completed"
-    REOPENED = "reopened"
-    NOT_PLANNED = "not_planned"
+    COMPLETED = 'completed'
+    REOPENED = 'reopened'
+    NOT_PLANNED = 'not_planned'
 
 
 class AuthorAssociation(Enum):
-    COLLABORATOR = "COLLABORATOR"
-    CONTRIBUTOR = "CONTRIBUTOR"
-    FIRST_TIMER = "FIRST_TIMER"
-    FIRST_TIME_CONTRIBUTOR = "FIRST_TIME_CONTRIBUTOR"
-    MANNEQUIN = "MANNEQUIN"
-    MEMBER = "MEMBER"
-    NONE = "NONE"
-    OWNER = "OWNER"
+    COLLABORATOR = 'COLLABORATOR'
+    CONTRIBUTOR = 'CONTRIBUTOR'
+    FIRST_TIMER = 'FIRST_TIMER'
+    FIRST_TIME_CONTRIBUTOR = 'FIRST_TIME_CONTRIBUTOR'
+    MANNEQUIN = 'MANNEQUIN'
+    MEMBER = 'MEMBER'
+    NONE = 'NONE'
+    OWNER = 'OWNER'
 
 
 @dataclass(**get_dataclass_args())
@@ -106,8 +106,8 @@ class Milestone(BaseModel):
 class Reactions(BaseModel):
     url: str
     total_count: int
-    plus_one: int = field(metadata=field_options(alias="+1"))
-    minus_one: int = field(metadata=field_options(alias="-1"))
+    plus_one: int = field(metadata=field_options(alias='+1'))
+    minus_one: int = field(metadata=field_options(alias='-1'))
     laugh: int
     confused: int
     heart: int

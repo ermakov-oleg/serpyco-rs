@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ._consts import DEFAULT_REF_PREFIX
+
 
 @dataclass
 class Config:
-    ref_prefix: str = '#/components/schemas'
+    ref_prefix: str = DEFAULT_REF_PREFIX
 
 
 @dataclass

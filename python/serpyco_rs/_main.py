@@ -6,6 +6,7 @@ from ._impl import Serializer as _Serializer
 from ._json_schema import get_json_schema
 from .metadata import CamelCase, ForceDefaultForOptional, OmitNone
 
+
 _T = TypeVar('_T', bound=Any)
 _D = TypeVar('_D')
 
@@ -27,7 +28,6 @@ class _MultiMapping(Protocol[_T, _D]):
 
 
 class Serializer(Generic[_T]):
-
     _type_info: BaseType
 
     def __init__(

@@ -23,6 +23,7 @@ from typing import (
 
 from typing_extensions import NotRequired, ParamSpec, Required, TypeVarTuple, is_typeddict
 
+
 _allowed_types = (
     types.FunctionType,
     types.BuiltinFunctionType,
