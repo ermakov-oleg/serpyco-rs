@@ -389,6 +389,48 @@ print(ser.get_json_schema())
 }
 ```
 
+Also, you can configure the schema generation via `JsonSchemaBuilder`.
+
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer, JsonSchemaBuilder
+
+@dataclass
+class A:
+    foo: int
+    bar: str
+
+ser = Serializer(A)
+
+builder = JsonSchemaBuilder(
+  add_dialect_uri=False,
+  ref_prefix='#/definitions',
+)
+
+print(builder.build(ser))
+>> {'$ref': '#/definitions/__main__.A[no_format,keep_nones]'}
+
+print(builder.get_definitions())
+>> {
+  "__main__.A[no_format,keep_nones]": {
+    "properties": {
+      "foo": {
+        "type": "integer"
+      },
+      "bar": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "foo",
+      "bar"
+    ],
+    "type": "object"
+  }
+}
+```
+
 ## Query string deserialization
 
 `serpyco-rs` can deserialize query string parameters (MultiDict like structures) with from string coercion.
