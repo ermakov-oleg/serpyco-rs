@@ -7,12 +7,12 @@ import pytest
 def pytest_addoption(parser):
     parser.addoption(
         '--debug-refs',
-        action="store_true",
+        action='store_true',
         default=False,
         help='Check refcount of gc tracked objects before and after the test.',
     )
     parser.addoption(
-        '--debug-refs-gc', action="store_true", default=False, help='Collect garbage before and after the test.'
+        '--debug-refs-gc', action='store_true', default=False, help='Collect garbage before and after the test.'
     )
 
 

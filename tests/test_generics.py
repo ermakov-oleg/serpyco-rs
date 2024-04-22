@@ -183,7 +183,6 @@ def test_generics__swagger_schema():
 
 
 def test_generics_inheritance():
-
     @dataclass
     class Parent(Generic[T]):
         value: T

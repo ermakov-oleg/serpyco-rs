@@ -46,7 +46,6 @@ def test_get_type_hints_with_nested_dataclasses():
 
 
 def test_get_type_hints_with_generics():
-
     @dataclass
     class A(Generic[T, U]):
         a: T
@@ -60,7 +59,6 @@ def test_get_type_hints_with_generics():
 
 
 def test_get_type_hints_with_generics_and_reuse_type_vars():
-
     @dataclass
     class A(Generic[T, U]):
         a: T
@@ -74,7 +72,6 @@ def test_get_type_hints_with_generics_and_reuse_type_vars():
 
 
 def test_get_type_hints_with_generics_and_nested_dataclasses():
-
     @dataclass
     class A(Generic[T, U]):
         a: T
@@ -89,7 +86,6 @@ def test_get_type_hints_with_generics_and_nested_dataclasses():
 
 
 def test_get_type_hints_with_generics_and_annotations():
-
     @dataclass
     class A(Generic[T, U]):
         a: T

@@ -188,7 +188,6 @@ class FooEnum(Enum):
 
 
 def test_load_query_params__enum():
-
     @dataclass
     class Foo:
         e: FooEnum
@@ -199,7 +198,6 @@ def test_load_query_params__enum():
 
 
 def test_load_query_params__literal():
-
     @dataclass
     class Foo:
         e: Literal['a', 2]
@@ -210,7 +208,6 @@ def test_load_query_params__literal():
 
 
 def test_load_query_params__typed_dict():
-
     class Foo(TypedDict):
         id: int
         name: str

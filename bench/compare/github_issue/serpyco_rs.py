@@ -11,30 +11,30 @@ from ._utils import get_dataclass_args
 
 
 class IssueState(Enum):
-    OPEN = "open"
-    CLOSED = "closed"
+    OPEN = 'open'
+    CLOSED = 'closed'
 
 
 class MilestoneState(Enum):
-    OPEN = "open"
-    CLOSED = "closed"
+    OPEN = 'open'
+    CLOSED = 'closed'
 
 
 class IssueStateReason(Enum):
-    COMPLETED = "completed"
-    REOPENED = "reopened"
-    NOT_PLANNED = "not_planned"
+    COMPLETED = 'completed'
+    REOPENED = 'reopened'
+    NOT_PLANNED = 'not_planned'
 
 
 class AuthorAssociation(Enum):
-    COLLABORATOR = "COLLABORATOR"
-    CONTRIBUTOR = "CONTRIBUTOR"
-    FIRST_TIMER = "FIRST_TIMER"
-    FIRST_TIME_CONTRIBUTOR = "FIRST_TIME_CONTRIBUTOR"
-    MANNEQUIN = "MANNEQUIN"
-    MEMBER = "MEMBER"
-    NONE = "NONE"
-    OWNER = "OWNER"
+    COLLABORATOR = 'COLLABORATOR'
+    CONTRIBUTOR = 'CONTRIBUTOR'
+    FIRST_TIMER = 'FIRST_TIMER'
+    FIRST_TIME_CONTRIBUTOR = 'FIRST_TIME_CONTRIBUTOR'
+    MANNEQUIN = 'MANNEQUIN'
+    MEMBER = 'MEMBER'
+    NONE = 'NONE'
+    OWNER = 'OWNER'
 
 
 @dataclass(**get_dataclass_args())

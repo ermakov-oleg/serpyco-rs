@@ -4,11 +4,10 @@ from datetime import datetime, time
 from decimal import Decimal
 from enum import Enum
 from typing import Annotated, Any, Literal, Optional, TypedDict, Union
-from unittest import mock
 from uuid import UUID
 
 import pytest
-from serpyco_rs import Serializer
+from serpyco_rs import Serializer, JsonSchemaBuilder
 from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, OmitNone
 
 
@@ -88,7 +87,7 @@ def test_to_json_schema():
                             'format': 'date-time',
                             'type': 'string',
                         },
-                        'i': {'enum': ['a']},
+                        'i': {'enum': ['a'], 'type': 'string'},
                         'j': {
                             '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData[no_format,keep_nones]'
                         },
@@ -412,3 +411,68 @@ def test_to_json_schema__bytes():
             }
         },
     }
+
+
+def test_enum_x_attrs():
+    class EnumCls(Enum):
+        a = 'a'
+        """a docstring"""
+
+    serializer = Serializer(EnumCls)
+    assert serializer.get_json_schema() == {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'enum': ['a'],
+        'type': 'string',
+        'x-a': 'a docstring',
+    }
+
+
+def test_enum_multiply_types():
+    class EnumCls(Enum):
+        a = 'a'
+        """a docstring"""
+        b = 1
+        """b docstring"""
+
+    serializer = Serializer(EnumCls)
+    assert serializer.get_json_schema() == {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'enum': ['a', 1],
+        'x-a': 'a docstring',
+        'x-1': 'b docstring',
+    }
+
+
+class TestJsonSchemaBuilder:
+    def test_build__use_custom_ref_prefix(self):
+        @dataclass
+        class Data:
+            a: int
+
+        serializer = Serializer(Data)
+        schema_builder = JsonSchemaBuilder(ref_prefix='#/foo/bar')
+        schema = schema_builder.build(serializer)
+        definitions = schema_builder.get_definitions()
+
+        assert schema == {
+            '$ref': '#/foo/bar/tests.json_schema.test_convert.TestJsonSchemaBuilder.test_build__use_custom_ref_prefix.<locals>.Data[no_format,keep_nones]',
+        }
+
+        assert definitions == {
+            'tests.json_schema.test_convert.TestJsonSchemaBuilder.test_build__use_custom_ref_prefix.<locals>.Data[no_format,keep_nones]': {
+                'properties': {'a': {'type': 'integer'}},
+                'required': ['a'],
+                'type': 'object',
+            }
+        }
+
+    def test_build__add_dialect_uri(self):
+        serializer = Serializer(int)
+        schema_builder = JsonSchemaBuilder(add_dialect_uri=True)
+        schema = schema_builder.build(serializer)
+
+        assert schema == {
+            'type': 'integer',
+            '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        }
+        assert schema_builder.get_definitions() == {}

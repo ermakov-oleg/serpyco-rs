@@ -19,7 +19,6 @@ from typing import (
 )
 from uuid import UUID
 
-from attributes_doc import get_attributes_doc
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
 from ._impl import (
@@ -53,7 +52,7 @@ from ._impl import (
 )
 from ._meta import Meta, MetaStateKey
 from ._type_utils import get_type_hints  # type: ignore[attr-defined]
-from ._utils import to_camelcase
+from ._utils import get_attributes_doc, to_camelcase
 from .metadata import (
     Alias,
     Discriminator,
@@ -70,6 +69,7 @@ from .metadata import (
     NoneFormat,
     OmitNone,
 )
+
 
 if sys.version_info >= (3, 10):  # pragma: no cover
     from types import UnionType as StdUnionType
@@ -287,7 +287,6 @@ def _describe_entity(
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: Meta,
 ) -> Union[EntityType, TypedDictType]:
-
     # PEP-484: Replace all unfilled type parameters with Any
     if not hasattr(original_t, '__origin__') and getattr(original_t, '__parameters__', None):
         original_t = original_t[(Any,) * len(t.__parameters__)]
@@ -389,8 +388,7 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                 default=(
                     DefaultValue.some(f.default)
                     if (
-                        f.default is not attr.NOTHING
-                        and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
+                        f.default is not attr.NOTHING and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
                     )
                     else NOT_SET
                 ),

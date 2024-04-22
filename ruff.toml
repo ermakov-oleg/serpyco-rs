@@ -1,6 +1,7 @@
 line-length = 120
 src = ["python/serpyco_rs", "tests"]
 exclude = ["pyproject.toml"]
+target-version = "py39"
 
 [lint]
 select = [
@@ -78,6 +79,11 @@ ignore = [
 
 [lint.flake8-quotes]
 inline-quotes = "single"
+
+[lint.isort]
+combine-as-imports = true
+lines-after-imports = 2
+no-lines-before = ["local-folder"]
 
 [format]
 quote-style = "single"
