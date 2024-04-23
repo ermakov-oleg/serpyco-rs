@@ -103,7 +103,7 @@ def _(_: describe.DecimalType, doc: Optional[str] = None, *, config: Config) -> 
 
 @to_json_schema.register
 def _(_: describe.BooleanType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return Boolean(config=config)
+    return Boolean(config=config, description=doc)
 
 
 @to_json_schema.register
