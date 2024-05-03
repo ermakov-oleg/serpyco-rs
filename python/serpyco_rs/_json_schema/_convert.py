@@ -251,3 +251,8 @@ def _check_unions_schema_types(schema: Schema) -> TypeGuard[Union[ObjectType, Re
     if isinstance(schema, (ObjectType, RefType)):
         return True
     raise RuntimeError(f'Unions schema items must be ObjectType or RefType. Current: {schema}')
+
+
+@to_json_schema.register
+def _(arg: describe.CustomType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Schema(additionalArgs=arg.json_schema, description=doc, config=config)

@@ -21,6 +21,7 @@ from uuid import UUID
 
 from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
 
+from ._custom_types import CustomType as CustomTypeMeta
 from ._impl import (
     NOT_SET,
     AnyType,
@@ -29,6 +30,7 @@ from ._impl import (
     BooleanType,
     BytesType,
     CustomEncoder,
+    CustomType,
     DateTimeType,
     DateType,
     DecimalType,
@@ -93,7 +95,11 @@ _NoneType = type(None)
 _T = TypeVar('_T')
 
 
-def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
+def describe_type(
+    t: Any,
+    meta: Optional[Meta] = None,
+    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
+) -> BaseType:
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
     type_repr = repr(t)
@@ -138,6 +144,14 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             meta=meta,
             custom_encoder=None,
         )
+
+    if custom_type_resolver and (custom_type := custom_type_resolver(t)):
+        if custom_encoder is None:
+            custom_encoder = CustomEncoder(
+                serialize=custom_type.serialize,
+                deserialize=custom_type.deserialize,
+            )
+        return CustomType(custom_encoder=custom_encoder, json_schema=custom_type.get_json_schema())
 
     if t is Any:
         return AnyType(custom_encoder=custom_encoder)
@@ -189,14 +203,26 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
 
         if t in {Sequence, list}:
             return ArrayType(
-                item_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType(custom_encoder=None)),
+                item_type=(
+                    describe_type(annotation_wrapper(args[0]), meta, custom_type_resolver)
+                    if args
+                    else AnyType(custom_encoder=None)
+                ),
                 custom_encoder=custom_encoder,
             )
 
         if t in {Mapping, dict}:
             return DictionaryType(
-                key_type=(describe_type(annotation_wrapper(args[0]), meta) if args else AnyType(custom_encoder=None)),
-                value_type=(describe_type(annotation_wrapper(args[1]), meta) if args else AnyType(custom_encoder=None)),
+                key_type=(
+                    describe_type(annotation_wrapper(args[0]), meta, custom_type_resolver)
+                    if args
+                    else AnyType(custom_encoder=None)
+                ),
+                value_type=(
+                    describe_type(annotation_wrapper(args[1]), meta, custom_type_resolver)
+                    if args
+                    else AnyType(custom_encoder=None)
+                ),
                 omit_none=none_format.omit,
                 custom_encoder=custom_encoder,
             )
@@ -205,7 +231,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             if not args or Ellipsis in args:
                 raise RuntimeError('Variable length tuples are not supported')
             return TupleType(
-                item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args],
+                item_types=[describe_type(annotation_wrapper(arg), meta, custom_type_resolver) for arg in args],
                 custom_encoder=custom_encoder,
             )
 
@@ -222,6 +248,7 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
                 custom_encoder=custom_encoder,
                 cls_none_as_default_for_optional=none_as_default_for_optional,
                 meta=meta,
+                custom_type_resolver=custom_type_resolver,
             )
             meta.add_to_state(meta_key, entity_type)
             return entity_type
@@ -236,14 +263,14 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
             new_args = tuple(arg for arg in args if arg is not _NoneType)
             new_t = Union[new_args] if len(new_args) > 1 else new_args[0]  # type: ignore[unused-ignore]
             return OptionalType(
-                inner=describe_type(annotation_wrapper(new_t), meta),
+                inner=describe_type(annotation_wrapper(new_t), meta, custom_type_resolver),
                 custom_encoder=None,
             )
 
         discriminator = _find_metadata(metadata, Discriminator)
         if not discriminator:
             return UnionType(
-                item_types=[describe_type(annotation_wrapper(arg), meta) for arg in args],
+                item_types=[describe_type(annotation_wrapper(arg), meta, custom_type_resolver) for arg in args],
                 union_repr=type_repr.removeprefix('typing.'),
                 custom_encoder=custom_encoder,
             )
@@ -256,7 +283,9 @@ def describe_type(t: Any, meta: Optional[Meta] = None) -> BaseType:
         meta = dataclasses.replace(meta, discriminator_field=discriminator.name)
         return DiscriminatedUnionType(
             item_types={
-                _get_discriminator_value(arg, discriminator.name): describe_type(annotation_wrapper(arg), meta)
+                _get_discriminator_value(arg, discriminator.name): describe_type(
+                    annotation_wrapper(arg), meta, custom_type_resolver
+                )
                 for arg in args
             },
             dump_discriminator=discriminator.name,
@@ -286,6 +315,7 @@ def _describe_entity(
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: Meta,
+    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta]]],
 ) -> Union[EntityType, TypedDictType]:
     # PEP-484: Replace all unfilled type parameters with Any
     if not hasattr(original_t, '__origin__') and getattr(original_t, '__parameters__', None):
@@ -306,7 +336,7 @@ def _describe_entity(
         type_ = Annotated[type_, cls_filed_format, cls_none_format, cls_none_as_default_for_optional]
 
         metadata = _get_annotated_metadata(type_)
-        field_type = describe_type(type_, meta)
+        field_type = describe_type(type_, meta, custom_type_resolver)
         alias = _find_metadata(metadata, Alias)
         none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional)
 

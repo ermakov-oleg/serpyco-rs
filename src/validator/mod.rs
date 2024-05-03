@@ -4,4 +4,4 @@ pub mod types;
 pub mod validators;
 
 pub use context::{Context, InstancePath};
-pub use errors::raise_error;
+pub use errors::{map_py_err_to_schema_validation_error, raise_error};

@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated
 
 import pytest
-from serpyco_rs import Serializer
+from serpyco_rs import Serializer, SchemaValidationError, ErrorItem
 from serpyco_rs.metadata import CustomEncoder, deserialize_with, serialize_with
 
 
@@ -30,3 +30,13 @@ def test_deserialize_with():
     serializer = Serializer(Annotated[datetime, deserialize_with(lambda x: x)])
     val = datetime.now()
     assert serializer.load(val) is val
+
+
+def test_deserialize_with__validation_error():
+    serializer = Serializer(Annotated[int, deserialize_with(int)])
+    with pytest.raises(SchemaValidationError) as exc_info:
+        serializer.load('foo')
+
+    assert exc_info.value.errors == [
+        ErrorItem(message="ValueError: invalid literal for int() with base 10: 'foo'", instance_path='')
+    ]

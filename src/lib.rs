@@ -37,6 +37,7 @@ fn _serpyco_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<types::DiscriminatedUnionType>()?;
     m.add_class::<types::LiteralType>()?;
     m.add_class::<types::RecursionHolder>()?;
+    m.add_class::<types::CustomType>()?;
 
     // Errors
     m.add(
