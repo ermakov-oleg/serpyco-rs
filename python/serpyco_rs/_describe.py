@@ -315,7 +315,7 @@ def _describe_entity(
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
     custom_encoder: Optional[CustomEncoder[Any, Any]],
     meta: Meta,
-    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta]]],
+    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]],
 ) -> Union[EntityType, TypedDictType]:
     # PEP-484: Replace all unfilled type parameters with Any
     if not hasattr(original_t, '__origin__') and getattr(original_t, '__parameters__', None):
