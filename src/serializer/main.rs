@@ -9,8 +9,8 @@ use pyo3::{intern, PyAny, PyResult};
 
 use crate::python::{get_object_type, Type};
 use crate::serializer::encoders::{
-    BooleanEncoder, BytesEncoder, FloatEncoder, IntEncoder, LiteralEncoder, QueryFields,
-    StringEncoder, TypedDictEncoder, UnionEncoder,
+    BooleanEncoder, BytesEncoder, CustomTypeEncoder, FloatEncoder, IntEncoder, LiteralEncoder,
+    QueryFields, StringEncoder, TypedDictEncoder, UnionEncoder,
 };
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
@@ -359,6 +359,28 @@ pub fn get_encoder(
                 enum_items: type_info.get().enum_items.clone(),
             }),
         )?,
+        Type::Custom(_, base_type) => {
+            if let Some(custom_encoder_py) = base_type.get().custom_encoder.clone() {
+                let custom_encoder = custom_encoder_py.extract::<types::CustomEncoder>(py)?;
+
+                if custom_encoder.serialize.is_none() || custom_encoder.deserialize.is_none() {
+                    return Err(PyRuntimeError::new_err(
+                        "CustomType must have both serialize and deserialize methods",
+                    ));
+                }
+                let serialize = custom_encoder.serialize.unwrap();
+                let deserialize = custom_encoder.deserialize.unwrap();
+
+                Box::new(CustomTypeEncoder {
+                    dump: serialize,
+                    load: deserialize,
+                })
+            } else {
+                return Err(PyRuntimeError::new_err(
+                    "CustomType must have both serialize and deserialize methods",
+                ));
+            }
+        }
     };
 
     Ok(encoder)

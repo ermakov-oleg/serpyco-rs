@@ -3,10 +3,10 @@ use pyo3::Bound;
 use pyo3::{PyAny, PyResult};
 
 use crate::validator::types::{
-    AnyType, ArrayType, BaseType, BooleanType, BytesType, DateTimeType, DateType, DecimalType,
-    DictionaryType, DiscriminatedUnionType, EntityType, EnumType, FloatType, IntegerType,
-    LiteralType, OptionalType, RecursionHolder, StringType, TimeType, TupleType, TypedDictType,
-    UUIDType, UnionType,
+    AnyType, ArrayType, BaseType, BooleanType, BytesType, CustomType, DateTimeType, DateType,
+    DecimalType, DictionaryType, DiscriminatedUnionType, EntityType, EnumType, FloatType,
+    IntegerType, LiteralType, OptionalType, RecursionHolder, StringType, TimeType, TupleType,
+    TypedDictType, UUIDType, UnionType,
 };
 
 #[derive(Clone, Debug)]
@@ -33,6 +33,7 @@ pub enum Type<'a, Base = Bound<'a, BaseType>> {
     Literal(Bound<'a, LiteralType>, Base),
     Any(Bound<'a, AnyType>, Base),
     RecursionHolder(Bound<'a, RecursionHolder>, Base),
+    Custom(Bound<'a, CustomType>, Base),
 }
 
 pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
@@ -62,6 +63,7 @@ pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
     check_type!(type_info, base_type, Literal, LiteralType);
     check_type!(type_info, base_type, Bytes, BytesType);
     check_type!(type_info, base_type, RecursionHolder, RecursionHolder);
+    check_type!(type_info, base_type, Custom, CustomType);
 
     if let Ok(t) = type_info.extract::<Bound<'_, EntityType>>() {
         let python_object_id = type_info.as_ptr() as *const _ as usize;

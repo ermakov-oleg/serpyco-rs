@@ -11,7 +11,7 @@ macro_rules! py_eq {
     };
 }
 
-#[pyclass(frozen, module = "serde_json", subclass)]
+#[pyclass(frozen, module = "serpyco_rs", subclass)]
 #[derive(Debug, Clone)]
 pub struct BaseType {
     #[pyo3(get)]
@@ -40,7 +40,7 @@ impl BaseType {
     }
 }
 
-#[pyclass(frozen, module = "serde_json", subclass)]
+#[pyclass(frozen, module = "serpyco_rs", subclass)]
 #[derive(Debug, Clone)]
 pub struct CustomEncoder {
     #[pyo3(get)]
@@ -71,7 +71,7 @@ impl CustomEncoder {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntegerType {
     #[pyo3(get)]
@@ -102,7 +102,7 @@ impl IntegerType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FloatType {
     #[pyo3(get)]
@@ -133,7 +133,7 @@ impl FloatType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct DecimalType {
     #[pyo3(get)]
@@ -164,7 +164,7 @@ impl DecimalType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringType {
     #[pyo3(get)]
@@ -206,7 +206,7 @@ impl StringType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BooleanType {}
 
@@ -228,7 +228,7 @@ impl BooleanType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UUIDType {}
 
@@ -250,7 +250,7 @@ impl UUIDType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimeType {}
 
@@ -272,7 +272,7 @@ impl TimeType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateTimeType {}
 
@@ -294,7 +294,7 @@ impl DateTimeType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateType {}
 
@@ -322,7 +322,7 @@ pub enum DefaultValueEnum {
     Value(Py<PyAny>),
 }
 
-#[pyclass(frozen, module = "serde_json", subclass)]
+#[pyclass(frozen, module = "serpyco_rs", subclass)]
 #[derive(Debug, Clone)]
 pub struct DefaultValue(DefaultValueEnum);
 
@@ -381,7 +381,7 @@ impl PartialEq<Self> for DefaultValue {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct EntityType {
     #[pyo3(get)]
@@ -460,7 +460,7 @@ impl EntityType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct TypedDictType {
     #[pyo3(get)]
@@ -528,7 +528,7 @@ impl TypedDictType {
     }
 }
 
-#[pyclass(frozen, module = "serde_json")]
+#[pyclass(frozen, module = "serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct EntityField {
     #[pyo3(get)]
@@ -593,7 +593,7 @@ impl EntityField {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct ArrayType {
     #[pyo3(get)]
@@ -627,7 +627,7 @@ impl ArrayType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct EnumType {
     #[pyo3(get)]
@@ -722,7 +722,7 @@ impl<'a> From<&'a Vec<(EnumItem, Py<PyAny>)>> for EnumItems {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct OptionalType {
     #[pyo3(get)]
@@ -756,7 +756,7 @@ impl OptionalType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct DictionaryType {
     #[pyo3(get)]
@@ -806,7 +806,7 @@ impl DictionaryType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct TupleType {
     #[pyo3(get)]
@@ -852,7 +852,7 @@ impl TupleType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BytesType {}
 
@@ -874,7 +874,7 @@ impl BytesType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnyType {}
 
@@ -896,7 +896,7 @@ impl AnyType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct DiscriminatedUnionType {
     #[pyo3(get)]
@@ -946,7 +946,7 @@ impl DiscriminatedUnionType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct UnionType {
     #[pyo3(get)]
@@ -985,7 +985,7 @@ impl UnionType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct LiteralType {
     #[pyo3(get)]
@@ -1034,7 +1034,7 @@ impl LiteralType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module = "serde_json")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs", subclass)]
 #[derive(Debug, Clone)]
 pub struct RecursionHolder {
     #[pyo3(get)]
@@ -1088,5 +1088,35 @@ impl RecursionHolder {
             self.name.to_string(),
             self.state_key.to_string(),
         )
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[derive(Debug, Clone)]
+pub struct CustomType {
+    #[pyo3(get)]
+    json_schema: Py<PyAny>,
+}
+
+#[pymethods]
+impl CustomType {
+    #[new]
+    fn new(custom_encoder: &Bound<'_, PyAny>, json_schema: &Bound<'_, PyAny>) -> (Self, BaseType) {
+        (
+            CustomType {
+                json_schema: json_schema.clone().unbind(),
+            },
+            BaseType::new(Some(custom_encoder)),
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        Ok(base.__eq__(base_other, py)? && py_eq!(self_.json_schema, other.json_schema, py))
+    }
+
+    fn __repr__(&self) -> String {
+        "<CustomType>".to_string()
     }
 }

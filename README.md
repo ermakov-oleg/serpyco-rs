@@ -453,3 +453,90 @@ ser = Serializer(A)
 print(ser.load_query_params(MultiDict(parse_qsl('foo=1&bar=2'))))
 >> A(foo=1, bar='2')
 ```
+
+## Custom Type Support
+
+In `serpyco-rs`, you can add support for your own types by using the `custom_type_resolver` parameter and the `CustomType` class. This allows you to define how your custom types should be serialized and deserialized.
+
+### CustomType
+
+The `CustomType` class is a way to define how a custom type should be serialized and deserialized. It is a generic class that takes two type parameters: the type of the object to be serialized/deserialized and the type of the serialized/deserialized object.
+
+Here is an example of a `CustomType` for `IPv4Address`:
+
+```python
+from serpyco_rs import CustomType
+from ipaddress import IPv4Address, AddressValueError
+
+class IPv4AddressType(CustomType[IPv4Address, str]):
+    def serialize(self, obj: IPv4Address) -> str:
+        return str(obj)
+
+    def deserialize(self, data: str) -> IPv4Address:
+        try:
+            return IPv4Address(data)
+        except AddressValueError:
+            raise ValueError(f"Invalid IPv4 address: {data}")
+
+    def get_json_schema(self) -> dict:
+        return {"type": "string", "format": "ipv4"}
+```
+
+In this example, `IPv4AddressType` is a `CustomType` that serializes `IPv4Address` objects to strings and deserializes strings to `IPv4Address` objects. The `get_json_schema` method returns the JSON schema for the custom type.
+
+### custom_type_resolver
+
+The `custom_type_resolver` is a function that takes a type as input and returns an instance of `CustomType` if the type is supported, or `None` otherwise. This function is passed to the `Serializer` constructor.
+
+Here is an example of a `custom_type_resolver` that supports `IPv4Address`:
+
+```python
+def custom_type_resolver(t: type) -> CustomType | None
+    if t is IPv4Address:
+        return IPv4AddressType()
+    return None
+
+ser = Serializer(MyDataclass, custom_type_resolver=custom_type_resolver)
+```
+
+In this example, the `custom_type_resolver` function checks if the type is `IPv4Address` and returns an instance of `IPv4AddressType` if it is. Otherwise, it returns `None`. This function is then passed to the `Serializer` constructor, which uses it to handle `IPv4Address` fields in the dataclass.
+
+### Full Example
+
+```python
+from dataclasses import dataclass
+from ipaddress import IPv4Address
+from serpyco_rs import Serializer, CustomType
+
+# Define custom type for IPv4Address
+class IPv4AddressType(CustomType[IPv4Address, str]):
+    def serialize(self, value: IPv4Address) -> str:
+        return str(value)
+
+    def deserialize(self, value: str) -> IPv4Address:
+        return IPv4Address(value)
+
+    def get_json_schema(self):
+        return {
+            'type': 'string',
+            'format': 'ipv4',
+        }
+
+# Defining custom_type_resolver
+def custom_type_resolver(t: type) -> CustomType | None:
+    if t is IPv4Address:
+        return IPv4AddressType()
+    return None
+
+@dataclass
+class Data:
+    ip: IPv4Address
+
+# Use custom_type_resolver in Serializer
+serializer = Serializer(Data, custom_type_resolver=custom_type_resolver)
+
+# Example usage
+data = Data(ip=IPv4Address('1.1.1.1'))
+serialized_data = serializer.dump(data)  # {'ip': '1.1.1.1'}
+deserialized_data = serializer.load(serialized_data)  # Data(ip=IPv4Address('1.1.1.1'))
+```

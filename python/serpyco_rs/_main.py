@@ -1,6 +1,8 @@
 import abc
-from typing import Annotated, Any, Generic, Protocol, TypeVar, Union, cast, overload
+from collections.abc import Callable
+from typing import Annotated, Any, Generic, Optional, Protocol, TypeVar, Union, cast, overload
 
+from ._custom_types import CustomType
 from ._describe import BaseType, describe_type
 from ._impl import Serializer as _Serializer
 from ._json_schema import get_json_schema
@@ -38,6 +40,7 @@ class Serializer(Generic[_T]):
         omit_none: bool = False,
         force_default_for_optional: bool = False,
         naive_datetime_to_utc: bool = False,
+        custom_type_resolver: Optional[Callable[[Any], Optional[CustomType[Any, Any]]]] = None,
     ) -> None:
         """
         Create a serializer for the given type.
@@ -47,6 +50,9 @@ class Serializer(Generic[_T]):
         :param omit_none: If True, the serializer will omit None values from the output.
         :param force_default_for_optional: If True, the serializer will force default values for optional fields.
         :param naive_datetime_to_utc: If True, the serializer will convert naive datetimes to UTC.
+        :param custom_type_resolver: An optional callable that allows users to add support for their own types.
+            This parameter should be a function that takes a type as input and returns an instance of CustomType
+            if the user-defined type is supported, or None otherwise.
         """
         if camelcase_fields:
             t = cast(type[_T], Annotated[t, CamelCase])
@@ -54,7 +60,7 @@ class Serializer(Generic[_T]):
             t = cast(type(_T), Annotated[t, OmitNone])  # type: ignore
         if force_default_for_optional:
             t = cast(type(_T), Annotated[t, ForceDefaultForOptional])  # type: ignore
-        self._type_info = describe_type(t)
+        self._type_info = describe_type(t, custom_type_resolver=custom_type_resolver)
         self._schema = get_json_schema(self._type_info)
         self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc)
 

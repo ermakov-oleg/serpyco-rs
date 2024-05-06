@@ -36,3 +36,18 @@ fn into_path(pointer: &InstancePath) -> String {
     }
     path.join("/")
 }
+
+pub fn map_py_err_to_schema_validation_error(
+    py: Python<'_>,
+    error: PyErr,
+    instance_path: &InstancePath,
+) -> PyErr {
+    let error_message = format!("{}", &error);
+    let instance_path = into_path(instance_path);
+    let err = PyErr::new::<SchemaValidationError, _>((
+        "Schema validation failed".to_string(),
+        vec![ErrorItem::new(error_message, instance_path)],
+    ));
+    err.set_cause(py, Some(error));
+    err
+}

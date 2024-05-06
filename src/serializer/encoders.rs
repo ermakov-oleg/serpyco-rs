@@ -24,7 +24,7 @@ use crate::validator::validators::{
     check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
     invalid_type_dump, missing_required_property, no_encoder_for_discriminator, str_as_bool,
 };
-use crate::validator::{Context, InstancePath};
+use crate::validator::{map_py_err_to_schema_validation_error, Context, InstancePath};
 
 pub type TEncoder = dyn Encoder + Send + Sync;
 
@@ -1056,12 +1056,38 @@ impl Encoder for CustomEncoder {
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         match self.load {
-            Some(ref load) => load.bind(value.py()).call1((value,)),
+            Some(ref load) => load.bind(value.py()).call1((value,)).map_err(|err| {
+                map_py_err_to_schema_validation_error(value.py(), err, instance_path)
+            }),
             None => self.inner.load(value, instance_path, ctx),
         }
     }
 
     fn is_sequence(&self) -> bool {
         self.inner.is_sequence()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomTypeEncoder {
+    pub(crate) dump: Py<PyAny>,
+    pub(crate) load: Py<PyAny>,
+}
+
+impl Encoder for CustomTypeEncoder {
+    #[inline]
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        self.dump.bind(value.py()).call1((value,))
+    }
+
+    #[inline]
+    fn load<'a>(
+        &self,
+        value: &Bound<'a, PyAny>,
+        instance_path: &InstancePath,
+        _ctx: &Context,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let result = self.load.bind(value.py()).call1((value,));
+        result.map_err(|err| map_py_err_to_schema_validation_error(value.py(), err, instance_path))
     }
 }
