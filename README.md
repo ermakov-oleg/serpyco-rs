@@ -69,6 +69,7 @@ There is support for generic types from the standard typing module:
 * Tuple (fixed size)
 * Literal[str, ...]
 * Unions / Tagged unions
+* typing.NewType
 
 ## Benchmarks
 
