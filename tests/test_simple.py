@@ -308,3 +308,31 @@ def test_dump_literal():
 
     assert serializer.dump(Foo(bar=1)) == {'bar': 1}
     assert serializer.dump(Foo(bar='2')) == {'bar': '2'}
+
+
+def test_load_new_type():
+    from typing import NewType
+
+    Foo = NewType('Foo', int)
+
+    @dataclass
+    class Bar:
+        foo: Foo
+
+    serializer = Serializer(Bar)
+
+    assert serializer.load({'foo': 1}) == Bar(foo=Foo(1))
+
+
+def test_dump_new_type():
+    from typing import NewType
+
+    Foo = NewType('Foo', int)
+
+    @dataclass
+    class Bar:
+        foo: Foo
+
+    serializer = Serializer(Bar)
+
+    assert serializer.dump(Bar(foo=Foo(1))) == {'foo': 1}
