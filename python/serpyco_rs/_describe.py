@@ -258,6 +258,9 @@ def describe_type(
             return LiteralType(args=list(args), custom_encoder=custom_encoder)
         raise RuntimeError('Supported only Literal[str | int, ...]')
 
+    if _is_new_type(t):
+        return describe_type(t.__supertype__, meta, custom_type_resolver)
+
     if t is Union:
         if _NoneType in args:
             new_args = tuple(arg for arg in args if arg is not _NoneType)
@@ -555,3 +558,7 @@ def _is_frozen_dataclass(cls: Any, field: EntityField) -> bool:
         return True
     else:
         return False
+
+
+def _is_new_type(t: Any) -> bool:
+    return hasattr(t, '__supertype__')
