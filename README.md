@@ -373,10 +373,10 @@ ser = Serializer(A)
 print(ser.get_json_schema())
 >> {
     '$schema': 'https://json-schema.org/draft/2020-12/schema', 
-    '$ref': '#/components/schemas/A[no_format,keep_nones]', 
+    '$ref': '#/components/schemas/A', 
     'components': {
         'schemas': {
-            'A[no_format,keep_nones]': {
+            'A': {
                 'properties': {
                     'foo': {'type': 'integer'}, 
                     'bar': {'type': 'string'}
@@ -410,11 +410,11 @@ builder = JsonSchemaBuilder(
 )
 
 print(builder.build(ser))
->> {'$ref': '#/definitions/__main__.A[no_format,keep_nones]'}
+>> {'$ref': '#/definitions/__main__.A'}
 
 print(builder.get_definitions())
 >> {
-  "__main__.A[no_format,keep_nones]": {
+  "__main__.A": {
     "properties": {
       "foo": {
         "type": "integer"

@@ -40,11 +40,11 @@ def test_custom_type():
     assert serializer.dump(data) == {'ip': '1.1.1.1'}
     assert serializer.load({'ip': '1.1.1.1'}) == data
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.test_custom_types.test_custom_type.<locals>.Data[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.test_custom_types.test_custom_type.<locals>.Data',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.test_custom_types.test_custom_type.<locals>.Data[no_format,keep_nones]': {
+                'tests.test_custom_types.test_custom_type.<locals>.Data': {
                     'properties': {
                         'ip': {
                             'format': 'ipv4',

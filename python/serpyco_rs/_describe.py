@@ -4,6 +4,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
 from enum import Enum, IntEnum
+from functools import cache
 from typing import (
     Annotated,
     Any,
@@ -472,16 +473,29 @@ def _apply_format(f: Optional[FieldFormat], value: str) -> str:
     assert_never(f.format)
 
 
+_NAME_CACHE = {}
+
+
+@cache
 def _generate_name(
     cls: Any,
     field_format: FieldFormat,
     none_format: NoneFormat,
     cls_none_as_default_for_optional: NoneAsDefaultForOptional,
 ) -> str:
+    """
+    Generate unique name for entity type.
+
+    We need unique name to avoid name conflicts in generated json schema,
+    when we have one entity with different Annotated metadata (like FieldFormat).
+    """
     name = repr(cls).removeprefix("<class '").removesuffix("'>")
-    nones = 'omit_nones' if none_format.omit else 'keep_nones'
-    force_none = ',force_none' if cls_none_as_default_for_optional.use else ''
-    return f'{name}[{field_format.format.value},{nones}{force_none}]'
+    if name not in _NAME_CACHE:
+        _NAME_CACHE[name] = 0
+        return name
+
+    _NAME_CACHE[name] += 1
+    return f'{name}{_NAME_CACHE[name]}'
 
 
 def _get_globals(t: Any) -> dict[str, Any]:

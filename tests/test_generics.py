@@ -96,82 +96,70 @@ def test_generics__serialization():
 def test_generics__swagger_schema():
     serializer = Serializer(A)
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.test_generics.A[no_format,keep_nones]',
+        '$ref': '#/components/schemas/tests.test_generics.A',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.test_generics.A[no_format,keep_nones]': {
+                'tests.test_generics.A': {
                     'properties': {
-                        'a': {
-                            '$ref': '#/components/schemas/tests.test_generics.GenericType[bool][no_format,keep_nones]'
-                        },
+                        'a': {'$ref': '#/components/schemas/tests.test_generics.GenericType[bool]'},
                         'b': {
-                            '$ref': '#/components/schemas/tests.test_generics.GenericType[tests.test_generics.CustomType][no_format,keep_nones]'
+                            '$ref': '#/components/schemas/tests.test_generics.GenericType[tests.test_generics.CustomType]'
                         },
-                        'c': {
-                            '$ref': '#/components/schemas/tests.test_generics.GenericType[int][no_format,keep_nones]'
-                        },
-                        'd': {
-                            '$ref': '#/components/schemas/tests.test_generics.GenericType[float][no_format,keep_nones]'
-                        },
-                        'e': {
-                            '$ref': '#/components/schemas/tests.test_generics.GenericType[str][no_format,keep_nones]'
-                        },
-                        'f': {
-                            '$ref': '#/components/schemas/tests.test_generics.GenericType[str][no_format,keep_nones]'
-                        },
+                        'c': {'$ref': '#/components/schemas/tests.test_generics.GenericType[int]'},
+                        'd': {'$ref': '#/components/schemas/tests.test_generics.GenericType[float]'},
+                        'e': {'$ref': '#/components/schemas/tests.test_generics.GenericType[str]'},
+                        'f': {'$ref': '#/components/schemas/tests.test_generics.GenericType[str]'},
                         'g': {
                             'anyOf': [
                                 {'type': 'null'},
-                                {
-                                    '$ref': '#/components/schemas/tests.test_generics.GenericType[str][no_format,keep_nones]'
-                                },
+                                {'$ref': '#/components/schemas/tests.test_generics.GenericType[str]'},
                             ]
                         },
                     },
                     'required': ['a', 'b', 'c', 'd', 'e', 'f'],
                     'type': 'object',
                 },
-                'tests.test_generics.CustomType[no_format,keep_nones]': {
+                'tests.test_generics.CustomType': {
                     'properties': {'q': {'type': 'string'}, 'w': {'type': 'integer'}},
                     'required': ['q', 'w'],
                     'type': 'object',
                 },
-                'tests.test_generics.GenericType[bool][no_format,keep_nones]': {
+                'tests.test_generics.GenericType[bool]': {
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'boolean'}]},
                     },
                     'type': 'object',
                 },
-                'tests.test_generics.GenericType[float][no_format,keep_nones]': {
+                'tests.test_generics.GenericType[float]': {
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'number'}]},
                     },
                     'type': 'object',
                 },
-                'tests.test_generics.GenericType[int][no_format,keep_nones]': {
+                'tests.test_generics.GenericType[int]': {
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]},
                     },
                     'type': 'object',
                 },
-                'tests.test_generics.GenericType[str][no_format,keep_nones]': {
+                'tests.test_generics.GenericType[str]': {
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                     },
                     'type': 'object',
                 },
-                'tests.test_generics.GenericType[tests.test_generics.CustomType][no_format,keep_nones]': {
+                'tests.test_generics.GenericType[tests.test_generics.CustomType]': {
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
                         'value': {
                             'anyOf': [
                                 {'type': 'null'},
-                                {'$ref': '#/components/schemas/tests.test_generics.CustomType[no_format,keep_nones]'},
+                                {'$ref': '#/components/schemas/tests.test_generics.CustomType'},
                             ]
                         },
                     },
