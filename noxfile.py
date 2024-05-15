@@ -22,7 +22,7 @@ def build(session, use_pip: bool = False):
 def test(session):
     build(session)
     install(session, '-r', 'requirements/dev.txt')
-    session.run('pytest', '-vss', 'tests/', *session.posargs)
+    session.run('pytest', '-vvs', 'tests/', *session.posargs)
 
 
 @nox.session(python=False)
