@@ -67,7 +67,7 @@ There is support for generic types from the standard typing module:
 * Mapping
 * Sequence
 * Tuple (fixed size)
-* Literal[str, ...]
+* Literal[str, int, Enum.variant, ...]
 * Unions / Tagged unions
 * typing.NewType
 
@@ -234,7 +234,7 @@ For better performance, you can use [Tagged unions](#tagged-unions).
 
 Supports tagged joins with discriminator field.
 
-All classes in the union must be dataclasses or attrs with discriminator field `Literal[str]`.
+All classes in the union must be dataclasses or attrs with discriminator field `Literal[str]` or `Literal[Enum.variant]`.
 
 **The discriminator field is always mandatory.**
 

@@ -1,9 +1,9 @@
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::intern;
-use std::fmt;
 
+use crate::python::fmt_py;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyLong, PyNone, PyString};
+use pyo3::types::{PyDict, PyList, PyLong, PyNone};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -634,7 +634,11 @@ pub struct EnumType {
     pub cls: Py<PyAny>,
     #[pyo3(get)]
     pub items: Py<PyList>,
-    pub enum_items: Vec<(EnumItem, Py<PyAny>)>,
+    // Map from expected values hash to the actual value
+    pub load_map: Py<PyDict>,
+    // Map from value hash to the expected value
+    pub dump_map: Py<PyDict>,
+    pub items_repr: String,
 }
 
 #[pymethods]
@@ -646,28 +650,33 @@ impl EnumType {
         items: &Bound<'_, PyList>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
-        let mut enum_items = vec![];
-        for py_item in items.iter() {
-            let value = py_item.getattr(intern!(py_item.py(), "value"))?;
-            if let Ok(item) = value.as_ref().downcast::<PyString>() {
-                enum_items.push((
-                    EnumItem::String(item.to_str()?.to_string()),
-                    py_item.unbind(),
-                ));
-            } else if let Ok(item) = value.as_ref().downcast::<PyLong>() {
-                enum_items.push((EnumItem::Int(item.extract()?), py_item.unbind()));
-            } else {
-                return Err(PyRuntimeError::new_err(format!(
-                    "Enum items must be strings or integers ({py_item})"
-                )));
+        let load_map = PyDict::new_bound(cls.py());
+        let dump_map = PyDict::new_bound(cls.py());
+        let mut items_repr = Vec::with_capacity(items.len());
+
+        for py_value in items.iter() {
+            // Get enum value
+            let value = py_value.getattr(intern!(py_value.py(), "value")).unwrap();
+
+            dump_map.set_item(&py_value, value.clone())?;
+            load_map.set_item(&value, &py_value)?;
+            items_repr.push(fmt_py(&value));
+
+            // For support fast load with try_cast_from_string option enabled
+            // we need to add additional mapping for string values
+            if let Ok(value) = value.downcast::<PyLong>() {
+                let str_value = value.str().unwrap();
+                load_map.set_item((&str_value, false), &py_value)?;
             }
         }
-        enum_items.sort_by(|a, b| a.0.cmp(&b.0));
+
         Ok((
             EnumType {
                 cls: cls.clone().unbind(),
                 items: items.clone().unbind(),
-                enum_items,
+                items_repr: format!("[{}]", items_repr.join(", ")),
+                load_map: load_map.unbind(),
+                dump_map: dump_map.unbind(),
             },
             BaseType::new(custom_encoder),
         ))
@@ -686,38 +695,6 @@ impl EnumType {
             "<EnumType: cls={:?}, items={:?}>",
             self.cls.to_string(),
             self.items.to_string(),
-        )
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-pub enum EnumItem {
-    Int(i64),
-    String(String),
-}
-
-pub struct EnumItems(Vec<EnumItem>);
-
-impl fmt::Display for EnumItems {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut items = vec![];
-        for item in &self.0 {
-            match item {
-                EnumItem::Int(int) => items.push(int.to_string()),
-                EnumItem::String(str) => items.push(format!("\"{}\"", str)),
-            }
-        }
-        write!(f, "[{}]", items.join(", "))
-    }
-}
-
-impl<'a> From<&'a Vec<(EnumItem, Py<PyAny>)>> for EnumItems {
-    fn from(items: &'a Vec<(EnumItem, Py<PyAny>)>) -> Self {
-        EnumItems(
-            items
-                .iter()
-                .map(|(item, _)| item.clone())
-                .collect::<Vec<_>>(),
         )
     }
 }
@@ -990,7 +967,11 @@ impl UnionType {
 pub struct LiteralType {
     #[pyo3(get)]
     pub args: Py<PyList>,
-    pub enum_items: Vec<(EnumItem, Py<PyAny>)>,
+    // Map from expected values hash to the actual value
+    pub load_map: Py<PyDict>,
+    // Map from value hash to the expected value
+    pub dump_map: Py<PyDict>,
+    pub items_repr: String,
 }
 
 #[pymethods]
@@ -1001,23 +982,36 @@ impl LiteralType {
         args: &Bound<'_, PyList>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
-        let mut enum_items = vec![];
+        let len = args.len();
+        let load_map = PyDict::new_bound(args.py());
+        let dump_map = PyDict::new_bound(args.py());
+        let mut items_repr = Vec::with_capacity(len);
+
         for py_value in args.iter() {
-            if let Ok(item) = py_value.as_ref().downcast::<PyString>() {
-                enum_items.push((EnumItem::String(item.to_string()), py_value.unbind()));
-            } else if let Ok(item) = py_value.as_ref().downcast::<PyLong>() {
-                enum_items.push((EnumItem::Int(item.extract()?), py_value.unbind()));
-            } else {
-                return Err(PyRuntimeError::new_err(
-                    "Literal items must be strings or integers",
-                ));
+            // Get enum value or use the value itself
+            let value = match py_value.getattr(intern!(py_value.py(), "value")) {
+                Ok(value) => value,
+                Err(_) => py_value.clone(),
+            };
+
+            dump_map.set_item(&py_value, value.clone().unbind())?;
+            load_map.set_item(&value, &py_value)?;
+            items_repr.push(fmt_py(&value));
+
+            // For support fast load with try_cast_from_string option enabled
+            // we need to add additional mapping for string values
+            if let Ok(value) = value.downcast::<PyLong>() {
+                let str_value = value.str().unwrap();
+                load_map.set_item((&str_value, false), &py_value)?;
             }
         }
-        enum_items.sort_by(|a, b| a.0.cmp(&b.0));
+
         Ok((
             LiteralType {
                 args: args.clone().unbind(),
-                enum_items,
+                items_repr: format!("[{}]", items_repr.join(", ")),
+                load_map: load_map.unbind(),
+                dump_map: dump_map.unbind(),
             },
             BaseType::new(custom_encoder),
         ))

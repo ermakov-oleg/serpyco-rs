@@ -1,4 +1,3 @@
-use crate::validator::types::EnumItems;
 use crate::validator::{raise_error, InstancePath};
 
 use pyo3::prelude::PyAnyMethods;
@@ -144,11 +143,15 @@ pub fn check_sequence_size(
     }
 }
 
-pub fn no_encoder_for_discriminator(
-    key: &str,
-    discriminators: &[String],
+pub fn no_encoder_for_discriminator<K, D>(
+    key: &K,
+    discriminators: &[D],
     instance_path: &InstancePath,
-) -> PyErr {
+) -> PyErr
+where
+    K: Display,
+    D: Display,
+{
     let items = discriminators
         .iter()
         .map(|s| format!(r#""{}""#, s))
@@ -169,10 +172,7 @@ pub fn _invalid_type_new(
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> PyResult<()> {
-    let error = match value.is_instance_of::<PyString>() {
-        true => format!(r#""{}" is not of type "{}""#, value, type_),
-        false => format!(r#"{} is not of type "{}""#, value, type_),
-    };
+    let error = format!(r#"{} is not of type "{}""#, fmt_py(value), type_);
     raise_error(error, instance_path)?;
     Ok(())
 }
@@ -194,15 +194,11 @@ macro_rules! invalid_type_dump {
 }
 
 pub fn _invalid_enum_item(
-    items: EnumItems,
+    items: &str,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> PyResult<()> {
-    let error = match value.is_instance_of::<PyString>() {
-        true => format!(r#""{}" is not one of {}"#, value, items),
-        false => format!(r#"{} is not one of {}"#, value, items),
-    };
-
+    let error = format!(r#"{} is not one of {}"#, fmt_py(value), items);
     raise_error(error, instance_path)?;
     Ok(())
 }
@@ -222,6 +218,7 @@ pub fn str_as_bool(str: &str) -> Option<bool> {
     }
 }
 
+use crate::python::fmt_py;
 pub(crate) use check_bounds;
 pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;

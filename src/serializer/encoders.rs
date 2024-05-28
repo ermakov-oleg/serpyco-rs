@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -19,7 +20,7 @@ use crate::python::{
     dump_time, parse_date, parse_datetime, parse_time, py_dict_set_item, py_list_get_item,
     py_list_set_item, py_tuple_set_item,
 };
-use crate::validator::types::{DecimalType, EnumItem, FloatType, IntegerType, StringType};
+use crate::validator::types::{DecimalType, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
     invalid_type_dump, missing_required_property, no_encoder_for_discriminator, str_as_bool,
@@ -611,14 +612,18 @@ impl Encoder for UUIDEncoder {
 
 #[derive(Debug, Clone)]
 pub struct EnumEncoder {
-    pub(crate) enum_items: Vec<(EnumItem, Py<PyAny>)>,
+    pub(crate) enum_items: String,
+    pub(crate) load_map: Py<PyDict>,
+    pub(crate) dump_map: Py<PyDict>,
 }
 
 impl Encoder for EnumEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let value_str = intern!(value.py(), "value");
-        Ok(value.getattr(value_str)?.into_any())
+        if let Ok(Some(py_item)) = self.dump_map.bind(value.py()).get_item(value) {
+            return Ok(py_item);
+        }
+        invalid_enum_item!(&self.enum_items, value, &InstancePath::new())
     }
 
     #[inline]
@@ -628,91 +633,16 @@ impl Encoder for EnumEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let val = if let Ok(val) = value.downcast::<PyString>() {
-            EnumItem::String(val.to_str()?.to_owned())
-        } else if let Ok(val) = value.downcast::<PyLong>() {
-            EnumItem::Int(val.extract()?)
-        } else {
-            invalid_enum_item!((&self.enum_items).into(), value, instance_path);
-        };
-
-        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&val));
-
-        match index {
-            Ok(index) => {
-                let (_, py_item) = &self.enum_items[index];
-                return Ok(py_item.bind(value.py()).clone());
-            }
-            Err(_) if ctx.try_cast_from_string => {
-                if let Ok(value) = value.downcast::<PyString>() {
-                    if let Ok(val) = value.to_str()?.parse::<i64>() {
-                        if let Ok(index) = self
-                            .enum_items
-                            .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
-                        {
-                            let (_, py_item) = &self.enum_items[index];
-                            return Ok(py_item.bind(value.py()).clone());
-                        }
-                    }
+        match self.load_map.bind(value.py()).get_item(value) {
+            Ok(Some(val)) => Ok(val),
+            _ if ctx.try_cast_from_string => {
+                if let Ok(Some(val)) = self.load_map.bind(value.py()).get_item((&value, false)) {
+                    return Ok(val);
                 }
+                invalid_enum_item!(&self.enum_items, value, instance_path)
             }
-            _ => {}
+            _ => invalid_enum_item!(&self.enum_items, value, instance_path),
         }
-
-        invalid_enum_item!((&self.enum_items).into(), value, instance_path);
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LiteralEncoder {
-    pub(crate) enum_items: Vec<(EnumItem, Py<PyAny>)>,
-}
-
-impl Encoder for LiteralEncoder {
-    #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        Ok(value.clone())
-    }
-
-    #[inline]
-    fn load<'a>(
-        &self,
-        value: &Bound<'a, PyAny>,
-        instance_path: &InstancePath,
-        ctx: &Context,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let val = if let Ok(val) = value.downcast::<PyString>() {
-            EnumItem::String(val.to_str()?.to_owned())
-        } else if let Ok(val) = value.downcast::<PyLong>() {
-            EnumItem::Int(val.extract()?)
-        } else {
-            invalid_enum_item!((&self.enum_items).into(), value, instance_path);
-        };
-
-        let index = self.enum_items.binary_search_by(|(e, _)| e.cmp(&val));
-
-        match index {
-            Ok(index) => {
-                let (_, py_item) = &self.enum_items[index];
-                return Ok(py_item.bind(value.py()).clone());
-            }
-            Err(_) if ctx.try_cast_from_string => {
-                if let Ok(value) = value.downcast::<PyString>() {
-                    if let Ok(val) = value.to_str()?.parse::<i64>() {
-                        if let Ok(index) = self
-                            .enum_items
-                            .binary_search_by(|(e, _)| e.cmp(&EnumItem::Int(val)))
-                        {
-                            let (_, py_item) = &self.enum_items[index];
-                            return Ok(py_item.bind(value.py()).clone());
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        invalid_enum_item!((&self.enum_items).into(), value, instance_path);
     }
 }
 
@@ -841,20 +771,43 @@ impl Encoder for UnionEncoder {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DiscriminatorKey(String);
+
+impl TryFrom<&Bound<'_, PyAny>> for DiscriminatorKey {
+    type Error = ();
+
+    fn try_from(value: &Bound<'_, PyAny>) -> Result<Self, Self::Error> {
+        if let Ok(val) = value.downcast::<PyString>() {
+            Ok(DiscriminatorKey(val.to_string()))
+        } else if let Ok(value) = value.getattr(intern!(value.py(), "value")) {
+            DiscriminatorKey::try_from(&value)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl fmt::Display for DiscriminatorKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DiscriminatedUnionEncoder {
-    pub(crate) encoders: HashMap<String, Box<TEncoder>>,
+    pub(crate) encoders: HashMap<DiscriminatorKey, Box<TEncoder>>,
     pub(crate) dump_discriminator: Py<PyString>,
     pub(crate) load_discriminator: Py<PyString>,
     pub(crate) load_discriminator_rs: String,
-    pub(crate) keys: Vec<String>,
+    pub(crate) keys: Vec<DiscriminatorKey>,
 }
 
 impl Encoder for DiscriminatedUnionEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let key = match value.getattr(&self.dump_discriminator) {
-            Ok(val) => val.str()?,
+            Ok(val) => val,
             Err(_) => {
                 return Err(missing_required_property(
                     self.dump_discriminator.bind(value.py()).str()?.to_str()?,
@@ -863,11 +816,12 @@ impl Encoder for DiscriminatedUnionEncoder {
             }
         };
 
-        let str_key = key.to_str()?;
+        let key = DiscriminatorKey::try_from(&key)
+            .map_err(|_| no_encoder_for_discriminator(&key, &self.keys, &InstancePath::new()))?;
 
-        let encoder = self.encoders.get(str_key).ok_or_else(|| {
+        let encoder = self.encoders.get(&key).ok_or_else(|| {
             let instance_path = InstancePath::new();
-            no_encoder_for_discriminator(str_key, &self.keys, &instance_path)
+            no_encoder_for_discriminator(&key, &self.keys, &instance_path)
         })?;
         encoder.dump(value)
     }
@@ -880,7 +834,7 @@ impl Encoder for DiscriminatedUnionEncoder {
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyDict>() {
-            let key_any = match val.get_item(&self.load_discriminator) {
+            let key = match val.get_item(&self.load_discriminator) {
                 Ok(Some(k)) => k,
                 _ => {
                     return Err(missing_required_property(
@@ -890,13 +844,13 @@ impl Encoder for DiscriminatedUnionEncoder {
                 }
             };
 
-            let key_py_string = key_any
-                .downcast::<PyString>()
-                .expect("key must be a string");
-            let key_str = key_py_string.to_str()?;
-            let encoder = self.encoders.get(key_str).ok_or_else(|| {
+            let key = DiscriminatorKey::try_from(&key).map_err(|_| {
+                no_encoder_for_discriminator(&key.to_string(), &self.keys, instance_path)
+            })?;
+
+            let encoder = self.encoders.get(&key).ok_or_else(|| {
                 let instance_path = instance_path.push(self.load_discriminator_rs.as_str());
-                no_encoder_for_discriminator(key_str, &self.keys, &instance_path)
+                no_encoder_for_discriminator(&key, &self.keys, &instance_path)
             })?;
             encoder.load(value, instance_path, ctx)
         } else {
