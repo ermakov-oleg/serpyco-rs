@@ -1,6 +1,7 @@
 import sys
 from dataclasses import dataclass
 from typing import Annotated, Literal, Optional, Union
+from enum import Enum
 
 import pytest
 
@@ -60,7 +61,7 @@ def test_tagged_union__invalid_discriminator_type():
     assert exc_info.type is RuntimeError
     assert exc_info.value.args[0] == (
         'Type <class \'tests.test_union.Buz\'> has invalid discriminator field "type" with type "<class \'int\'>". '
-        'Discriminator supports only Literal[<str>].'
+        'Discriminator supports Literal[<str>], Literal[Enum] with str values.'
     )
 
 
@@ -176,6 +177,51 @@ def test_tagged_union__camel_case_filed_format():
 
     serializer = Serializer(
         list[Annotated[Union[A, B], Discriminator('discriminator_with_multiple_words')]],
+        camelcase_fields=True,
+    )
+
+    assert serializer.dump(obj) == raw_obj
+    assert serializer.load(raw_obj) == obj
+
+
+def test_tagged_union__enum_tag():
+    class Type(Enum):
+        A = 'A'
+        B = 'B'
+
+    @dataclass
+    class A:
+        type: Literal[Type.A]
+        a: int
+
+    @dataclass
+    class B:
+        type: Literal[Type.B]
+        b: str
+
+    raw_obj = [
+        {
+            'type': 'A',
+            'a': 128,
+        },
+        {
+            'type': 'B',
+            'b': 'foo',
+        },
+    ]
+    obj = [
+        A(
+            type=Type.A,
+            a=128,
+        ),
+        B(
+            type=Type.B,
+            b='foo',
+        ),
+    ]
+
+    serializer = Serializer(
+        list[Annotated[Union[A, B], Discriminator('type')]],
         camelcase_fields=True,
     )
 

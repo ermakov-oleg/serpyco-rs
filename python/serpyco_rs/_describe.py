@@ -255,7 +255,7 @@ def describe_type(
             return entity_type
 
     if _is_literal_type(t):
-        if args and all(isinstance(arg, (str, int)) for arg in args):
+        if args and all(isinstance(arg, (str, int, Enum)) for arg in args):
             return LiteralType(args=list(args), custom_encoder=custom_encoder)
         raise RuntimeError('Supported only Literal[str | int, ...]')
 
@@ -515,19 +515,24 @@ def _get_discriminator_value(t: Any, name: str) -> str:
     fields = attr.fields(t) if attr and _is_attrs(t) else dataclasses.fields(t)
     for field in fields:
         if field.name == name:
-            if _is_str_literal(field.type):
+            if _is_literal_type(field.type):
                 args = get_args(field.type)
                 if len(args) != 1:
                     raise RuntimeError(
                         f'Type {t} has invalid discriminator field "{name}". '
-                        f'Discriminator supports only Literal[<str>] with one argument.'
+                        f'Discriminator supports only Literal[...] with one argument.'
                     )
+                arg = args[0]
 
-                return cast(str, args[0])
+                if isinstance(arg, Enum):
+                    arg = arg.value
+
+                if isinstance(arg, str):
+                    return arg
 
             raise RuntimeError(
                 f'Type {t} has invalid discriminator field "{name}" with type "{field.type!r}". '
-                f'Discriminator supports only Literal[<str>].'
+                f'Discriminator supports Literal[<str>], Literal[Enum] with str values.'
             )
     raise RuntimeError(f'Type {t} does not have discriminator field "{name}"')
 

@@ -9,7 +9,7 @@ use pyo3::{intern, PyAny, PyResult};
 
 use crate::python::{get_object_type, Type};
 use crate::serializer::encoders::{
-    BooleanEncoder, BytesEncoder, CustomTypeEncoder, FloatEncoder, IntEncoder, LiteralEncoder,
+    BooleanEncoder, BytesEncoder, CustomTypeEncoder, DiscriminatorKey, FloatEncoder, IntEncoder,
     QueryFields, StringEncoder, TypedDictEncoder, UnionEncoder,
 };
 use crate::validator::types::{BaseType, EntityField};
@@ -188,8 +188,10 @@ pub fn get_encoder(
         Type::Literal(type_info, base_type) => wrap_with_custom_encoder(
             py,
             base_type,
-            Box::new(LiteralEncoder {
-                enum_items: type_info.get().enum_items.clone(),
+            Box::new(EnumEncoder {
+                enum_items: type_info.get().items_repr.clone(),
+                load_map: type_info.get().load_map.clone(),
+                dump_map: type_info.get().dump_map.clone(),
             }),
         )?,
         Type::Optional(type_info, base_type) => {
@@ -276,16 +278,17 @@ pub fn get_encoder(
             let mut keys = vec![];
 
             for (key, value) in item_types.iter() {
-                let key = key.downcast::<PyString>()?;
+                let key = DiscriminatorKey::try_from(&key).map_err(|e| {
+                    PyRuntimeError::new_err(format!("Invalid key for DiscriminatedUnion: {:?}", e))
+                })?;
                 let encoder = get_encoder(
                     py,
                     get_object_type(&value)?,
                     encoder_state,
                     naive_datetime_to_utc,
                 )?;
-                let rs_key: String = key.to_string_lossy().into();
-                keys.push(rs_key.clone());
-                encoders.insert(rs_key, encoder);
+                keys.push(key.clone());
+                encoders.insert(key, encoder);
             }
 
             wrap_with_custom_encoder(
@@ -356,7 +359,9 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(EnumEncoder {
-                enum_items: type_info.get().enum_items.clone(),
+                enum_items: type_info.get().items_repr.clone(),
+                load_map: type_info.get().load_map.clone(),
+                dump_map: type_info.get().dump_map.clone(),
             }),
         )?,
         Type::Custom(_, base_type) => {
