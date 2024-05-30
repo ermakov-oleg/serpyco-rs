@@ -1,5 +1,6 @@
 import sys
 import typing
+from enum import Enum
 from functools import singledispatch
 from typing import Any, Optional, Union, cast
 
@@ -213,7 +214,7 @@ def _(holder: describe.RecursionHolder, doc: Optional[str] = None, *, config: Co
 @to_json_schema.register
 def _(arg: describe.LiteralType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return Schema(
-        enum=list(arg.args),
+        enum=[arg.value if isinstance(arg, Enum) else arg for arg in arg.args],
         description=doc,
         config=config,
     )
