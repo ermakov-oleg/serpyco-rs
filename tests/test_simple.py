@@ -1,3 +1,5 @@
+from enum import Enum
+
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -289,25 +291,33 @@ def test_load_frozen_attrs():
 
 
 def test_load_literal():
+    class FooEnum(Enum):
+        three = '3'
+
     @dataclass
     class Foo:
-        bar: Literal[1, '2']
+        bar: Literal[1, '2', FooEnum.three]
 
     serializer = Serializer(Foo)
 
     assert serializer.load({'bar': 1}) == Foo(bar=1)
     assert serializer.load({'bar': '2'}) == Foo(bar='2')
+    assert serializer.load({'bar': '3'}) == Foo(bar=FooEnum.three)
 
 
 def test_dump_literal():
+    class FooEnum(Enum):
+        three = '3'
+
     @dataclass
     class Foo:
-        bar: Literal[1, '2']
+        bar: Literal[1, '2', FooEnum.three]
 
     serializer = Serializer(Foo)
 
     assert serializer.dump(Foo(bar=1)) == {'bar': 1}
     assert serializer.dump(Foo(bar='2')) == {'bar': '2'}
+    assert serializer.dump(Foo(bar=FooEnum.three)) == {'bar': '3'}
 
 
 def test_load_new_type():

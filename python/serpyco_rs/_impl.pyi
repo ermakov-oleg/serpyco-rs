@@ -215,9 +215,9 @@ class DiscriminatedUnionType(BaseType):
     ): ...
 
 class LiteralType(BaseType):
-    args: list[str | int]
+    args: list[str | int | Enum]
 
-    def __init__(self, args: list[str | int], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(self, args: list[str | int | Enum], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
 class RecursionHolder(BaseType):
     name: str

@@ -251,10 +251,13 @@ def test_to_json_schema__recursive_type():
 
 
 def test_to_json_schema__literal():
-    serializer = Serializer(Literal['foo'])
+    class BarEnum(Enum):
+        bar = 'bar'
+
+    serializer = Serializer(Literal['foo', 1, BarEnum.bar])
     assert serializer.get_json_schema() == {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
-        'enum': ['foo'],
+        'enum': ['foo', 1, 'bar'],
     }
 
 
@@ -269,9 +272,17 @@ def test_to_json_schema__tagged_union():
         val: str
         type: Literal['bar'] = 'bar'
 
+    class BuzEnum(Enum):
+        buz = 'buz'
+
+    @dataclass
+    class Baz:
+        val: float
+        type: Literal[BuzEnum.buz] = BuzEnum.buz
+
     @dataclass
     class Base:
-        field: Annotated[Union[Foo, Bar], Discriminator('type')]
+        field: Annotated[Union[Foo, Bar, Baz], Discriminator('type')]
 
     serializer = Serializer(Base)
     assert serializer.get_json_schema() == {
@@ -290,6 +301,7 @@ def test_to_json_schema__tagged_union():
                             'discriminator': {
                                 'mapping': {
                                     'bar': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Bar',
+                                    'buz': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Baz',
                                     'foo': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Foo',
                                 },
                                 'propertyName': 'type',
@@ -301,10 +313,18 @@ def test_to_json_schema__tagged_union():
                                 {
                                     '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Bar'
                                 },
+                                {
+                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Baz'
+                                },
                             ],
                         }
                     },
                     'required': ['field'],
+                    'type': 'object',
+                },
+                'tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Baz': {
+                    'properties': {'type': {'enum': ['buz']}, 'val': {'type': 'number'}},
+                    'required': ['val', 'type'],
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Foo': {
