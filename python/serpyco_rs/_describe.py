@@ -508,7 +508,7 @@ def _evaluate_forwardref(t: type[_T], meta: Meta) -> type[_T]:
     if not isinstance(t, ForwardRef):
         return t
 
-    return t._evaluate(meta.globals, {}, set())
+    return t._evaluate(meta.globals, {}, recursive_guard=set())
 
 
 def _get_discriminator_value(t: Any, name: str) -> str:
