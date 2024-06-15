@@ -15,11 +15,17 @@ pub enum Type<'a, Base = Bound<'a, BaseType>> {
     Float(Bound<'a, FloatType>, Base),
     Decimal(Bound<'a, DecimalType>, Base),
     String(Bound<'a, StringType>, Base),
+    #[allow(dead_code)]
     Boolean(Bound<'a, BooleanType>, Base),
+    #[allow(dead_code)]
     Uuid(Bound<'a, UUIDType>, Base),
+    #[allow(dead_code)]
     Bytes(Bound<'a, BytesType>, Base),
+    #[allow(dead_code)]
     Time(Bound<'a, TimeType>, Base),
+    #[allow(dead_code)]
     DateTime(Bound<'a, DateTimeType>, Base),
+    #[allow(dead_code)]
     Date(Bound<'a, DateType>, Base),
     Entity(Bound<'a, EntityType>, Base, usize),
     TypedDict(Bound<'a, TypedDictType>, Base, usize),
@@ -31,8 +37,10 @@ pub enum Type<'a, Base = Bound<'a, BaseType>> {
     DiscriminatedUnion(Bound<'a, DiscriminatedUnionType>, Base),
     Union(Bound<'a, UnionType>, Base),
     Literal(Bound<'a, LiteralType>, Base),
+    #[allow(dead_code)]
     Any(Bound<'a, AnyType>, Base),
     RecursionHolder(Bound<'a, RecursionHolder>, Base),
+    #[allow(dead_code)]
     Custom(Bound<'a, CustomType>, Base),
 }
 
