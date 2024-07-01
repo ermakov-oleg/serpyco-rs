@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.21.2", features = ["extension-module"] }
 pyo3-ffi = "0.21.2"
 cfg-if = "*"
-speedate = "0.14.0"
+speedate = "0.14.3"
 
 dyn-clone = "1.0"
 atomic_refcell = "0.1.13"
