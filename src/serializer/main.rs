@@ -190,8 +190,8 @@ pub fn get_encoder(
             base_type,
             Box::new(EnumEncoder {
                 enum_items: type_info.get().items_repr.clone(),
-                load_map: type_info.get().load_map.clone(),
-                dump_map: type_info.get().dump_map.clone(),
+                load_map: type_info.get().load_map.clone_ref(py),
+                dump_map: type_info.get().dump_map.clone_ref(py),
             }),
         )?,
         Type::Optional(type_info, base_type) => {
@@ -360,12 +360,12 @@ pub fn get_encoder(
             base_type,
             Box::new(EnumEncoder {
                 enum_items: type_info.get().items_repr.clone(),
-                load_map: type_info.get().load_map.clone(),
-                dump_map: type_info.get().dump_map.clone(),
+                load_map: type_info.get().load_map.clone_ref(py),
+                dump_map: type_info.get().dump_map.clone_ref(py),
             }),
         )?,
         Type::Custom(_, base_type) => {
-            if let Some(custom_encoder_py) = base_type.get().custom_encoder.clone() {
+            if let Some(custom_encoder_py) = &base_type.get().custom_encoder {
                 let custom_encoder = custom_encoder_py.extract::<types::CustomEncoder>(py)?;
 
                 if custom_encoder.serialize.is_none() || custom_encoder.deserialize.is_none() {
@@ -396,7 +396,7 @@ fn wrap_with_custom_encoder(
     base_type: Bound<'_, BaseType>,
     original_encoder: Box<TEncoder>,
 ) -> PyResult<Box<TEncoder>> {
-    if let Some(custom_encoder_py) = base_type.get().custom_encoder.clone() {
+    if let Some(custom_encoder_py) = &base_type.get().custom_encoder {
         let custom_encoder = custom_encoder_py.extract::<types::CustomEncoder>(py)?;
 
         if custom_encoder.serialize.is_none() && custom_encoder.deserialize.is_none() {

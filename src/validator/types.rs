@@ -21,6 +21,7 @@ pub struct BaseType {
 #[pymethods]
 impl BaseType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> Self {
         BaseType {
             custom_encoder: custom_encoder.map(|x| x.clone().unbind()),
@@ -83,6 +84,7 @@ pub struct IntegerType {
 #[pymethods]
 impl IntegerType {
     #[new]
+    #[pyo3(signature = (min=None, max=None, custom_encoder=None))]
     fn new(
         min: Option<i64>,
         max: Option<i64>,
@@ -114,6 +116,7 @@ pub struct FloatType {
 #[pymethods]
 impl FloatType {
     #[new]
+    #[pyo3(signature = (min=None, max=None, custom_encoder=None))]
     fn new(
         min: Option<f64>,
         max: Option<f64>,
@@ -145,6 +148,7 @@ pub struct DecimalType {
 #[pymethods]
 impl DecimalType {
     #[new]
+    #[pyo3(signature = (min=None, max=None, custom_encoder=None))]
     fn new(
         min: Option<f64>,
         max: Option<f64>,
@@ -176,6 +180,7 @@ pub struct StringType {
 #[pymethods]
 impl StringType {
     #[new]
+    #[pyo3(signature = (min_length=None, max_length=None, custom_encoder=None))]
     fn new(
         min_length: Option<usize>,
         max_length: Option<usize>,
@@ -213,6 +218,7 @@ pub struct BooleanType {}
 #[pymethods]
 impl BooleanType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (BooleanType {}, BaseType::new(custom_encoder))
     }
@@ -235,6 +241,7 @@ pub struct UUIDType {}
 #[pymethods]
 impl UUIDType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (UUIDType {}, BaseType::new(custom_encoder))
     }
@@ -257,6 +264,7 @@ pub struct TimeType {}
 #[pymethods]
 impl TimeType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (TimeType {}, BaseType::new(custom_encoder))
     }
@@ -279,6 +287,7 @@ pub struct DateTimeType {}
 #[pymethods]
 impl DateTimeType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (DateTimeType {}, BaseType::new(custom_encoder))
     }
@@ -301,6 +310,7 @@ pub struct DateType {}
 #[pymethods]
 impl DateType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (DateType {}, BaseType::new(custom_encoder))
     }
@@ -836,6 +846,7 @@ pub struct BytesType {}
 #[pymethods]
 impl BytesType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (BytesType {}, BaseType::new(custom_encoder))
     }
@@ -858,6 +869,7 @@ pub struct AnyType {}
 #[pymethods]
 impl AnyType {
     #[new]
+    #[pyo3(signature = (custom_encoder=None))]
     fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
         (AnyType {}, BaseType::new(custom_encoder))
     }
