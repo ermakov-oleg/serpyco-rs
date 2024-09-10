@@ -22,8 +22,9 @@ use crate::python::{
 };
 use crate::validator::types::{DecimalType, FloatType, IntegerType, StringType};
 use crate::validator::validators::{
-    check_bounds, check_length, check_sequence_size, invalid_enum_item, invalid_type,
-    invalid_type_dump, missing_required_property, no_encoder_for_discriminator, str_as_bool,
+    check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
+    invalid_type, invalid_type_dump, missing_required_property, no_encoder_for_discriminator,
+    str_as_bool,
 };
 use crate::validator::{map_py_err_to_schema_validation_error, Context, InstancePath};
 
@@ -345,6 +346,8 @@ impl ContainerEncoder for DictionaryEncoder {
 #[derive(Debug, Clone)]
 pub struct ArrayEncoder {
     pub(crate) encoder: Box<TEncoder>,
+    pub(crate) min_length: Option<usize>,
+    pub(crate) max_length: Option<usize>,
 }
 
 impl Encoder for ArrayEncoder {
@@ -375,6 +378,13 @@ impl Encoder for ArrayEncoder {
     ) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.downcast::<PyList>() {
             let size = val.len();
+            check_sequence_bounds(
+                val,
+                size,
+                self.min_length,
+                self.max_length,
+                Some(instance_path),
+            )?;
             let result = create_py_list(value.py(), size);
 
             for index in 0..size {

@@ -92,6 +92,7 @@ class TypedDictTotalFalse(TypedDict, total=False):
         (TypedDictTotalTrue, {'foo': 1, 'bar': '1'}),
         (TypedDictTotalFalse, {'bar': '1'}),
         (TypedDictTotalFalse, {'foo': 1, 'bar': '1'}),
+        (Annotated[list[int], MinLength(1), MaxLength(3)], [1, 2]),
     ),
 )
 def test_validate(cls, value):
@@ -214,6 +215,8 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
         ),
         (TypedDictTotalTrue, {}, _mk_e(m='"foo" is a required property')),
         (TypedDictTotalFalse, {}, _mk_e(m='"bar" is a required property')),
+        (Annotated[list[int], MinLength(1), MaxLength(3)], [], _mk_e(m='[] has less than 1 items')),
+        (Annotated[list[int], MinLength(1), MaxLength(3)], [1, 2, 3, 4], _mk_e(m='[1, 2, 3, 4] has more than 3 items')),
     ),
 )
 def test_validate__validation_error(cls, value, check):

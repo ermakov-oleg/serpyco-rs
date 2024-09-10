@@ -217,9 +217,18 @@ pub fn get_encoder(
             )?
         }
         Type::Array(type_info, base_type) => {
-            let item_type = get_object_type(type_info.get().item_type.bind(py))?;
+            let type_info = type_info.get();
+            let item_type = get_object_type(type_info.item_type.bind(py))?;
             let encoder = get_encoder(py, item_type, encoder_state, naive_datetime_to_utc)?;
-            wrap_with_custom_encoder(py, base_type, Box::new(ArrayEncoder { encoder }))?
+            wrap_with_custom_encoder(
+                py,
+                base_type,
+                Box::new(ArrayEncoder {
+                    encoder,
+                    min_length: type_info.min_length,
+                    max_length: type_info.max_length,
+                }),
+            )?
         }
         Type::Tuple(type_info, base_type) => {
             let mut encoders = vec![];

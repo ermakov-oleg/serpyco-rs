@@ -203,12 +203,16 @@ def describe_type(
             )
 
         if t in {Sequence, list}:
+            min_length_meta = _find_metadata(metadata, MinLength)
+            max_length_meta = _find_metadata(metadata, MaxLength)
             return ArrayType(
                 item_type=(
                     describe_type(annotation_wrapper(args[0]), meta, custom_type_resolver)
                     if args
                     else AnyType(custom_encoder=None)
                 ),
+                min_length=min_length_meta.value if min_length_meta else None,
+                max_length=max_length_meta.value if max_length_meta else None,
                 custom_encoder=custom_encoder,
             )
 
