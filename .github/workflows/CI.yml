@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     tags:
-      - '**'
+      - "**"
     branches:
       - main
       - master
@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
-          cache: 'pip'
+          cache: "pip"
 
       - uses: actions/cache@v4
         id: cache-uv
@@ -56,11 +56,11 @@ jobs:
           manylinux: auto
           target: ${{ matrix.target }}
           rust-toolchain: stable
-          sccache: 'true'
+          sccache: "true"
           args: >
-            --release 
-            --sdist 
-            --interpreter ${{ matrix.python-version }} 
+            --release
+            --sdist
+            --interpreter ${{ matrix.python-version }}
             --out pgo-wheel
         env:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/target/profdata"
@@ -79,8 +79,8 @@ jobs:
           pytest bench -k "not mashumaro and not marshmallow and not pydantic"
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
-#      - name: Setup upterm session
-#        uses: lhotari/action-upterm@v1
+      #      - name: Setup upterm session
+      #        uses: lhotari/action-upterm@v1
 
       - name: Merge pgo data
         run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/target/profdata
@@ -92,19 +92,19 @@ jobs:
           rust-toolchain: stable
           command: build
           target: ${{ matrix.target }}
-          sccache: 'true'
+          sccache: "true"
           args: >
-            --release 
-            --sdist 
-            --interpreter ${{ matrix.python-version }} 
+            --release
+            --sdist
+            --interpreter ${{ matrix.python-version }}
             --out dist
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels_${{ matrix.os }}_${{ matrix.python-version }}
           path: dist
 
   linux-cross:
@@ -134,19 +134,19 @@ jobs:
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
           args: --release --sdist -o dist --interpreter 3.9 3.10 3.11 3.12 3.13
-          sccache: 'true'
+          sccache: "true"
       - name: Upload wheels
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: wheels_${{ matrix.platform.arch }}
           path: dist
 
   test:
-    needs: [ build ]
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     name: Test on ${{ matrix.os}} ${{ matrix.python-version }}
@@ -158,9 +158,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels_*
+          merge-multiple: true
           path: wheels
       - name: install dependencies
         run: |
@@ -181,11 +182,11 @@ jobs:
           CI: true
 
   benchmark:
-    needs: [ build ]
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
+        os: [ubuntu-latest, macos-latest]
     name: Benchmark on ${{ matrix.os}}
     runs-on: ${{ matrix.os }}
     steps:
@@ -194,9 +195,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels_*
+          merge-multiple: true
           path: wheels
       - name: install dependencies
         run: |
@@ -231,7 +233,7 @@ jobs:
         run: nox -s test_rc_leaks --no-venv --no-install
 
   benchmark-codespeed:
-    needs: [ build ]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -244,12 +246,13 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.12
-          cache: 'pip'
+          cache: "pip"
           cache-dependency-path: |
             requirements/*.txt
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels_*
+          merge-multiple: true
           path: wheels
       - name: install dependencies
         run: |
@@ -294,15 +297,18 @@ jobs:
     name: release
     runs-on: ubuntu-latest
     if: startsWith(github.event.ref, 'refs/tags')
-    needs: [ build, linux-cross, test ]
+    needs: [build, linux-cross, test]
     steps:
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          pattern: wheels_*
+          merge-multiple: true
+          path: dist
+
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         with:
           command: upload
-          args: --skip-existing *
+          args: --skip-existing dist/*
