@@ -180,7 +180,13 @@ def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config)
 
 @to_json_schema.register
 def _(arg: describe.ArrayType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return ArrayType(items=to_json_schema(arg.item_type, config=config), description=doc, config=config)
+    return ArrayType(
+        items=to_json_schema(arg.item_type, config=config),
+        minItems=arg.min_length,
+        maxItems=arg.max_length,
+        description=doc,
+        config=config,
+    )
 
 
 @to_json_schema.register

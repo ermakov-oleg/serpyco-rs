@@ -1,7 +1,7 @@
 use crate::validator::{raise_error, InstancePath};
 
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::{PySequence, PyString};
+use pyo3::types::{PyList, PySequence, PyString};
 use pyo3::{Bound, PyAny, PyErr, PyResult};
 use std::cmp::Ordering;
 use std::fmt::Display;
@@ -141,6 +141,37 @@ pub fn check_sequence_size(
             )
         }
     }
+}
+
+pub fn check_sequence_bounds(
+    val: &Bound<'_, PyList>,
+    seq_len: usize,
+    min: Option<usize>,
+    max: Option<usize>,
+    instance_path: Option<&InstancePath>,
+) -> PyResult<()> {
+    if min.is_none() && max.is_none() {
+        return Ok(());
+    }
+    if let Some(min) = min {
+        if seq_len < min {
+            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
+            raise_error(
+                format!(r#"{} has less than {} items"#, val, min),
+                &instance_path,
+            )?;
+        }
+    }
+    if let Some(max) = max {
+        if seq_len > max {
+            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
+            raise_error(
+                format!(r#"{} has more than {} items"#, val, max),
+                &instance_path,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 pub fn no_encoder_for_discriminator<K, D>(

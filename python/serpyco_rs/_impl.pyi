@@ -150,8 +150,16 @@ class TypedDictType(BaseType):
 
 class ArrayType(BaseType):
     item_type: BaseType
+    min_length: int | None
+    max_length: int | None
 
-    def __init__(self, item_type: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(
+        self,
+        item_type: BaseType,
+        min_length: int | None = None,
+        max_length: int | None = None,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+    ): ...
 
 class EnumType(BaseType):
     cls: type[Enum | IntEnum]

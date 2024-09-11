@@ -459,6 +459,17 @@ def test_enum_multiply_types():
     }
 
 
+def test_array_length():
+    serializer = Serializer(Annotated[list[int], MinLength(1), MaxLength(10)])
+    assert serializer.get_json_schema() == {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'type': 'array',
+        'items': {'type': 'integer'},
+        'minItems': 1,
+        'maxItems': 10,
+    }
+
+
 def test_one_dataclass_with_different_annotations__should_generate_different_schemas():
     @dataclass
     class Foo:

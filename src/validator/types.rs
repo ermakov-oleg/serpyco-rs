@@ -608,19 +608,27 @@ impl EntityField {
 pub struct ArrayType {
     #[pyo3(get)]
     pub item_type: Py<PyAny>,
+    #[pyo3(get)]
+    pub min_length: Option<usize>,
+    #[pyo3(get)]
+    pub max_length: Option<usize>,
 }
 
 #[pymethods]
 impl ArrayType {
     #[new]
-    #[pyo3(signature = (item_type, custom_encoder=None))]
+    #[pyo3(signature = (item_type, min_length=None, max_length=None, custom_encoder=None))]
     fn new(
         item_type: &Bound<'_, PyAny>,
+        min_length: Option<usize>,
+        max_length: Option<usize>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> (Self, BaseType) {
         (
             ArrayType {
                 item_type: item_type.clone().unbind(),
+                min_length,
+                max_length,
             },
             BaseType::new(custom_encoder),
         )
@@ -629,11 +637,19 @@ impl ArrayType {
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
         let base = self_.as_ref();
         let base_other = other.as_ref();
-        Ok(base.__eq__(base_other, py)? && py_eq!(self_.item_type, other.item_type, py))
+        Ok(base.__eq__(base_other, py)?
+            && py_eq!(self_.item_type, other.item_type, py)
+            && self_.min_length == other.min_length
+            && self_.max_length == other.max_length)
     }
 
     fn __repr__(&self) -> String {
-        format!("<ArrayType: item_type={:?}>", self.item_type.to_string(),)
+        format!(
+            "<ArrayType: item_type={:?}, min_length={:?}, max_length={:?}>",
+            self.item_type.to_string(),
+            self.min_length,
+            self.max_length
+        )
     }
 }
 
