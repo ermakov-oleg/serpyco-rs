@@ -310,7 +310,7 @@ def describe_type(
 @dataclasses.dataclass
 class _Field(Generic[_T]):
     name: str
-    type: type[_T] | str | Any
+    type: Union[type[_T], str, Any]
     default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
     default_factory: Union[DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
 
@@ -587,5 +587,5 @@ def _is_new_type(t: Any) -> TypeGuard[NewType]:
     return hasattr(t, '__supertype__')
 
 
-def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[str | int | Enum]]:
+def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[Union[str, int, Enum]]]:
     return all(isinstance(arg, (str, int, Enum)) for arg in args)
