@@ -20,7 +20,7 @@ from typing import (
 )
 from uuid import UUID
 
-from typing_extensions import NotRequired, Required, assert_never, get_args, is_typeddict
+from typing_extensions import NewType, NotRequired, Required, TypeGuard, assert_never, get_args, is_typeddict
 
 from ._custom_types import CustomType as CustomTypeMeta
 from ._impl import (
@@ -259,7 +259,7 @@ def describe_type(
             return entity_type
 
     if _is_literal_type(t):
-        if args and all(isinstance(arg, (str, int, Enum)) for arg in args):
+        if args and _is_supported_literal_args(args):
             return LiteralType(args=list(args), custom_encoder=custom_encoder)
         raise RuntimeError('Supported only Literal[str | int, ...]')
 
@@ -310,7 +310,7 @@ def describe_type(
 @dataclasses.dataclass
 class _Field(Generic[_T]):
     name: str
-    type: type[_T]
+    type: Union[type[_T], str, Any]
     default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
     default_factory: Union[DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
 
@@ -583,5 +583,9 @@ def _is_frozen_dataclass(cls: Any, field: EntityField) -> bool:
         return False
 
 
-def _is_new_type(t: Any) -> bool:
+def _is_new_type(t: Any) -> TypeGuard[NewType]:
     return hasattr(t, '__supertype__')
+
+
+def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[Union[str, int, Enum]]]:
+    return all(isinstance(arg, (str, int, Enum)) for arg in args)

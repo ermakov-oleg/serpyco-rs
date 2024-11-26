@@ -10,7 +10,7 @@ module-name = "serpyco_rs._serpyco_rs"
 name = "serpyco-rs"
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
 requires-python = ">=3.9"
-license = {file = "LICENSE"}
+license = { file = "LICENSE" }
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
@@ -27,11 +27,4 @@ classifiers = [
     "Programming Language :: Rust",
 ]
 
-dependencies = [
-    "attributes-doc",
-    "typing-extensions",
-]
-
-[tool.black]
-line-length = 120
-skip-string-normalization = true
+dependencies = ["attributes-doc", "typing-extensions"]

@@ -17,7 +17,7 @@ class _MultiMapping(Protocol[_T, _D]):
     """Protocol for a multi-mapping type."""
 
     @abc.abstractmethod
-    def __getitem__(self, __key: str) -> _T: ...
+    def __getitem__(self, /, __key: str) -> _T: ...
 
     @overload
     @abc.abstractmethod

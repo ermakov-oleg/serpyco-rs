@@ -40,14 +40,11 @@ fn _serpyco_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<types::CustomType>()?;
 
     // Errors
-    m.add(
-        "ValidationError",
-        py.get_type_bound::<errors::ValidationError>(),
-    )?;
+    m.add("ValidationError", py.get_type::<errors::ValidationError>())?;
     m.add(
         "SchemaValidationError",
-        py.get_type_bound::<errors::SchemaValidationError>(),
+        py.get_type::<errors::SchemaValidationError>(),
     )?;
-    m.add("ErrorItem", py.get_type_bound::<errors::ErrorItem>())?;
+    m.add("ErrorItem", py.get_type::<errors::ErrorItem>())?;
     Ok(())
 }

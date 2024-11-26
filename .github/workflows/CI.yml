@@ -260,7 +260,7 @@ jobs:
           python -m pip install --upgrade pip nox uv==0.1.18
           nox -s bench_codespeed --no-venv --install-only
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v2
+        uses: CodSpeedHQ/action@v3
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           run: nox -s bench_codespeed --no-venv --no-install

@@ -51,9 +51,9 @@ impl SchemaValidationError {
         for error in self_.errors.bind(self_.py()).iter() {
             let message = match error.downcast::<ErrorItem>() {
                 Ok(cell) => cell.borrow().__str__(),
-                Err(e) => format!("Error: {}", e),
+                Err(e) => format!("Error: {e}"),
             };
-            result.push_str(&format!("- {}\n", message));
+            result.push_str(&format!("- {message}\n"));
         }
         result
     }
@@ -68,9 +68,9 @@ impl SchemaValidationError {
         for error in self_.errors.bind(self_.py()).iter() {
             let message = match error.downcast::<ErrorItem>() {
                 Ok(cell) => cell.borrow().__repr__(),
-                Err(e) => format!("Error: {}", e),
+                Err(e) => format!("Error: {e}"),
             };
-            result.push_str(&format!("        {},\n", message));
+            result.push_str(&format!("        {message},\n"));
         }
         result.push_str("    ]\n)");
         result

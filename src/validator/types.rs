@@ -1,9 +1,9 @@
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::intern;
+use pyo3::{intern, BoundObject};
 
 use crate::python::fmt_py;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyLong, PyNone};
+use pyo3::types::{PyDict, PyInt, PyList, PyNone};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -430,7 +430,7 @@ impl EntityType {
                 fields,
                 omit_none,
                 is_frozen,
-                doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
+                doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
             },
             BaseType::new(custom_encoder),
         )
@@ -500,7 +500,7 @@ impl TypedDictType {
                 name: name.clone().unbind(),
                 fields,
                 omit_none,
-                doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
+                doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
             },
             BaseType::new(custom_encoder),
         )
@@ -581,7 +581,7 @@ impl EntityField {
             field_type: field_type.clone().clone().unbind(),
             required,
             is_discriminator_field,
-            doc: doc.map_or(PyNone::get_bound(py).into_py(py), |x| x.clone().unbind()),
+            doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
             default,
             default_factory,
         }
@@ -676,8 +676,8 @@ impl EnumType {
         items: &Bound<'_, PyList>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
-        let load_map = PyDict::new_bound(cls.py());
-        let dump_map = PyDict::new_bound(cls.py());
+        let load_map = PyDict::new(cls.py());
+        let dump_map = PyDict::new(cls.py());
         let mut items_repr = Vec::with_capacity(items.len());
 
         for py_value in items.iter() {
@@ -690,7 +690,7 @@ impl EnumType {
 
             // For support fast load with try_cast_from_string option enabled
             // we need to add additional mapping for string values
-            if let Ok(value) = value.downcast::<PyLong>() {
+            if let Ok(value) = value.downcast::<PyInt>() {
                 let str_value = value.str().unwrap();
                 load_map.set_item((&str_value, false), &py_value)?;
             }
@@ -1011,8 +1011,8 @@ impl LiteralType {
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
         let len = args.len();
-        let load_map = PyDict::new_bound(args.py());
-        let dump_map = PyDict::new_bound(args.py());
+        let load_map = PyDict::new(args.py());
+        let dump_map = PyDict::new(args.py());
         let mut items_repr = Vec::with_capacity(len);
 
         for py_value in args.iter() {
@@ -1028,7 +1028,7 @@ impl LiteralType {
 
             // For support fast load with try_cast_from_string option enabled
             // we need to add additional mapping for string values
-            if let Ok(value) = value.downcast::<PyLong>() {
+            if let Ok(value) = value.downcast::<PyInt>() {
                 let str_value = value.str().unwrap();
                 load_map.set_item((&str_value, false), &py_value)?;
             }

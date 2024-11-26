@@ -10,8 +10,8 @@ pub fn raise_error<T: Into<String>>(error: T, instance_path: &InstancePath) -> P
     Python::with_gil(|py| {
         let errors: Vec<ErrorItem> = vec![into_err_item(error, instance_path)];
 
-        let pyerror_type = PyType::new_bound::<SchemaValidationError>(py);
-        Err(PyErr::from_type_bound(
+        let pyerror_type = PyType::new::<SchemaValidationError>(py);
+        Err(PyErr::from_type(
             pyerror_type,
             ("Schema validation failed".to_string(), errors),
         ))
