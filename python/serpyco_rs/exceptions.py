@@ -1,4 +1,4 @@
 from ._impl import ErrorItem, SchemaValidationError, ValidationError
 
 
-__all__ = ['ValidationError', 'SchemaValidationError', 'ErrorItem']
+__all__ = ['ErrorItem', 'SchemaValidationError', 'ValidationError']

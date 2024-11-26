@@ -23,7 +23,7 @@ pub(crate) fn parse_datetime<'py>(
 ) -> PyResult<Bound<'py, PyDateTime>> {
     let datetime = DateTime::parse_bytes_rfc3339_with_config(value.as_ref(), &TIME_CONFIG)
         .map_err(InnerParseError::from)?;
-    PyDateTime::new_bound(
+    PyDateTime::new(
         py,
         datetime.date.year.into(),
         datetime.date.month,
@@ -40,7 +40,7 @@ pub(crate) fn parse_datetime<'py>(
 pub(crate) fn parse_time<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyTime>> {
     let time = Time::parse_bytes_with_config(value.as_ref(), &TIME_CONFIG)
         .map_err(InnerParseError::from)?;
-    PyTime::new_bound(
+    PyTime::new(
         py,
         time.hour,
         time.minute,
@@ -53,14 +53,14 @@ pub(crate) fn parse_time<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'p
 #[inline]
 pub(crate) fn parse_date<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyDate>> {
     let date = Date::parse_str(value).map_err(InnerParseError::from)?;
-    PyDate::new_bound(py, date.year.into(), date.month, date.day)
+    PyDate::new(py, date.year.into(), date.month, date.day)
 }
 
 #[inline]
 fn time_as_tzinfo<'py>(py: Python<'py>, time: &Time) -> PyResult<Option<Bound<'py, PyTzInfo>>> {
     match time.tz_offset {
         Some(offset) => {
-            let delta = PyDelta::new_bound(py, 0, offset, 0, true)?;
+            let delta = PyDelta::new(py, 0, offset, 0, true)?;
 
             let tzinfo =
                 unsafe { Bound::from_owned_ptr(py, PyTimeZone_FromOffset(delta.as_ptr())) };
@@ -113,9 +113,9 @@ pub(crate) fn dump_time(value: &Bound<PyTime>) -> PyResult<String> {
     Ok(time.to_string())
 }
 
-pub(crate) fn dump_date(value: &Bound<PyDate>) -> PyResult<String> {
+pub(crate) fn dump_date(value: &Bound<PyDate>) -> String {
     let date = to_date(value);
-    Ok(date.to_string())
+    date.to_string()
 }
 
 fn to_date(value: &dyn PyDateAccess) -> Date {
@@ -140,7 +140,7 @@ fn to_tz_offset(
     value: &dyn PyTzInfoAccess,
     datetime: Option<&Bound<PyDateTime>>,
 ) -> PyResult<Option<i32>> {
-    let tzinfo = value.get_tzinfo_bound();
+    let tzinfo = value.get_tzinfo();
     if tzinfo.is_none() {
         return Ok(None);
     }

@@ -84,7 +84,7 @@ impl Serializer {
 
         let new_data = match fields {
             QueryFields::Object(fields) => {
-                let new_data = PyDict::new_bound(py);
+                let new_data = PyDict::new(py);
                 for field in fields {
                     let field_value = if field.is_sequence {
                         data.call_method1(intern!(py, "getall"), (field.name,))
@@ -101,9 +101,8 @@ impl Serializer {
                 new_data.into_any()
             }
             QueryFields::Dict(true) => {
-                let new_data = PyDict::new_bound(py);
-                for key in data.keys()?.iter()? {
-                    let key = key?;
+                let new_data = PyDict::new(py);
+                for key in data.keys()?.iter() {
                     let field_value = data
                         .call_method1(intern!(py, "getall"), (&key,))
                         .expect("Mapping changing during iteration");
@@ -112,7 +111,7 @@ impl Serializer {
                 new_data.into_any()
             }
             QueryFields::Dict(false) => {
-                let new_data = PyDict::from_sequence_bound(&data.items()?.into_any())?;
+                let new_data = PyDict::from_sequence(&data.items()?.into_any())?;
                 new_data.into_any()
             }
         };
@@ -145,7 +144,7 @@ pub fn get_encoder(
         }
         Type::Decimal(type_info, base_type) => {
             let type_info = type_info.get().clone();
-            let decimal_module = PyModule::import_bound(py, "decimal")?;
+            let decimal_module = PyModule::import(py, "decimal")?;
             let decimal_cls = decimal_module.getattr("Decimal")?;
             let encoder = DecimalEncoder {
                 type_info,
@@ -158,7 +157,7 @@ pub fn get_encoder(
             wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
         }
         Type::Uuid(_, base_type) => {
-            let uuid = PyModule::import_bound(py, "uuid")?;
+            let uuid = PyModule::import(py, "uuid")?;
             let uuid_cls = uuid.getattr("UUID")?;
 
             let encoder = UUIDEncoder {
@@ -317,7 +316,7 @@ pub fn get_encoder(
             let fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
-            let builtins = PyModule::import_bound(py, intern!(py, "builtins"))?;
+            let builtins = PyModule::import(py, intern!(py, "builtins"))?;
             let object = builtins.getattr(intern!(py, "object"))?;
             let create_object = object.getattr(intern!(py, "__new__"))?;
             let object_set_attr = object.getattr("__setattr__")?;

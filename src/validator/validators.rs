@@ -243,8 +243,8 @@ macro_rules! invalid_enum_item {
 
 pub fn str_as_bool(str: &str) -> Option<bool> {
     match str.as_bytes() {
-        [b't'] | [b'T'] | b"true" | b"True" | b"TRUE" => Some(true),
-        [b'f'] | [b'F'] | b"false" | b"False" | b"FALSE" => Some(false),
+        [b't' | b'T'] | b"true" | b"True" | b"TRUE" => Some(true),
+        [b'f' | b'F'] | b"false" | b"False" | b"FALSE" => Some(false),
         _ => None,
     }
 }

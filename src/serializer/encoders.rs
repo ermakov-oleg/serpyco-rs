@@ -6,12 +6,12 @@ use std::sync::Arc;
 use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::*;
 use pyo3::types::{
-    PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyList, PyLong, PySequence, PyString,
+    PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PyString,
     PyTime,
 };
 use pyo3::{intern, Bound, Py, PyAny, PyResult};
+use pyo3::{prelude::*, IntoPyObjectExt};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
@@ -101,7 +101,7 @@ impl Encoder for IntEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyLong>() {
+        if let Ok(val) = value.downcast::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
@@ -109,7 +109,7 @@ impl Encoder for IntEncoder {
             if let Ok(val) = value.downcast::<PyString>() {
                 if let Ok(val) = val.to_str()?.parse::<i64>() {
                     check_bounds!(val, self.type_info, instance_path)?;
-                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                    return val.into_bound_py_any(value.py());
                 }
             }
         }
@@ -134,7 +134,7 @@ impl Encoder for FloatEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyLong>() {
+        if let Ok(val) = value.downcast::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
@@ -146,7 +146,7 @@ impl Encoder for FloatEncoder {
             if let Ok(val) = value.downcast::<PyString>() {
                 if let Ok(val) = val.to_str()?.parse::<f64>() {
                     check_bounds!(val, self.type_info, instance_path)?;
-                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                    return val.into_bound_py_any(value.py());
                 }
             }
         }
@@ -176,7 +176,7 @@ impl Encoder for DecimalEncoder {
         let valid = if let Ok(val) = value.downcast::<PyFloat>() {
             check_bounds!(val.value(), self.type_info, instance_path)?;
             true
-        } else if let Ok(val) = value.downcast::<PyLong>() {
+        } else if let Ok(val) = value.downcast::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             true
         } else if let Ok(val) = value.downcast::<PyString>() {
@@ -253,7 +253,7 @@ impl Encoder for BooleanEncoder {
         if ctx.try_cast_from_string {
             if let Ok(val) = value.downcast::<PyString>() {
                 if let Some(val) = str_as_bool(val.to_str()?) {
-                    return Ok(val.to_object(value.py()).into_bound(value.py()));
+                    return val.into_bound_py_any(value.py());
                 }
             }
         }
@@ -528,9 +528,8 @@ impl Encoder for TypedDictEncoder {
                             "data dictionary is missing required parameter {}",
                             &field.name
                         )));
-                    } else {
-                        continue;
                     }
+                    continue;
                 }
             };
             let dump_result = field.encoder.dump(&field_val)?;
@@ -561,9 +560,8 @@ impl Encoder for TypedDictEncoder {
                 _ => {
                     if field.required {
                         return Err(missing_required_property(&field.dict_key_rs, instance_path));
-                    } else {
-                        continue;
                     }
+                    continue;
                 }
             };
             let instance_path = instance_path.push(field.dict_key_rs.as_str());
@@ -877,7 +875,7 @@ impl Encoder for TimeEncoder {
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let py_time = value.downcast::<PyTime>()?;
         let result = dump_time(py_time)?;
-        Ok(result.into_py(value.py()).into_bound(value.py()))
+        result.into_bound_py_any(value.py())
     }
 
     #[inline]
@@ -906,7 +904,7 @@ impl Encoder for DateTimeEncoder {
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let py_datetime = value.downcast::<PyDateTime>()?;
         let result = dump_datetime(py_datetime, self.naive_datetime_to_utc)?;
-        Ok(result.into_py(value.py()).into_bound(value.py()))
+        result.into_bound_py_any(value.py())
     }
 
     #[inline]
@@ -932,8 +930,8 @@ impl Encoder for DateEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let py_date = value.downcast::<PyDate>()?;
-        let result = dump_date(py_date)?;
-        Ok(result.into_py(value.py()).into_bound(value.py()))
+        let result = dump_date(py_date);
+        result.into_bound_py_any(value.py())
     }
 
     #[inline]
