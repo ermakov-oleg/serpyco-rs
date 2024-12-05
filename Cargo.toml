@@ -10,7 +10,7 @@ name = "serpyco_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.23.2", features = ["extension-module", "py-clone"] }
+pyo3 = { version = "0.23.3", features = ["extension-module", "py-clone"] }
 pyo3-ffi = "0.23.2"
 cfg-if = "*"
 speedate = "0.15.0"
