@@ -17,6 +17,7 @@ speedate = "0.15.0"
 
 dyn-clone = "1.0"
 atomic_refcell = "0.1"
+nohash-hasher = "*"
 
 uuid = "1"
 

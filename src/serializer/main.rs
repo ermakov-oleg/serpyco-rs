@@ -10,7 +10,7 @@ use pyo3::{intern, PyAny, PyResult};
 use crate::python::{get_object_type, Type};
 use crate::serializer::encoders::{
     BooleanEncoder, BytesEncoder, CustomTypeEncoder, DiscriminatorKey, FloatEncoder, IntEncoder,
-    QueryFields, StringEncoder, TypedDictEncoder, UnionEncoder,
+    LiteralEncoder, QueryFields, StringEncoder, TypedDictEncoder, UnionEncoder,
 };
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
@@ -187,7 +187,7 @@ pub fn get_encoder(
         Type::Literal(type_info, base_type) => wrap_with_custom_encoder(
             py,
             base_type,
-            Box::new(EnumEncoder {
+            Box::new(LiteralEncoder {
                 enum_items: type_info.get().items_repr.clone(),
                 load_map: type_info.get().load_map.clone_ref(py),
                 dump_map: type_info.get().dump_map.clone_ref(py),
@@ -369,7 +369,7 @@ pub fn get_encoder(
             Box::new(EnumEncoder {
                 enum_items: type_info.get().items_repr.clone(),
                 load_map: type_info.get().load_map.clone_ref(py),
-                dump_map: type_info.get().dump_map.clone_ref(py),
+                dump_map: type_info.get().dump_map.clone(),
             }),
         )?,
         Type::Custom(_, base_type) => {
