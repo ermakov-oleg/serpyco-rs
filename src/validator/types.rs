@@ -1,7 +1,7 @@
-use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::{intern, BoundObject};
 
+use crate::fast_map::FastMap;
 use crate::python::fmt_py;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyList, PyNone};
@@ -664,7 +664,7 @@ pub struct EnumType {
     // Map from expected values hash to the actual value
     pub load_map: Py<PyDict>,
     // Map from value hash to the expected value
-    pub dump_map: IntMap<usize, Py<PyAny>>,
+    pub dump_map: FastMap<usize, Py<PyAny>>,
     pub items_repr: String,
 }
 
@@ -678,7 +678,7 @@ impl EnumType {
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
         let load_map = PyDict::new(cls.py());
-        let mut dump_map = IntMap::default();
+        let mut dump_map = FastMap::new(items.len());
         let mut items_repr = Vec::with_capacity(items.len());
 
         for py_value in items.iter() {

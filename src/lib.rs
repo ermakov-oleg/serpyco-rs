@@ -1,4 +1,5 @@
 mod errors;
+mod fast_map;
 mod python;
 mod serializer;
 mod validator;
