@@ -628,8 +628,14 @@ pub struct EnumEncoder {
 impl Encoder for EnumEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let dump_map = self.dump_map.bind(value.py());
+
         let id = value.as_ptr() as *const _ as usize;
-        if let Ok(Some(py_item)) = self.dump_map.bind(value.py()).get_item(id) {
+        if let Ok(Some(py_item)) = dump_map.get_item(id) {
+            return Ok(py_item);
+        }
+        // For literal enums, because strings may not be interned and we can't compare them by pointer
+        if let Ok(Some(py_item)) = dump_map.get_item(value) {
             return Ok(py_item);
         }
         invalid_enum_item!(&self.enum_items, value, &InstancePath::new())

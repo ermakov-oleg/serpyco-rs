@@ -45,7 +45,7 @@ impl<'a> InstancePath<'a> {
         }
     }
 
-    pub(crate) fn to_vec(&'a self) -> Vec<PathChunk> {
+    pub(crate) fn to_vec(&self) -> Vec<PathChunk> {
         // The path capacity should be the average depth so we avoid extra allocations
         let mut result = Vec::with_capacity(6);
         let mut current = self;
@@ -63,21 +63,21 @@ impl<'a> InstancePath<'a> {
     }
 }
 
-impl<'a> From<String> for PathChunk<'a> {
+impl From<String> for PathChunk<'_> {
     #[inline]
     fn from(value: String) -> Self {
         PathChunk::Property(value.into_boxed_str())
     }
 }
 
-impl<'a> From<&str> for PathChunk<'a> {
+impl From<&str> for PathChunk<'_> {
     #[inline]
     fn from(value: &str) -> Self {
         PathChunk::Property(value.into())
     }
 }
 
-impl<'a> From<usize> for PathChunk<'a> {
+impl From<usize> for PathChunk<'_> {
     #[inline]
     fn from(value: usize) -> Self {
         PathChunk::Index(value)
