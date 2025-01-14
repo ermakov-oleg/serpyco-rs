@@ -628,7 +628,8 @@ pub struct EnumEncoder {
 impl Encoder for EnumEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(Some(py_item)) = self.dump_map.bind(value.py()).get_item(value) {
+        let id = value.as_ptr() as *const _ as usize;
+        if let Ok(Some(py_item)) = self.dump_map.bind(value.py()).get_item(id) {
             return Ok(py_item);
         }
         invalid_enum_item!(&self.enum_items, value, &InstancePath::new())

@@ -684,7 +684,8 @@ impl EnumType {
             // Get enum value
             let value = py_value.getattr(intern!(py_value.py(), "value")).unwrap();
 
-            dump_map.set_item(&py_value, value.clone())?;
+            let py_value_id = py_value.as_ptr() as *const _ as usize;
+            dump_map.set_item(py_value_id, value.clone())?;
             load_map.set_item(&value, &py_value)?;
             items_repr.push(fmt_py(&value));
 
