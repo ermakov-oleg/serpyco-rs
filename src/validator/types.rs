@@ -1,3 +1,4 @@
+use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::{intern, BoundObject};
 
@@ -663,7 +664,7 @@ pub struct EnumType {
     // Map from expected values hash to the actual value
     pub load_map: Py<PyDict>,
     // Map from value hash to the expected value
-    pub dump_map: Py<PyDict>,
+    pub dump_map: IntMap<usize, Py<PyAny>>,
     pub items_repr: String,
 }
 
@@ -677,14 +678,15 @@ impl EnumType {
         custom_encoder: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<(Self, BaseType)> {
         let load_map = PyDict::new(cls.py());
-        let dump_map = PyDict::new(cls.py());
+        let mut dump_map = IntMap::default();
         let mut items_repr = Vec::with_capacity(items.len());
 
         for py_value in items.iter() {
             // Get enum value
             let value = py_value.getattr(intern!(py_value.py(), "value")).unwrap();
 
-            dump_map.set_item(&py_value, value.clone())?;
+            let py_value_id = py_value.as_ptr() as *const _ as usize;
+            dump_map.insert(py_value_id, value.clone().unbind());
             load_map.set_item(&value, &py_value)?;
             items_repr.push(fmt_py(&value));
 
@@ -702,7 +704,7 @@ impl EnumType {
                 items: items.clone().unbind(),
                 items_repr: format!("[{}]", items_repr.join(", ")),
                 load_map: load_map.unbind(),
-                dump_map: dump_map.unbind(),
+                dump_map,
             },
             BaseType::new(custom_encoder),
         ))
@@ -1085,7 +1087,7 @@ impl RecursionHolder {
         )
     }
 
-    pub fn get_inner_type<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'_, pyo3::PyAny>> {
+    pub fn get_inner_type<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, pyo3::PyAny>> {
         match self.meta.bind(py).get_item(&self.state_key) {
             Ok(type_) => Ok(type_),
             Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!(

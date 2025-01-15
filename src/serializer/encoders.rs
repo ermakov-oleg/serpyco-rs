@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
+use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{
     PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PyString,
@@ -622,10 +623,47 @@ impl Encoder for UUIDEncoder {
 pub struct EnumEncoder {
     pub(crate) enum_items: String,
     pub(crate) load_map: Py<PyDict>,
-    pub(crate) dump_map: Py<PyDict>,
+    pub(crate) dump_map: IntMap<usize, Py<PyAny>>,
 }
 
 impl Encoder for EnumEncoder {
+    #[inline]
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        let id = value.as_ptr() as *const _ as usize;
+        if let Some(py_item) = self.dump_map.get(&id) {
+            return Ok(py_item.bind(value.py()).clone());
+        }
+        invalid_enum_item!(&self.enum_items, value, &InstancePath::new())
+    }
+
+    #[inline]
+    fn load<'a>(
+        &self,
+        value: &Bound<'a, PyAny>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        match self.load_map.bind(value.py()).get_item(value) {
+            Ok(Some(val)) => Ok(val),
+            _ if ctx.try_cast_from_string => {
+                if let Ok(Some(val)) = self.load_map.bind(value.py()).get_item((&value, false)) {
+                    return Ok(val);
+                }
+                invalid_enum_item!(&self.enum_items, value, instance_path)
+            }
+            _ => invalid_enum_item!(&self.enum_items, value, instance_path),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LiteralEncoder {
+    pub(crate) enum_items: String,
+    pub(crate) load_map: Py<PyDict>,
+    pub(crate) dump_map: Py<PyDict>,
+}
+
+impl Encoder for LiteralEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         if let Ok(Some(py_item)) = self.dump_map.bind(value.py()).get_item(value) {
