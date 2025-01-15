@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
+use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{
     PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PyString,
@@ -15,7 +16,6 @@ use pyo3::{prelude::*, IntoPyObjectExt};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::fast_map::FastMap;
 use crate::python::{
     create_py_dict_known_size, create_py_list, create_py_tuple, dump_date, dump_datetime,
     dump_time, parse_date, parse_datetime, parse_time, py_dict_set_item, py_list_get_item,
@@ -623,7 +623,7 @@ impl Encoder for UUIDEncoder {
 pub struct EnumEncoder {
     pub(crate) enum_items: String,
     pub(crate) load_map: Py<PyDict>,
-    pub(crate) dump_map: FastMap<usize, Py<PyAny>>,
+    pub(crate) dump_map: IntMap<usize, Py<PyAny>>,
 }
 
 impl Encoder for EnumEncoder {

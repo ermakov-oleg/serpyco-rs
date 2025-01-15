@@ -12,13 +12,11 @@ crate-type = ["cdylib"]
 [dependencies]
 pyo3 = { version = "0.23.3", features = ["extension-module", "py-clone"] }
 pyo3-ffi = "0.23.2"
-cfg-if = "*"
 speedate = "0.15.0"
 
 dyn-clone = "1.0"
 atomic_refcell = "0.1"
 nohash-hasher = "*"
-micromap = "0.0.15"
 
 uuid = "1"
 
