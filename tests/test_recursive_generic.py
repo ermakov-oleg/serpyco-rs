@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Annotated, Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar, Optional, Union
 
 from serpyco_rs import Serializer
 from serpyco_rs.metadata import Discriminator
@@ -11,7 +11,7 @@ TWidget_co = TypeVar('TWidget_co', bound='BaseWidget', covariant=True)
 @dataclass
 class BaseWidget(Generic[TWidget_co]):
     type: str
-    childrens: list[TWidget_co] | None = None
+    childrens: Optional[list[TWidget_co]] = None
 
 
 @dataclass
@@ -22,10 +22,10 @@ class Widget1(BaseWidget[TWidget_co]):
 @dataclass
 class Widget2(BaseWidget[TWidget_co]):
     type: Literal['Widget2'] = 'Widget2'
-    some_field: str | None = None
+    some_field: Optional[str] = None
 
 
-Widget = Annotated[Widget1['Widget'] | Widget2['Widget'], Discriminator('type')]
+Widget = Annotated[Union[Widget1['Widget'], Widget2['Widget']], Discriminator('type')]
 
 
 def test_recursive_generics():
