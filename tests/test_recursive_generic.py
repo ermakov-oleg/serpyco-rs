@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 from typing import Annotated, Generic, Literal, TypeVar, Optional, Union
 
+import pytest
+import sys
+
 from serpyco_rs import Serializer
 from serpyco_rs.metadata import Discriminator
 
@@ -28,6 +31,7 @@ class Widget2(BaseWidget[TWidget_co]):
 Widget = Annotated[Union[Widget1['Widget'], Widget2['Widget']], Discriminator('type')]
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason='requires python3.11 or higher')
 def test_recursive_generics():
     serializer = Serializer(Widget)
 
@@ -39,6 +43,7 @@ def test_recursive_generics():
     assert serializer.load(data) == obj
 
 
+@pytest.mark.skipif(sys.version_info < (3, 11), reason='requires python3.11 or higher')
 def test_recursive_generics_propagates_annotations():
     serializer = Serializer(Widget, camelcase_fields=True)
 
