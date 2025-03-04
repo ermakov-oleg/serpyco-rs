@@ -117,13 +117,18 @@ def describe_type(
         args = t.__args__
         t = Union
     elif hasattr(t, '__parameters__'):
-        # Если передан generic-класс без type-параметров, значит по PEP-484 заменяем все параметры на Any
+        # If a generic class without type parameters is passed,
+        # then according to PEP-484 we replace all parameters with Any
         args = (Any,) * len(t.__parameters__)
 
     if not meta:
         meta = Meta(globals=_get_globals(t), state={})
 
-    t = _evaluate_forwardref(t, meta)
+    if isinstance(t, ForwardRef):
+        t = _evaluate_forwardref(t, meta)
+        # ForwardRef evaluation can return a generic class that we need to resolve
+        if hasattr(t, '__origin__'):
+            return describe_type(_wrap_annotated(metadata)(t), meta, custom_type_resolver)
 
     filed_format = _find_metadata(metadata, FieldFormat, NoFormat)
     none_format = _find_metadata(metadata, NoneFormat, KeepNone)
@@ -283,7 +288,10 @@ def describe_type(
                 custom_encoder=custom_encoder,
             )
 
-        if not all(dataclasses.is_dataclass(arg) or _is_attrs(arg) for arg in args):
+        if not all(
+            _applies_to_type_or_origin(arg, dataclasses.is_dataclass) or _applies_to_type_or_origin(arg, _is_attrs)
+            for arg in args
+        ):
             raise RuntimeError(
                 f'Unions supported only for dataclasses or attrs. Provided: {t}[{",".join(map(str, args))}]'
             )
@@ -291,7 +299,7 @@ def describe_type(
         meta = dataclasses.replace(meta, discriminator_field=discriminator.name)
         return DiscriminatedUnionType(
             item_types={
-                _get_discriminator_value(arg, discriminator.name): describe_type(
+                _get_discriminator_value(get_origin(arg) or arg, discriminator.name): describe_type(
                     annotation_wrapper(arg), meta, custom_type_resolver
                 )
                 for arg in args
@@ -508,11 +516,8 @@ def _get_globals(t: Any) -> dict[str, Any]:
     return {}
 
 
-def _evaluate_forwardref(t: type[_T], meta: Meta) -> type[_T]:
-    if not isinstance(t, ForwardRef):
-        return t
-
-    return t._evaluate(meta.globals, {}, recursive_guard=set())
+def _evaluate_forwardref(t: ForwardRef, meta: Meta) -> Any:
+    return t._evaluate(meta.globals, {}, recursive_guard=frozenset[str]())
 
 
 def _get_discriminator_value(t: Any, name: str) -> str:
@@ -589,3 +594,11 @@ def _is_new_type(t: Any) -> TypeGuard[NewType]:
 
 def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[Union[str, int, Enum]]]:
     return all(isinstance(arg, (str, int, Enum)) for arg in args)
+
+
+def _applies_to_type_or_origin(t: Any, predicate: Callable[[Any], bool]) -> bool:
+    if predicate(t):
+        return True
+    if hasattr(t, '__origin__'):
+        return predicate(t.__origin__)
+    return False
