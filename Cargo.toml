@@ -21,7 +21,7 @@ nohash-hasher = "*"
 uuid = "1"
 
 [build-dependencies]
-pyo3-build-config = { version = "0.23.2", features = ["resolve-config"] }
+pyo3-build-config = { version = "0.24.0", features = ["resolve-config"] }
 
 [profile.release]
 codegen-units = 1
