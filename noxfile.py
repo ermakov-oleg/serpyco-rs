@@ -5,7 +5,6 @@ import nox
 
 
 nox.options.sessions = ['test', 'lint', 'type_check', 'rust_lint']
-nox.options.python = False
 
 
 def build(session, use_pip: bool = False):
@@ -85,7 +84,7 @@ def test_rc_leaks(session):
     )
 
 
-@nox.session
+@nox.session(python=False)
 def bench_codespeed(session):
     build(session)
     install(session, '-r', 'requirements/bench.txt')

@@ -8,6 +8,7 @@ module-name = "serpyco_rs._serpyco_rs"
 
 [project]
 name = "serpyco-rs"
+dynamic = ["version"]
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
