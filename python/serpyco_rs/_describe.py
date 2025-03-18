@@ -79,6 +79,11 @@ if sys.version_info >= (3, 10):  # pragma: no cover
 else:  # pragma: no cover
     StdUnionType = None
 
+if sys.version_info >= (3, 12):  # pragma: no cover
+    from typing import TypeAliasType
+else:  # pragma: no cover
+    TypeAliasType = None
+
 FrozenInstanceErrors: tuple[type[Exception], ...] = (dataclasses.FrozenInstanceError,)
 
 try:
@@ -104,6 +109,11 @@ def describe_type(
     args: tuple[Any, ...] = ()
     metadata = _get_annotated_metadata(t)
     type_repr = repr(t)
+
+    if TypeAliasType and isinstance(t, TypeAliasType):
+        t = t.__value__
+        args = t.__type_params__
+
     if get_origin(t) == Annotated:  # unwrap annotated
         t = t.__origin__
     original_t = t
@@ -308,6 +318,9 @@ def describe_type(
             load_discriminator=_apply_format(filed_format, discriminator.name),
             custom_encoder=custom_encoder,
         )
+
+    if TypeAliasType and isinstance(t, TypeAliasType):
+        return describe_type(annotation_wrapper(t.__value__), meta, custom_type_resolver)
 
     if isinstance(t, TypeVar):
         raise RuntimeError(f'Unfilled TypeVar: {t}')

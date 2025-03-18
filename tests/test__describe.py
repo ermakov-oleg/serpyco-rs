@@ -21,6 +21,7 @@ from serpyco_rs._describe import (
     DecimalType,
     DefaultValue,
     DictionaryType,
+    DiscriminatedUnionType,
     EntityField,
     EntityType,
     EnumType,
@@ -33,7 +34,6 @@ from serpyco_rs._describe import (
     TupleType,
     TypedDictType,
     UnionType,
-    DiscriminatedUnionType,
     UUIDType,
     describe_type,
 )
