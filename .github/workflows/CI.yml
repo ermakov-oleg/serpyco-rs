@@ -215,9 +215,9 @@ jobs:
       - uses: actions/checkout@v3
       - uses: deadsnakes/action@v3.1.0
         with:
-          python-version: 3.11
+          python-version: 3.13
           debug: true
-      - run: python3.11 --version --version && which python3.11 && python3.11 -c "import sys; print(sys.gettotalrefcount())"
+      - run: python3.13 --version --version && which python3.13 && python3.13 -c "import sys; print(sys.gettotalrefcount())"
       - uses: PyO3/maturin-action@v1
         with:
           command: build
