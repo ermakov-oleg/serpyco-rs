@@ -1,10 +1,16 @@
-import pytest
 import sys
 
+import pytest
 from serpyco_rs._describe import _NAME_CACHE, _generate_name
 
+
+collect_ignore_glob = []
+
 if sys.version_info[:2] < (3, 11):
-    collect_ignore_glob = ['*_py311.py']
+    collect_ignore_glob += ['*_py311.py']
+
+if sys.version_info[:2] < (3, 12):
+    collect_ignore_glob += ['*_py312.py']
 
 
 @pytest.fixture(autouse=True)

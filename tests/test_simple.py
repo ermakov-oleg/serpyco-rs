@@ -1,9 +1,8 @@
-from enum import Enum
-
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Annotated, Optional, Literal
+from enum import Enum
+from typing import Annotated, Literal, Optional
 
 import attr
 import pytest

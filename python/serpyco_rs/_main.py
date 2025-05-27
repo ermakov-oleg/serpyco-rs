@@ -34,7 +34,7 @@ class Serializer(Generic[_T]):
 
     def __init__(
         self,
-        t: type[_T],
+        t: Union[type[_T], Any],
         *,
         camelcase_fields: bool = False,
         omit_none: bool = False,
@@ -57,9 +57,9 @@ class Serializer(Generic[_T]):
         if camelcase_fields:
             t = cast(type[_T], Annotated[t, CamelCase])
         if omit_none:
-            t = cast(type(_T), Annotated[t, OmitNone])  # type: ignore
+            t = cast(type[_T], Annotated[t, OmitNone])
         if force_default_for_optional:
-            t = cast(type(_T), Annotated[t, ForceDefaultForOptional])  # type: ignore
+            t = cast(type[_T], Annotated[t, ForceDefaultForOptional])
         self._type_info = describe_type(t, custom_type_resolver=custom_type_resolver)
         self._schema = get_json_schema(self._type_info)
         self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc)

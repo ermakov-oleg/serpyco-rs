@@ -1,11 +1,10 @@
 import sys
 from dataclasses import dataclass
-from typing import Annotated, Literal, Optional, Union
 from enum import Enum
+from typing import Annotated, Literal, Optional, Union
 
 import pytest
-
-from serpyco_rs import Serializer, SchemaValidationError, ErrorItem
+from serpyco_rs import ErrorItem, SchemaValidationError, Serializer
 from serpyco_rs.metadata import Discriminator
 
 
@@ -87,7 +86,7 @@ def test_tagged_union__unsupported_types():
 
     assert exc_info.type is RuntimeError
     assert exc_info.value.args[0] == (
-        "Unions supported only for dataclasses or attrs. Provided: typing.Union[<class 'int'>,<class 'str'>]"
+        'Unions supported only for dataclasses or attrs. Provided: typing.Union[int, str]'
     )
 
 

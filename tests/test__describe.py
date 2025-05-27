@@ -21,6 +21,7 @@ from serpyco_rs._describe import (
     DecimalType,
     DefaultValue,
     DictionaryType,
+    DiscriminatedUnionType,
     EntityField,
     EntityType,
     EnumType,
@@ -33,7 +34,6 @@ from serpyco_rs._describe import (
     TupleType,
     TypedDictType,
     UnionType,
-    DiscriminatedUnionType,
     UUIDType,
     describe_type,
 )
@@ -499,7 +499,7 @@ def test_describe__unknown_type__fail():
     with pytest.raises(RuntimeError) as exc_info:
         describe_type(set[int])
 
-    assert exc_info.match("Unknown type <class 'set'>")
+    assert exc_info.match(r'Unknown type set\[int\]')
 
 
 def test_describe__optional__wrapped():

@@ -29,13 +29,13 @@ pub enum Type<'a, Base = Bound<'a, BaseType>> {
     Date(Bound<'a, DateType>, Base),
     Entity(Bound<'a, EntityType>, Base, usize),
     TypedDict(Bound<'a, TypedDictType>, Base, usize),
-    Array(Bound<'a, ArrayType>, Base),
+    Array(Bound<'a, ArrayType>, Base, usize),
     Enum(Bound<'a, EnumType>, Base),
-    Optional(Bound<'a, OptionalType>, Base),
-    Dictionary(Bound<'a, DictionaryType>, Base),
-    Tuple(Bound<'a, TupleType>, Base),
-    DiscriminatedUnion(Bound<'a, DiscriminatedUnionType>, Base),
-    Union(Bound<'a, UnionType>, Base),
+    Optional(Bound<'a, OptionalType>, Base, usize),
+    Dictionary(Bound<'a, DictionaryType>, Base, usize),
+    Tuple(Bound<'a, TupleType>, Base, usize),
+    DiscriminatedUnion(Bound<'a, DiscriminatedUnionType>, Base, usize),
+    Union(Bound<'a, UnionType>, Base, usize),
     Literal(Bound<'a, LiteralType>, Base),
     #[allow(dead_code)]
     Any(Bound<'a, AnyType>, Base),
@@ -46,6 +46,7 @@ pub enum Type<'a, Base = Bound<'a, BaseType>> {
 
 pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
     let base_type = type_info.extract::<Bound<'_, BaseType>>()?;
+    let python_object_id = type_info.as_ptr() as *const _ as usize;
     check_type!(type_info, base_type, Integer, IntegerType);
     check_type!(type_info, base_type, String, StringType);
     check_type!(type_info, base_type, Float, FloatType);
@@ -56,38 +57,57 @@ pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
     check_type!(type_info, base_type, DateTime, DateTimeType);
     check_type!(type_info, base_type, Date, DateType);
     check_type!(type_info, base_type, Enum, EnumType);
-    check_type!(type_info, base_type, Optional, OptionalType);
-    check_type!(type_info, base_type, Array, ArrayType);
-    check_type!(type_info, base_type, Dictionary, DictionaryType);
-    check_type!(type_info, base_type, Tuple, TupleType);
-    check_type!(type_info, base_type, Any, AnyType);
-    check_type!(type_info, base_type, Union, UnionType);
-    check_type!(
-        type_info,
-        base_type,
-        DiscriminatedUnion,
-        DiscriminatedUnionType
-    );
     check_type!(type_info, base_type, Literal, LiteralType);
     check_type!(type_info, base_type, Bytes, BytesType);
     check_type!(type_info, base_type, RecursionHolder, RecursionHolder);
     check_type!(type_info, base_type, Custom, CustomType);
+    check_type!(type_info, base_type, Any, AnyType);
+    check_type!(
+        type_info,
+        base_type,
+        Optional,
+        OptionalType,
+        python_object_id
+    );
+    check_type!(type_info, base_type, Array, ArrayType, python_object_id);
+    check_type!(
+        type_info,
+        base_type,
+        Dictionary,
+        DictionaryType,
+        python_object_id
+    );
+    check_type!(type_info, base_type, Tuple, TupleType, python_object_id);
+    check_type!(type_info, base_type, Union, UnionType, python_object_id);
+    check_type!(
+        type_info,
+        base_type,
+        DiscriminatedUnion,
+        DiscriminatedUnionType,
+        python_object_id
+    );
 
-    if let Ok(t) = type_info.extract::<Bound<'_, EntityType>>() {
-        let python_object_id = type_info.as_ptr() as *const _ as usize;
-        Ok(Type::Entity(t, base_type, python_object_id))
-    } else if let Ok(t) = type_info.extract::<Bound<'_, TypedDictType>>() {
-        let python_object_id = type_info.as_ptr() as *const _ as usize;
-        Ok(Type::TypedDict(t, base_type, python_object_id))
-    } else {
-        unreachable!("Unknown type: {:?}", type_info)
-    }
+    check_type!(type_info, base_type, Entity, EntityType, python_object_id);
+    check_type!(
+        type_info,
+        base_type,
+        TypedDict,
+        TypedDictType,
+        python_object_id
+    );
+
+    unreachable!("Unknown type: {:?}", type_info)
 }
 
 macro_rules! check_type {
     ($type_info:ident, $base_type:ident, $enum:ident, $type:ident) => {
         if let Ok(t) = $type_info.extract::<Bound<'_, $type>>() {
             return Ok(Type::$enum(t, $base_type));
+        }
+    };
+    ($type_info:ident, $base_type:ident, $enum:ident, $type:ident, $python_object_id:ident) => {
+        if let Ok(t) = $type_info.extract::<Bound<'_, $type>>() {
+            return Ok(Type::$enum(t, $base_type, $python_object_id));
         }
     };
 }

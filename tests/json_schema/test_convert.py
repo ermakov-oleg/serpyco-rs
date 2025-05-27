@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal, Optional, TypedDict, Union
 from uuid import UUID
 
 import pytest
-from serpyco_rs import Serializer, JsonSchemaBuilder
+from serpyco_rs import JsonSchemaBuilder, Serializer
 from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, OmitNone
 
 
