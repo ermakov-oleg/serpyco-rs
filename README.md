@@ -70,6 +70,7 @@ There is support for generic types from the standard typing module:
 * Literal[str, int, Enum.variant, ...]
 * Unions / Tagged unions
 * typing.NewType
+* PEP 695 (Type Parameter Syntax) - Python 3.12+
 
 ## Benchmarks
 
@@ -351,6 +352,56 @@ class Foo:
 
 ser = Serializer(Foo)
 ser.load({'val': b'123'}) == Foo(val=b'123')
+```
+
+
+## PEP 695 Support
+
+`serpyco-rs` supports the type parameter syntax from PEP 695, which was introduced in Python 3.12. This allows you to use a more concise and readable syntax for generic types.
+
+### Generic Dataclasses
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+@dataclass
+class Container[T]:
+    value: T
+    items: list[T]
+
+# Usage with concrete type
+ser = Serializer(Container[int])
+
+result = ser.dump(Container(value=42, items=[1, 2, 3]))
+print(result)
+>> {'value': 42, 'items': [1, 2, 3]}
+
+loaded = ser.load({'value': 42, 'items': [1, 2, 3]})
+print(loaded)
+>> Container(value=42, items=[1, 2, 3])
+```
+
+### Type Aliases
+
+```python
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+
+# New type alias syntax from PEP 695
+type StrList = list[str]
+type StrKeyDict[T] = dict[str, T]
+
+@dataclass
+class Data:
+    names: StrList
+    values: StrKeyDict[int]
+
+ser = Serializer(Data)
+
+result = ser.dump(Data(names=['alice', 'bob'], values={'a': 1, 'b': 2}))
+print(result)
+>> {'names': ['alice', 'bob'], 'values': {'a': 1, 'b': 2}}
 ```
 
 
