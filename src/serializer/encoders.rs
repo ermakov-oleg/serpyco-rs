@@ -992,6 +992,12 @@ impl Encoder for DateEncoder {
 pub enum Encoders {
     Entity(EntityEncoder),
     TypedDict(TypedDictEncoder),
+    Dict(DictionaryEncoder),
+    Union(UnionEncoder),
+    DiscriminatedUnion(DiscriminatedUnionEncoder),
+    Tuple(TupleEncoder),
+    Array(ArrayEncoder),
+    Optional(OptionalEncoder),
 }
 
 #[derive(Debug, Clone)]
@@ -1006,6 +1012,12 @@ impl Encoder for LazyEncoder {
             Some(encoder) => match encoder {
                 Encoders::Entity(encoder) => encoder.dump(value),
                 Encoders::TypedDict(encoder) => encoder.dump(value),
+                Encoders::Union(encoder) => encoder.dump(value),
+                Encoders::DiscriminatedUnion(encoder) => encoder.dump(value),
+                Encoders::Tuple(encoder) => encoder.dump(value),
+                Encoders::Array(encoder) => encoder.dump(value),
+                Encoders::Optional(encoder) => encoder.dump(value),
+                Encoders::Dict(encoder) => encoder.dump(value),
             },
             None => Err(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
@@ -1024,6 +1036,12 @@ impl Encoder for LazyEncoder {
             Some(encoder) => match encoder {
                 Encoders::Entity(encoder) => encoder.load(value, instance_path, ctx),
                 Encoders::TypedDict(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::Tuple(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::Array(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::Optional(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::Union(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::DiscriminatedUnion(encoder) => encoder.load(value, instance_path, ctx),
+                Encoders::Dict(encoder) => encoder.load(value, instance_path, ctx),
             },
             None => Err(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),

@@ -6,7 +6,6 @@ from decimal import Decimal
 from enum import Enum, IntEnum
 from functools import cache
 from typing import (
-    Annotated,
     Any,
     ForwardRef,
     Generic,
@@ -20,7 +19,12 @@ from typing import (
 )
 from uuid import UUID
 
-from typing_extensions import NewType, NotRequired, Required, TypeGuard, assert_never, get_args, is_typeddict
+from typing_extensions import (
+    TypeGuard,
+    assert_never,
+    get_args,
+    is_typeddict,
+)
 
 from ._custom_types import CustomType as CustomTypeMeta
 from ._impl import (
@@ -53,15 +57,15 @@ from ._impl import (
     UnionType,
     UUIDType,
 )
-from ._meta import Meta, MetaStateKey
+from ._meta import Annotations, ResolverContext
+from ._secial_forms import is_union_type, unwrap_special_forms
 from ._type_utils import get_type_hints  # type: ignore[attr-defined]
-from ._utils import get_attributes_doc, to_camelcase
+from ._utils import _MergeStack, _Stack, get_attributes_doc, to_camelcase
 from .metadata import (
     Alias,
     Discriminator,
     FieldFormat,
     Format,
-    KeepDefaultForOptional,
     KeepNone,
     Max,
     MaxLength,
@@ -74,11 +78,6 @@ from .metadata import (
 )
 
 
-if sys.version_info >= (3, 10):  # pragma: no cover
-    from types import UnionType as StdUnionType
-else:  # pragma: no cover
-    StdUnionType = None
-
 FrozenInstanceErrors: tuple[type[Exception], ...] = (dataclasses.FrozenInstanceError,)
 
 try:
@@ -88,7 +87,6 @@ try:
     FrozenInstanceErrors += (FrozenInstanceError,)
 except ImportError:  # pragma: no cover
     attr = None  # type: ignore
-    FrozenInstanceError = None  # type: ignore
 
 
 _NoneType = type(None)
@@ -96,73 +94,173 @@ _NoneType = type(None)
 _T = TypeVar('_T')
 
 
-def describe_type(
-    t: Any,
-    meta: Optional[Meta] = None,
-    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
-) -> BaseType:
-    args: tuple[Any, ...] = ()
-    metadata = _get_annotated_metadata(t)
-    type_repr = repr(t)
-    if get_origin(t) == Annotated:  # unwrap annotated
-        t = t.__origin__
-    original_t = t
-    if get_origin(t) in {Required, NotRequired}:  # unwrap TypedDict special forms
-        t = t.__args__[0]
-    if hasattr(t, '__origin__'):
-        args = t.__args__
-        t = t.__origin__
-    # StdUnionType has no __origin__
-    elif StdUnionType and isinstance(t, StdUnionType):  # type: ignore[truthy-function]
-        args = t.__args__
-        t = Union
-    elif hasattr(t, '__parameters__'):
-        # If a generic class without type parameters is passed,
-        # then according to PEP-484 we replace all parameters with Any
-        args = (Any,) * len(t.__parameters__)
+_CONTAINER_TYPES = (EntityType, TypedDictType, UnionType, TupleType, ArrayType, DiscriminatedUnionType)
 
-    if not meta:
-        meta = Meta(globals=_get_globals(t), state={})
 
-    if isinstance(t, ForwardRef):
-        t = _evaluate_forwardref(t, meta)
-        # ForwardRef evaluation can return a generic class that we need to resolve
-        if hasattr(t, '__origin__'):
-            return describe_type(_wrap_annotated(metadata)(t), meta, custom_type_resolver)
+class _TypeResolver:
+    resolver_context: _Stack[ResolverContext]
+    annotations: _MergeStack[Annotations]
+    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]]
 
-    filed_format = _find_metadata(metadata, FieldFormat, NoFormat)
-    none_format = _find_metadata(metadata, NoneFormat, KeepNone)
-    none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional, KeepDefaultForOptional)
-    custom_encoder = _find_metadata(metadata, CustomEncoder)
-    annotation_wrapper = _wrap_annotated([filed_format, none_format, none_as_default_for_optional])
+    def __init__(
+        self,
+        globals: dict[str, Any],
+        custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
+    ):
+        self.resolver_context = _Stack(ResolverContext(globals=globals, type_cache={}))
+        self.custom_type_resolver = custom_type_resolver
+        self.annotations = _MergeStack(Annotations(NoFormat, KeepNone, KeepNone))
 
-    meta_key = MetaStateKey(
-        cls=original_t,
-        field_format=filed_format,
-        none_format=none_format,
-        none_as_default_for_optional=none_as_default_for_optional,
-    )
+    def resolve(self, t: Any) -> BaseType:
+        type_info, _ = self._resolve_with_meta(t)
+        return type_info
 
-    if meta.has_in_state(meta_key):
-        return RecursionHolder(
-            name=_generate_name(original_t, filed_format, none_format, none_as_default_for_optional),
-            state_key=meta_key,
-            meta=meta,
-            custom_encoder=None,
-        )
+    def _resolve_with_meta(self, t: Any) -> tuple[BaseType, Annotations]:
+        t, metadata = unwrap_special_forms(t)
+        with self.annotations.merge(other=metadata):
+            context = self.resolver_context.get()
+            metadata = self.annotations.get()
 
-    if custom_type_resolver and (custom_type := custom_type_resolver(t)):
-        if custom_encoder is None:
-            custom_encoder = CustomEncoder(
-                serialize=custom_type.serialize,
-                deserialize=custom_type.deserialize,
+            # Try find type in state
+            ref = f'{t!r}::{metadata.make_key()}'
+            if context.has_cached_type(ref):
+                type_info = context.get_cached_type(ref)
+
+                # for non container types avoid wrap type_info
+                if type_info and not isinstance(type_info, _CONTAINER_TYPES):
+                    return type_info, metadata
+
+                return (
+                    RecursionHolder(
+                        name=_generate_name(t, ref),
+                        state_key=ref,
+                        meta=context,
+                        custom_encoder=None,
+                    ),
+                    metadata,
+                )
+
+            context.cache_type(ref, None)
+
+            if isinstance(t, ForwardRef):
+                t = _evaluate_forwardref(t, self.resolver_context.get())
+                return self._resolve_with_meta(t)
+
+            type_info = self._resolve_type(t, ref=ref)
+            context.cache_type(ref, type_info)
+
+            return type_info, metadata
+
+    def _resolve_type(self, t: Any, ref: str) -> BaseType:
+        annotations = self.annotations.get()
+        custom_encoder = annotations.get(CustomEncoder)
+
+        if self.custom_type_resolver and (custom_type := self.custom_type_resolver(t)):
+            if custom_encoder is None:
+                custom_encoder = CustomEncoder(
+                    serialize=custom_type.serialize,
+                    deserialize=custom_type.deserialize,
+                )
+            return CustomType(custom_encoder=custom_encoder, json_schema=custom_type.get_json_schema())
+
+        if t is Any:
+            return AnyType(custom_encoder=custom_encoder)
+
+        if res := self._match_simple_types(t):
+            return res
+
+        origin = get_origin(t) or t
+        args = get_args(t)
+
+        # generics types
+        if origin in {Sequence, list}:
+            min_length_meta = annotations.get(MinLength)
+            max_length_meta = annotations.get(MaxLength)
+
+            return ArrayType(
+                item_type=(self.resolve(args[0]) if args else AnyType(custom_encoder=None)),
+                min_length=min_length_meta.value if min_length_meta else None,
+                max_length=max_length_meta.value if max_length_meta else None,
+                custom_encoder=custom_encoder,
             )
-        return CustomType(custom_encoder=custom_encoder, json_schema=custom_type.get_json_schema())
 
-    if t is Any:
-        return AnyType(custom_encoder=custom_encoder)
+        if origin in {Mapping, dict}:
+            return DictionaryType(
+                key_type=(self.resolve(args[0]) if args else AnyType(custom_encoder=None)),
+                value_type=(self.resolve(args[1]) if args else AnyType(custom_encoder=None)),
+                omit_none=annotations.get(NoneFormat, KeepNone).omit,
+                custom_encoder=custom_encoder,
+            )
 
-    if isinstance(t, type):
+        if origin is tuple:
+            if not args or Ellipsis in args:
+                raise RuntimeError('Variable length tuples are not supported')
+            return TupleType(
+                item_types=[self.resolve(arg) for arg in args],
+                custom_encoder=custom_encoder,
+            )
+
+        if dataclasses.is_dataclass(origin) or _is_attrs(origin) or is_typeddict(origin):
+            entity_type = self._describe_entity(
+                t=t,
+                name=_generate_name(t, ref),
+                custom_encoder=custom_encoder,
+            )
+            return entity_type
+
+        if _is_literal_type(origin):
+            if args and _is_supported_literal_args(args):
+                return LiteralType(args=list(args), custom_encoder=custom_encoder)
+            raise RuntimeError('Supported only Literal[str | int, ...]')
+
+        if is_union_type(origin):
+            if _NoneType in args:
+                new_args = tuple(arg for arg in args if arg is not _NoneType)
+                new_t = Union[new_args] if len(new_args) > 1 else new_args[0]  # type: ignore[unused-ignore]
+                return OptionalType(
+                    inner=self.resolve(new_t),
+                    custom_encoder=None,
+                )
+
+            discriminator = annotations.get(Discriminator)
+            if not discriminator:
+                return UnionType(
+                    item_types=[self.resolve(arg) for arg in args],
+                    union_repr=repr(t).removeprefix('typing.'),
+                    custom_encoder=custom_encoder,
+                )
+
+            if not all(
+                _applies_to_type_or_origin(arg, dataclasses.is_dataclass) or _applies_to_type_or_origin(arg, _is_attrs)
+                for arg in args
+            ):
+                raise RuntimeError(f'Unions supported only for dataclasses or attrs. Provided: {t}')
+
+            with self.resolver_context.push(
+                dataclasses.replace(self.resolver_context.get(), discriminator_field=discriminator.name)
+            ):
+                return DiscriminatedUnionType(
+                    item_types={
+                        _get_discriminator_value(get_origin(arg) or arg, discriminator.name): self.resolve(arg)
+                        for arg in args
+                    },
+                    dump_discriminator=discriminator.name,
+                    load_discriminator=_apply_format(annotations.get(FieldFormat, NoFormat), discriminator.name),
+                    custom_encoder=custom_encoder,
+                )
+
+        if isinstance(t, TypeVar):
+            raise RuntimeError(f'Unfilled TypeVar: {t}')
+
+        raise RuntimeError(f'Unknown type {t!r}')
+
+    def _match_simple_types(self, t: Any) -> Optional[BaseType]:
+        if not isinstance(t, type):
+            return None
+
+        annotations = self.annotations.get()
+        custom_encoder = annotations.get(CustomEncoder)
+
         simple_type_mapping: Mapping[type, type[BaseType]] = {
             bytes: BytesType,
             bool: BooleanType,
@@ -181,8 +279,8 @@ def describe_type(
         }
 
         if number_type := number_type_mapping.get(t):
-            min_meta = _find_metadata(metadata, Min)
-            max_meta = _find_metadata(metadata, Max)
+            min_meta = annotations.get(Min)
+            max_meta = annotations.get(Max)
             return number_type(
                 min=cast(Any, min_meta.value) if min_meta else None,
                 max=cast(Any, max_meta.value) if max_meta else None,
@@ -190,8 +288,8 @@ def describe_type(
             )
 
         if t is Decimal:
-            min_meta = _find_metadata(metadata, Min)
-            max_meta = _find_metadata(metadata, Max)
+            min_meta = annotations.get(Min)
+            max_meta = annotations.get(Max)
             return DecimalType(
                 min=min_meta.value if min_meta else None,
                 max=max_meta.value if max_meta else None,
@@ -199,120 +297,115 @@ def describe_type(
             )
 
         if t is str:
-            min_length_meta = _find_metadata(metadata, MinLength)
-            max_length_meta = _find_metadata(metadata, MaxLength)
+            min_length_meta = annotations.get(MinLength)
+            max_length_meta = annotations.get(MaxLength)
+
             return StringType(
                 min_length=min_length_meta.value if min_length_meta else None,
                 max_length=max_length_meta.value if max_length_meta else None,
                 custom_encoder=custom_encoder,
             )
 
-        if t in {Sequence, list}:
-            min_length_meta = _find_metadata(metadata, MinLength)
-            max_length_meta = _find_metadata(metadata, MaxLength)
-            return ArrayType(
-                item_type=(
-                    describe_type(annotation_wrapper(args[0]), meta, custom_type_resolver)
-                    if args
-                    else AnyType(custom_encoder=None)
-                ),
-                min_length=min_length_meta.value if min_length_meta else None,
-                max_length=max_length_meta.value if max_length_meta else None,
-                custom_encoder=custom_encoder,
-            )
-
-        if t in {Mapping, dict}:
-            return DictionaryType(
-                key_type=(
-                    describe_type(annotation_wrapper(args[0]), meta, custom_type_resolver)
-                    if args
-                    else AnyType(custom_encoder=None)
-                ),
-                value_type=(
-                    describe_type(annotation_wrapper(args[1]), meta, custom_type_resolver)
-                    if args
-                    else AnyType(custom_encoder=None)
-                ),
-                omit_none=none_format.omit,
-                custom_encoder=custom_encoder,
-            )
-
-        if t is tuple:
-            if not args or Ellipsis in args:
-                raise RuntimeError('Variable length tuples are not supported')
-            return TupleType(
-                item_types=[describe_type(annotation_wrapper(arg), meta, custom_type_resolver) for arg in args],
-                custom_encoder=custom_encoder,
-            )
-
         if issubclass(t, (Enum, IntEnum)):
             return EnumType(cls=t, items=list(t), custom_encoder=custom_encoder)
 
-        if dataclasses.is_dataclass(t) or _is_attrs(t) or is_typeddict(t):
-            meta.add_to_state(meta_key, None)
-            entity_type = _describe_entity(
-                t=t,
-                original_t=original_t,
-                cls_filed_format=filed_format,
-                cls_none_format=none_format,
-                custom_encoder=custom_encoder,
-                cls_none_as_default_for_optional=none_as_default_for_optional,
-                meta=meta,
-                custom_type_resolver=custom_type_resolver,
-            )
-            meta.add_to_state(meta_key, entity_type)
-            return entity_type
+        return None
 
-    if _is_literal_type(t):
-        if args and _is_supported_literal_args(args):
-            return LiteralType(args=list(args), custom_encoder=custom_encoder)
-        raise RuntimeError('Supported only Literal[str | int, ...]')
+    def _describe_entity(
+        self,
+        t: Any,
+        name: str,
+        custom_encoder: Optional[CustomEncoder[Any, Any]],
+    ) -> Union[EntityType, TypedDictType]:
+        # PEP-484: Replace all unfilled type parameters with Any
+        if get_origin(t) is None and getattr(t, '__parameters__', None):
+            t = t[(Any,) * len(t.__parameters__)]
 
-    if _is_new_type(t):
-        return describe_type(t.__supertype__, meta, custom_type_resolver)
+        origin = get_origin(t) or t
+        docs = get_attributes_doc(t)
+        try:
+            types = get_type_hints(t, include_extras=True)
+        except Exception:  # pylint: disable=broad-except
+            types = {}
 
-    if t is Union:
-        if _NoneType in args:
-            new_args = tuple(arg for arg in args if arg is not _NoneType)
-            new_t = Union[new_args] if len(new_args) > 1 else new_args[0]  # type: ignore[unused-ignore]
-            return OptionalType(
-                inner=describe_type(annotation_wrapper(new_t), meta, custom_type_resolver),
-                custom_encoder=None,
-            )
+        discriminator_field = self.resolver_context.get().discriminator_field
 
-        discriminator = _find_metadata(metadata, Discriminator)
-        if not discriminator:
-            return UnionType(
-                item_types=[describe_type(annotation_wrapper(arg), meta, custom_type_resolver) for arg in args],
-                union_repr=type_repr.removeprefix('typing.'),
-                custom_encoder=custom_encoder,
-            )
+        cls_annotations = self.annotations.get()
 
-        if not all(
-            _applies_to_type_or_origin(arg, dataclasses.is_dataclass) or _applies_to_type_or_origin(arg, _is_attrs)
-            for arg in args
+        with self.resolver_context.push(
+            dataclasses.replace(self.resolver_context.get(), globals=_get_globals(t), discriminator_field=None)
         ):
-            raise RuntimeError(
-                f'Unions supported only for dataclasses or attrs. Provided: {t}[{",".join(map(str, args))}]'
+            fields = []
+            for field in _get_entity_fields(origin):
+                type_ = types.get(field.name, field.type)
+
+                if isinstance(type_, str):
+                    type_ = ForwardRef(
+                        type_,
+                        module=t.__module__,
+                        is_class=True,
+                    )
+                field_type, field_metadata = self._resolve_with_meta(type_)
+                with self.annotations.merge(field_metadata) as field_annotations:
+                    alias = field_annotations.get(Alias)
+                    none_as_default_for_optional = field_annotations.get(NoneAsDefaultForOptional)
+
+                    is_discriminator_field = field.name == discriminator_field
+                    required = (
+                        not (field.default != NOT_SET or field.default_factory != NOT_SET) or is_discriminator_field
+                    )
+
+                    default = field.default
+                    if (
+                        isinstance(field_type, OptionalType)
+                        and required
+                        and none_as_default_for_optional
+                        and none_as_default_for_optional.use
+                    ):
+                        default = DefaultValue.some(None)
+                        required = False
+
+                    fields.append(
+                        EntityField(
+                            name=field.name,
+                            dict_key=(
+                                alias.value if alias else _apply_format(cls_annotations.get(FieldFormat), field.name)
+                            ),
+                            doc=docs.get(field.name),
+                            field_type=field_type,
+                            default=default,
+                            default_factory=field.default_factory,
+                            is_discriminator_field=is_discriminator_field,
+                            required=required,
+                        )
+                    )
+
+            if is_typeddict(origin):
+                return TypedDictType(
+                    name=name,
+                    fields=fields,
+                    omit_none=cls_annotations.get(NoneFormat) is OmitNone,
+                    doc=t.__doc__,
+                    custom_encoder=custom_encoder,
+                )
+
+            return EntityType(
+                cls=origin,
+                name=name,
+                fields=fields,
+                omit_none=cls_annotations.get(NoneFormat) is OmitNone,
+                is_frozen=_is_frozen_dataclass(origin, fields[0]) if fields else False,
+                doc=_get_dataclass_doc(t),
+                custom_encoder=custom_encoder,
             )
 
-        meta = dataclasses.replace(meta, discriminator_field=discriminator.name)
-        return DiscriminatedUnionType(
-            item_types={
-                _get_discriminator_value(get_origin(arg) or arg, discriminator.name): describe_type(
-                    annotation_wrapper(arg), meta, custom_type_resolver
-                )
-                for arg in args
-            },
-            dump_discriminator=discriminator.name,
-            load_discriminator=_apply_format(filed_format, discriminator.name),
-            custom_encoder=custom_encoder,
-        )
 
-    if isinstance(t, TypeVar):
-        raise RuntimeError(f'Unfilled TypeVar: {t}')
-
-    raise RuntimeError(f'Unknown type {t!r}')
+def describe_type(
+    t: Any,
+    meta: Optional[ResolverContext] = None,
+    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
+) -> BaseType:
+    return _TypeResolver(_get_globals(t), custom_type_resolver).resolve(t)
 
 
 @dataclasses.dataclass
@@ -321,85 +414,6 @@ class _Field(Generic[_T]):
     type: Union[type[_T], str, Any]
     default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
     default_factory: Union[DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
-
-
-def _describe_entity(
-    t: Any,
-    original_t: Any,
-    cls_filed_format: FieldFormat,
-    cls_none_format: NoneFormat,
-    cls_none_as_default_for_optional: NoneAsDefaultForOptional,
-    custom_encoder: Optional[CustomEncoder[Any, Any]],
-    meta: Meta,
-    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]],
-) -> Union[EntityType, TypedDictType]:
-    # PEP-484: Replace all unfilled type parameters with Any
-    if not hasattr(original_t, '__origin__') and getattr(original_t, '__parameters__', None):
-        original_t = original_t[(Any,) * len(t.__parameters__)]
-
-    docs = get_attributes_doc(t)
-    try:
-        types = get_type_hints(original_t, include_extras=True)
-    except Exception:  # pylint: disable=broad-except
-        types = {}
-
-    discriminator_field = meta.discriminator_field
-    meta = dataclasses.replace(meta, globals=_get_globals(t), discriminator_field=None)
-
-    fields = []
-    for field in _get_entity_fields(t):
-        type_ = types.get(field.name, field.type)
-        type_ = Annotated[type_, cls_filed_format, cls_none_format, cls_none_as_default_for_optional]
-
-        metadata = _get_annotated_metadata(type_)
-        field_type = describe_type(type_, meta, custom_type_resolver)
-        alias = _find_metadata(metadata, Alias)
-        none_as_default_for_optional = _find_metadata(metadata, NoneAsDefaultForOptional)
-
-        is_discriminator_field = field.name == discriminator_field
-        required = not (field.default != NOT_SET or field.default_factory != NOT_SET) or is_discriminator_field
-
-        default = field.default
-        if (
-            isinstance(field_type, OptionalType)
-            and required
-            and none_as_default_for_optional
-            and none_as_default_for_optional.use
-        ):
-            default = DefaultValue.some(None)
-            required = False
-
-        fields.append(
-            EntityField(
-                name=field.name,
-                dict_key=alias.value if alias else _apply_format(cls_filed_format, field.name),
-                doc=docs.get(field.name),
-                field_type=field_type,
-                default=default,
-                default_factory=field.default_factory,
-                is_discriminator_field=is_discriminator_field,
-                required=required,
-            )
-        )
-
-    if is_typeddict(t):
-        return TypedDictType(
-            name=_generate_name(original_t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional),
-            fields=fields,
-            omit_none=cls_none_format is OmitNone,
-            doc=t.__doc__,
-            custom_encoder=custom_encoder,
-        )
-
-    return EntityType(
-        cls=t,
-        name=_generate_name(original_t, cls_filed_format, cls_none_format, cls_none_as_default_for_optional),
-        fields=fields,
-        omit_none=cls_none_format is OmitNone,
-        is_frozen=_is_frozen_dataclass(t, fields[0]) if fields else False,
-        doc=_get_dataclass_doc(t),
-        custom_encoder=custom_encoder,
-    )
 
 
 def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
@@ -462,21 +476,6 @@ def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optiona
     return next((ann for ann in annotations if isinstance(ann, type_)), default)
 
 
-def _wrap_annotated(annotations: Iterable[Any]) -> Callable[[_T], _T]:
-    def inner(type_: _T) -> _T:
-        for ann in annotations:
-            type_ = Annotated[type_, ann]  # type: ignore
-        return type_
-
-    return inner
-
-
-def _get_annotated_metadata(t: Any) -> tuple[Any, ...]:
-    if get_origin(t) == Annotated:
-        return getattr(t, '__metadata__', ())
-    return ()
-
-
 def _apply_format(f: Optional[FieldFormat], value: str) -> str:
     if not f or f.format is Format.no_format:
         return value
@@ -489,12 +488,7 @@ _NAME_CACHE = {}
 
 
 @cache
-def _generate_name(
-    cls: Any,
-    field_format: FieldFormat,
-    none_format: NoneFormat,
-    cls_none_as_default_for_optional: NoneAsDefaultForOptional,
-) -> str:
+def _generate_name(cls: Any, ref: str) -> str:
     """
     Generate unique name for entity type.
 
@@ -516,7 +510,7 @@ def _get_globals(t: Any) -> dict[str, Any]:
     return {}
 
 
-def _evaluate_forwardref(t: ForwardRef, meta: Meta) -> Any:
+def _evaluate_forwardref(t: ForwardRef, meta: ResolverContext) -> Any:
     return t._evaluate(meta.globals, {}, recursive_guard=frozenset[str]())
 
 
@@ -586,10 +580,6 @@ def _is_frozen_dataclass(cls: Any, field: EntityField) -> bool:
         return True
     else:
         return False
-
-
-def _is_new_type(t: Any) -> TypeGuard[NewType]:
-    return hasattr(t, '__supertype__')
 
 
 def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[Union[str, int, Enum]]]:

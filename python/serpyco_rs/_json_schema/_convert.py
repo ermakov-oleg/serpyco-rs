@@ -2,7 +2,7 @@ import sys
 import typing
 from enum import Enum
 from functools import singledispatch
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, Union
 
 from .._utils import get_attributes_doc
 from ._consts import DEFAULT_REF_PREFIX, SCHEMA_VERSION

@@ -34,6 +34,40 @@ from ._serpyco_rs import (
     CustomType,
 )
 
+__all__ = [
+    'AnyType',
+    'ArrayType',
+    'BaseType',
+    'BooleanType',
+    'BytesType',
+    'CustomEncoder',
+    'CustomType',
+    'DateTimeType',
+    'DateType',
+    'DecimalType',
+    'DefaultValue',
+    'DictionaryType',
+    'DiscriminatedUnionType',
+    'EntityField',
+    'EntityType',
+    'EnumType',
+    'ErrorItem',
+    'FloatType',
+    'IntegerType',
+    'LiteralType',
+    'OptionalType',
+    'RecursionHolder',
+    'SchemaValidationError',
+    'Serializer',
+    'StringType',
+    'TimeType',
+    'TupleType',
+    'TypedDictType',
+    'UUIDType',
+    'UnionType',
+    'ValidationError',
+]
+
 
 _T = TypeVar('_T')
 _I = TypeVar('_I')
