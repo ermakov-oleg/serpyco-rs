@@ -121,7 +121,7 @@ def test_generics__swagger_schema():
                     'type': 'object',
                 },
                 'tests.test_generics.CustomType': {
-                    'properties': {'q': {'type': 'string'}, 'w': {'type': 'integer'}},
+                    'properties': {'q': {'type': 'string'}, 'w': {'type': 'integer', 'format': 'int64'}},
                     'required': ['q', 'w'],
                     'type': 'object',
                 },
@@ -142,7 +142,7 @@ def test_generics__swagger_schema():
                 'tests.test_generics.GenericType[int]': {
                     'properties': {
                         'path': {'anyOf': [{'type': 'null'}, {'type': 'string'}]},
-                        'value': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]},
+                        'value': {'anyOf': [{'type': 'null'}, {'type': 'integer', 'format': 'int64'}]},
                     },
                     'type': 'object',
                 },
