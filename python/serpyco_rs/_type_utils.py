@@ -140,7 +140,9 @@ def get_type_hints(
         # sub the original args back in
         if ga_args is not None:
             param_tracking[obj].append(ga_args)
-            to_sub = _substitute_type_hints(param_tracking[obj], hints)
+            # Build full mapping for Python 3.12+ TypeVar compatibility
+            full_mapping = _build_full_typevar_mapping(param_tracking, ga_args)
+            to_sub = _substitute_type_hints(param_tracking[obj], hints, full_mapping)
             hints.update(to_sub)
 
         return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
@@ -181,7 +183,76 @@ def get_type_hints(
     return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
 
 
-def _substitute_type_hints(substitutions: 'list[tuple[Any, ...]]', hints: 'dict[str, Any]'):
+def _build_full_typevar_mapping(
+    param_tracking: 'dict[Any, list[tuple[Any, ...]]]', final_substitution: 'tuple[Any, ...]'
+) -> 'dict[Any, Any]':
+    """Build a complete mapping of all related TypeVars in the inheritance chain.
+
+    In Python 3.12+, each class creates its own TypeVar instances even with the same name.
+    This function traces the TypeVar substitutions through the entire inheritance chain
+    to build a complete mapping from all TypeVars to their final values.
+    """
+    if not final_substitution:
+        return {}
+
+    # Build a complete mapping by tracing substitutions through the chain
+    full_mapping = {}
+
+    # Process classes in reverse MRO order to build substitution chain
+    classes_in_order = list(param_tracking.keys())
+
+    # Start with the final class and work backwards
+    if classes_in_order and param_tracking[classes_in_order[0]]:
+        # Map final class params to their values
+        final_params = param_tracking[classes_in_order[0]][0]  # TypeVars of final class
+        for i, param in enumerate(final_params):
+            if i < len(final_substitution) and _is_typevar_like(param):
+                full_mapping[param] = final_substitution[i]
+
+    # Now process all substitution pairs to build transitive mappings
+    for substitution_list in param_tracking.values():
+        for i in range(len(substitution_list) - 1):
+            from_params = substitution_list[i]  # Source TypeVars
+            to_params = substitution_list[i + 1]  # Target values/TypeVars
+
+            # Build mapping from source to target
+            for j, from_param in enumerate(from_params):
+                if j < len(to_params) and _is_typevar_like(from_param):
+                    target = to_params[j]
+
+                    # If target is already mapped to a final value, use that
+                    if _is_typevar_like(target) and target in full_mapping:
+                        full_mapping[from_param] = full_mapping[target]
+                    # If target is not a TypeVar, it's a direct value
+                    elif not _is_typevar_like(target):
+                        full_mapping[from_param] = target
+                    # Otherwise, map TypeVar to TypeVar for later resolution
+                    else:
+                        full_mapping[from_param] = target
+
+    # Resolve any remaining TypeVar-to-TypeVar mappings
+    changed = True
+    max_iterations = 10  # Prevent infinite loops
+    iterations = 0
+
+    while changed and iterations < max_iterations:
+        changed = False
+        iterations += 1
+
+        for typevar, value in list(full_mapping.items()):
+            if _is_typevar_like(value) and value in full_mapping:
+                # Replace TypeVar with its mapped value
+                new_value = full_mapping[value]
+                if new_value != value:
+                    full_mapping[typevar] = new_value
+                    changed = True
+
+    return full_mapping
+
+
+def _substitute_type_hints(
+    substitutions: 'list[tuple[Any, ...]]', hints: 'dict[str, Any]', full_mapping: 'dict[Any, Any] | None' = None
+):
     # nothing to substitute
     if len(substitutions) < 2:
         return {}
@@ -206,6 +277,13 @@ def _substitute_type_hints(substitutions: 'list[tuple[Any, ...]]', hints: 'dict[
             mapping[previous_typevartuple] = new_value
         else:
             mapping[current] = new_substitutions[i]
+
+    # If we have a full_mapping, extend the current mapping with it
+    if full_mapping:
+        # Add all mappings from full_mapping that are not already in mapping
+        for k, v in full_mapping.items():
+            if k not in mapping:
+                mapping[k] = v
 
     hints_to_replace = {}
 

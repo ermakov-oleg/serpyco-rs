@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import TypeVar, Generic, List, Type
+from typing import Generic, List, Type, TypeVar
 
 from serpyco_rs._type_utils import get_type_hints
+
 
 T = TypeVar('T')
 U = TypeVar('U')
@@ -127,7 +128,6 @@ def test_get_type_hints_swapped_typevar_order():
     class Bar(Foo[KT, T]):
         pass
 
-    assert get_type_hints(Bar) == {'arr': List[KT], 'key': T}
     assert get_type_hints(Bar) == {'arr': List[KT], 'key': T}
 
 
