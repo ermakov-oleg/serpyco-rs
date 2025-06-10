@@ -71,6 +71,7 @@ def test_to_json_schema():
                             'maximum': 10,
                             'minimum': 0,
                             'type': 'integer',
+                            'format': 'int64',
                         },
                         'b': {'type': 'number'},
                         'c': {
@@ -91,12 +92,12 @@ def test_to_json_schema():
                         'j': {
                             '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData'
                         },
-                        'k': {'items': {'type': 'integer'}, 'type': 'array'},
+                        'k': {'items': {'type': 'integer', 'format': 'int64'}, 'type': 'array'},
                         'l': {
                             'maxItems': 3,
                             'minItems': 3,
                             'prefixItems': [
-                                {'type': 'integer'},
+                                {'type': 'integer', 'format': 'int64'},
                                 {'type': 'string'},
                                 {
                                     '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData'
@@ -104,7 +105,7 @@ def test_to_json_schema():
                             ],
                             'type': 'array',
                         },
-                        'm': {'additionalProperties': {'type': 'integer'}, 'type': 'object'},
+                        'm': {'additionalProperties': {'type': 'integer', 'format': 'int64'}, 'type': 'object'},
                         'n': {},
                         'p': {
                             '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.OtherInnerData'
@@ -199,7 +200,7 @@ def test_to_json_schema__new_union_syntax():
             'schemas': {
                 'tests.json_schema.test_convert.test_to_json_schema__new_union_syntax.<locals>.Data': {
                     'description': 'Docs',
-                    'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]}},
+                    'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer', 'format': 'int64'}]}},
                     'required': ['a'],
                     'type': 'object',
                 }
@@ -328,7 +329,7 @@ def test_to_json_schema__tagged_union():
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.test_to_json_schema__tagged_union.<locals>.Foo': {
-                    'properties': {'type': {'enum': ['foo']}, 'val': {'type': 'integer'}},
+                    'properties': {'type': {'enum': ['foo']}, 'val': {'type': 'integer', 'format': 'int64'}},
                     'required': ['val', 'type'],
                     'type': 'object',
                 },
@@ -379,7 +380,7 @@ def test_to_json_schema__union():
                     'type': 'object',
                 },
                 'tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Foo': {
-                    'properties': {'val': {'type': 'integer'}},
+                    'properties': {'val': {'type': 'integer', 'format': 'int64'}},
                     'required': ['val'],
                     'type': 'object',
                 },
@@ -400,7 +401,7 @@ def test_to_json_schema__force_none_as_default_for_optional():
         'components': {
             'schemas': {
                 'tests.json_schema.test_convert.test_to_json_schema__force_none_as_default_for_optional.<locals>.Data': {
-                    'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer'}]}},
+                    'properties': {'a': {'anyOf': [{'type': 'null'}, {'type': 'integer', 'format': 'int64'}]}},
                     'type': 'object',
                 }
             }
@@ -464,7 +465,7 @@ def test_array_length():
     assert serializer.get_json_schema() == {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'type': 'array',
-        'items': {'type': 'integer'},
+        'items': {'type': 'integer', 'format': 'int64'},
         'minItems': 1,
         'maxItems': 10,
     }
@@ -530,7 +531,7 @@ class TestJsonSchemaBuilder:
 
         assert definitions == {
             'tests.json_schema.test_convert.TestJsonSchemaBuilder.test_build__use_custom_ref_prefix.<locals>.Data': {
-                'properties': {'a': {'type': 'integer'}},
+                'properties': {'a': {'type': 'integer', 'format': 'int64'}},
                 'required': ['a'],
                 'type': 'object',
             }
@@ -543,6 +544,7 @@ class TestJsonSchemaBuilder:
 
         assert schema == {
             'type': 'integer',
+            'format': 'int64',
             '$schema': 'https://json-schema.org/draft/2020-12/schema',
         }
         assert schema_builder.get_definitions() == {}

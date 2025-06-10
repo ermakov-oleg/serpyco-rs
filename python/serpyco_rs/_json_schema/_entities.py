@@ -90,6 +90,7 @@ class NumberType(Schema):
 @dataclass
 class IntegerType(NumberType):
     type: str = 'integer'
+    format: str | None = 'int64'
 
 
 @dataclass
