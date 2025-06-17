@@ -185,7 +185,7 @@ def test_describe__dataclass__supported():
                 name='l',
                 field_type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
-                    ref_name='ANY',
+                    ref_name='',
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -197,7 +197,7 @@ def test_describe__dataclass__supported():
                 name='m',
                 field_type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
-                    ref_name='ANY',
+                    ref_name='',
                     custom_encoder=None,
                 ),
                 doc=None,

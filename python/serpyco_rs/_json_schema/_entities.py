@@ -146,9 +146,9 @@ class ArrayType(Schema):
         return {k: v for k, v in data.items() if v is not None}
 
 
-@dataclass(kw_only=True)
+@dataclass
 class RefType(Schema):
-    name: str
+    name: str | None = None
     definition: Schema | None = None
 
     @property
@@ -158,6 +158,7 @@ class RefType(Schema):
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = super().dump(definitions)
         if self.definition:
+            assert self.name
             definitions[self.name] = self.definition.dump(definitions)
         return {
             '$ref': self.ref,
