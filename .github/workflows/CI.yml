@@ -24,7 +24,7 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
-          - "3.13"
+          - "3.13.3" # wait https://github.com/python/cpython/issues/135151
         include:
           - os: macos-latest
             target: universal2-apple-darwin
