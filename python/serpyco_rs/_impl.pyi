@@ -123,9 +123,9 @@ class EntityField(BaseType):
         doc: str | None = None,
     ): ...
 
-class EntityType(ContainerBaseType):
+class EntityType(BaseType):
     cls: type[Any]
-    ref_name: str
+    name: str
     fields: Sequence[EntityField]
     omit_none: bool
     is_frozen: bool
@@ -134,7 +134,7 @@ class EntityType(ContainerBaseType):
     def __init__(
         self,
         cls: type[Any],
-        ref_name: str,
+        name: str,
         fields: Sequence[EntityField],
         omit_none: bool = False,
         is_frozen: bool = False,
@@ -142,7 +142,7 @@ class EntityType(ContainerBaseType):
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-class TypedDictType(ContainerBaseType):
+class TypedDictType(BaseType):
     name: str
     fields: Sequence[EntityField]
     omit_none: bool
@@ -150,8 +150,8 @@ class TypedDictType(ContainerBaseType):
 
     def __init__(
         self,
+        name: str,
         fields: Sequence[EntityField],
-        ref_name: str,
         omit_none: bool = False,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,

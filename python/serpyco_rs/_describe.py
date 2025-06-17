@@ -390,7 +390,7 @@ class _TypeResolver:
 
             if is_typeddict(origin):
                 return TypedDictType(
-                    ref_name=name,
+                    name=name,
                     fields=fields,
                     omit_none=cls_annotations.get(NoneFormat) is OmitNone,
                     doc=t.__doc__,
@@ -399,7 +399,7 @@ class _TypeResolver:
 
             return EntityType(
                 cls=origin,
-                ref_name=name,
+                name=name,
                 fields=fields,
                 omit_none=cls_annotations.get(NoneFormat) is OmitNone,
                 is_frozen=_is_frozen_dataclass(origin, fields[0]) if fields else False,

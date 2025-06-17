@@ -65,7 +65,7 @@ pub struct ContainerBaseType {
 impl ContainerBaseType {
     #[new]
     fn new(ref_name: &str, custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
-        PyClassInitializer::from(BaseType::new(custom_encoder)).add_subclass(ContainerBaseType {
+        BaseType::new(custom_encoder).add_subclass(ContainerBaseType {
             usage_counter: UsageCounter(AtomicUsize::new(0)),
             ref_name: ref_name.to_string(),
         })
@@ -460,13 +460,13 @@ impl PartialEq<Self> for DefaultValue {
     }
 }
 
-#[pyclass(frozen, extends=ContainerBaseType, module="serpyco_rs")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct EntityType {
     #[pyo3(get)]
     pub cls: Py<PyAny>,
     #[pyo3(get)]
-    pub name: String,
+    pub name: Py<PyAny>,
     #[pyo3(get)]
     pub fields: Vec<EntityField>,
     #[pyo3(get)]
@@ -480,21 +480,21 @@ pub struct EntityType {
 #[pymethods]
 impl EntityType {
     #[new]
-    #[pyo3(signature = (cls, fields, ref_name, omit_none=false, is_frozen=false, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, doc=None, custom_encoder=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         cls: &Bound<'_, PyAny>,
+        name: &Bound<'_, PyAny>,
         fields: Vec<EntityField>,
-        ref_name: String,
         omit_none: bool,
         is_frozen: bool,
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> PyClassInitializer<Self> {
-        ContainerBaseType::new(&ref_name, custom_encoder).add_subclass(EntityType {
+        BaseType::new(custom_encoder).add_subclass(EntityType {
             cls: cls.clone().unbind(),
-            name: ref_name.clone(),
+            name: name.clone().unbind(),
             fields,
             omit_none,
             is_frozen,
@@ -503,11 +503,11 @@ impl EntityType {
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_super().as_super();
-        let base_other = other.as_super().as_super();
+        let base = self_.as_super();
+        let base_other = other.as_super();
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.cls, other.cls, py)
-            && self_.name == other.name
+            && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
             && self_
                 .fields
@@ -536,11 +536,11 @@ impl EntityType {
     }
 }
 
-#[pyclass(frozen, extends=ContainerBaseType, module="serpyco_rs")]
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct TypedDictType {
     #[pyo3(get)]
-    pub name: String,
+    pub name: Py<PyAny>,
     #[pyo3(get)]
     pub fields: Vec<EntityField>,
     #[pyo3(get)]
@@ -552,17 +552,17 @@ pub struct TypedDictType {
 #[pymethods]
 impl TypedDictType {
     #[new]
-    #[pyo3(signature = (fields, ref_name, omit_none=false, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (name, fields, omit_none=false, doc=None, custom_encoder=None))]
     fn new(
+        name: &Bound<'_, PyAny>,
         fields: Vec<EntityField>,
-        ref_name: String,
         omit_none: bool,
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> PyClassInitializer<Self> {
-        ContainerBaseType::new(&ref_name, custom_encoder).add_subclass(TypedDictType {
-            name: ref_name,
+        BaseType::new(custom_encoder).add_subclass(TypedDictType {
+            name: name.clone().unbind(),
             fields,
             omit_none,
             doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
@@ -570,10 +570,10 @@ impl TypedDictType {
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_super().as_super();
-        let base_other = other.as_super().as_super();
+        let base = self_.as_super();
+        let base_other = other.as_super();
         Ok(base.__eq__(base_other, py)?
-            && self_.name == other.name
+            && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
             && self_
                 .fields

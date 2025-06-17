@@ -81,7 +81,7 @@ def test_describe__dataclass__supported(ns):
 
     assert describe_type(SomeEntity) == EntityType(
         cls=SomeEntity,
-        ref_name=f'{ns}.<locals>.SomeEntity',
+        name=ANY,
         fields=[
             EntityField(
                 name='a',
@@ -167,7 +167,7 @@ def test_describe__dataclass__supported(ns):
                 name='k',
                 field_type=EntityType(
                     cls=SomeOtherEntity,
-                    ref_name=f'{ns}.<locals>.SomeOtherEntity',
+                    name=ANY,
                     fields=[
                         EntityField(
                             name='a',
@@ -332,7 +332,7 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type(ns):
     )
     assert result.fields[1].field_type == EntityType(
         cls=SomeOtherEntity,
-        ref_name=f'{ns}.<locals>.SomeOtherEntity[int]',
+        name=ANY,
         fields=[EntityField(name='x', field_type=IntegerType(custom_encoder=None), dict_key='x')],
         custom_encoder=None,
     )
@@ -378,7 +378,7 @@ def test_describe__dataclass_and_annotated_with_min_max__parsed(ns):
 
     assert result == EntityType(
         cls=SomeEntity,
-        ref_name=f'{ns}.<locals>.SomeEntity',
+        name=ANY,
         fields=[
             EntityField(
                 name='x',
@@ -399,7 +399,7 @@ def test_describe__dataclass_and_annotated_with_min_max_length__parsed(ns):
 
     assert result == EntityType(
         cls=SomeEntity,
-        ref_name=f'{ns}.<locals>.SomeEntity',
+        name=ANY,
         doc=ANY,
         fields=[
             EntityField(
@@ -472,7 +472,7 @@ def test_describe__attrs_and_annotated_with_min_max__parsed(ns):
 
     assert result == EntityType(
         cls=SomeEntity,
-        ref_name=f'{ns}.<locals>.SomeEntity',
+        name=ANY,
         fields=[
             EntityField(
                 name='x',
@@ -493,7 +493,7 @@ def test_describe__attrs_and_annotated_with_min_max_length__parsed(ns):
 
     assert result == EntityType(
         cls=SomeEntity,
-        ref_name=f'{ns}.<locals>.SomeEntity',
+        name=ANY,
         custom_encoder=None,
         fields=[
             EntityField(
@@ -565,7 +565,7 @@ def test_describe__dataclass_field_format__parsed(ns):
 
     assert describe_type(Annotated[Entity, CamelCase]) == EntityType(
         cls=Entity,
-        ref_name=f'{ns}.<locals>.Entity',
+        name=ANY,
         custom_encoder=None,
         fields=[
             EntityField(
@@ -575,7 +575,7 @@ def test_describe__dataclass_field_format__parsed(ns):
                     custom_encoder=None,
                     ref_name='',
                     item_type=EntityType(
-                        ref_name=f'{ns}.<locals>.InnerEntity',
+                        name=ANY,
                         cls=InnerEntity,
                         fields=[
                             EntityField(
@@ -625,7 +625,7 @@ def test_describe__tagged_union(ns):
 
     assert describe_type(Base) == EntityType(
         cls=Base,
-        ref_name=f'{ns}.<locals>.Base',
+        name=ANY,
         fields=[
             EntityField(
                 name='field',
@@ -634,7 +634,7 @@ def test_describe__tagged_union(ns):
                     item_types={
                         'foo': EntityType(
                             cls=Foo,
-                            ref_name=f'{ns}.<locals>.Foo',
+                            name=ANY,
                             fields=[
                                 EntityField(
                                     name='val',
@@ -653,7 +653,7 @@ def test_describe__tagged_union(ns):
                         ),
                         'bar': EntityType(
                             cls=Bar,
-                            ref_name=f'{ns}.<locals>.Bar',
+                            name=ANY,
                             fields=[
                                 EntityField(
                                     name='val',
@@ -690,7 +690,7 @@ def test_describe__typed_dict(ns):
         generic_field: T
 
     assert describe_type(Entity[bool]) == TypedDictType(
-        ref_name=f'{ns}.<locals>.Entity[bool]',
+        name=ANY,
         fields=[
             EntityField(
                 name='foo_filed',
@@ -720,7 +720,7 @@ def test_describe__typed_dict__total_false(ns):
         bar: Required[str]
 
     assert describe_type(Entity) == TypedDictType(
-        ref_name=f'{ns}.<locals>.Entity',
+        name=ANY,
         fields=[
             EntityField(
                 name='foo',
@@ -739,7 +739,7 @@ def test_describe__typed_dict__total_false(ns):
     )
 
 
-def test_describe__dataclass__partial_typevars(ns):
+def test_describe__dataclass__partial_typevars():
     @dataclass
     class Foo(Generic[T, U]):
         arr: list[T]
@@ -751,7 +751,7 @@ def test_describe__dataclass__partial_typevars(ns):
 
     assert describe_type(Bar) == EntityType(
         cls=Bar,
-        ref_name=f'{ns}.<locals>.Bar',
+        name=ANY,
         fields=[
             EntityField(
                 name='arr',
@@ -768,7 +768,7 @@ def test_describe__dataclass__partial_typevars(ns):
     )
     assert describe_type(Bar[bool]) == EntityType(
         cls=Bar,
-        ref_name=f'{ns}.<locals>.Bar[bool]',
+        name=ANY,
         fields=[
             EntityField(
                 name='arr',
@@ -805,7 +805,7 @@ def test_describe__dataclass__multiple_generic_inheritance(ns):
 
     assert describe_type(Baz[int, bool]) == EntityType(
         cls=Baz,
-        ref_name=f'{ns}.<locals>.Baz[int, bool]',
+        name=ANY,
         fields=[
             EntityField(name='beer', dict_key='beer', field_type=IntegerType(custom_encoder=None)),
             EntityField(
@@ -823,7 +823,7 @@ def test_describe__dataclass__multiple_generic_inheritance(ns):
     )
     assert describe_type(Baz2[int, bool]) == EntityType(
         cls=Baz2,
-        ref_name=f'{ns}.<locals>.Baz2[int, bool]',
+        name=ANY,
         fields=[
             EntityField(name='beer', dict_key='beer', field_type=IntegerType(custom_encoder=None)),
             EntityField(

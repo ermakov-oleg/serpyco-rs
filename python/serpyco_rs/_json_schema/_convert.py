@@ -166,7 +166,7 @@ def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) ->
     return ObjectType(
         properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,
-        name=arg.ref_name,
+        name=arg.name,
         description=arg.doc,
         config=config,
     )

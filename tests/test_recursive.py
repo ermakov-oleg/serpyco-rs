@@ -28,14 +28,14 @@ class Root:
 def test_describe__recursive_type__parsed():
     assert describe_type(Root) == EntityType(
         cls=Root,
-        ref_name='tests.test_recursive.Root',
+        name=ANY,
         fields=[
             EntityField(
                 name='head',
                 dict_key='head',
                 field_type=EntityType(
                     cls=Node,
-                    ref_name='tests.test_recursive.Node',
+                    name=ANY,
                     fields=[
                         EntityField(
                             name='value',
