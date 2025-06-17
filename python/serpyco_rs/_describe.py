@@ -194,7 +194,6 @@ class _TypeResolver:
             return DictionaryType(
                 key_type=(self.resolve(args[0]) if args else AnyType(custom_encoder=None)),
                 value_type=(self.resolve(args[1]) if args else AnyType(custom_encoder=None)),
-                ref_name=name,
                 omit_none=annotations.get(NoneFormat, KeepNone).omit,
                 custom_encoder=custom_encoder,
             )

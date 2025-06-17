@@ -215,7 +215,6 @@ def test_describe__dataclass__supported(ns):
                 field_type=DictionaryType(
                     key_type=StringType(min_length=None, max_length=None, custom_encoder=None),
                     value_type=IntegerType(min=None, max=None, custom_encoder=None),
-                    ref_name='',
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -228,7 +227,6 @@ def test_describe__dataclass__supported(ns):
                 field_type=DictionaryType(
                     key_type=StringType(min_length=None, max_length=None, custom_encoder=None),
                     value_type=IntegerType(min=None, max=None, custom_encoder=None),
-                    ref_name='',
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -258,7 +256,6 @@ def test_describe_dataclass__dict_type__works_without_type_parameters():
     assert describe_type(SomeEntity).fields[0].field_type == DictionaryType(
         key_type=AnyType(custom_encoder=None),
         value_type=AnyType(custom_encoder=None),
-        ref_name='',
         custom_encoder=None,
     )
 

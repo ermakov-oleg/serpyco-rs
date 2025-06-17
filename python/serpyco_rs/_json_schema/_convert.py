@@ -184,17 +184,6 @@ def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config)
 
 
 @to_json_schema.register
-def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return ObjectType(
-        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
-        required=[prop.dict_key for prop in arg.fields if prop.required] or None,
-        name=arg.name,
-        description=arg.doc,
-        config=config,
-    )
-
-
-@to_json_schema.register
 def _(arg: describe.ArrayType, doc: Optional[str] = None, *, config: Config) -> Schema:
     schema = ArrayType(
         items=to_json_schema(arg.item_type, config=config),

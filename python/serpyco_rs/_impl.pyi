@@ -184,7 +184,7 @@ class OptionalType(BaseType):
 
     def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
-class DictionaryType(ContainerBaseType):
+class DictionaryType(BaseType):
     key_type: BaseType
     value_type: BaseType
     omit_none: bool
@@ -193,7 +193,6 @@ class DictionaryType(ContainerBaseType):
         self,
         key_type: BaseType,
         value_type: BaseType,
-        ref_name: str,
         omit_none: bool = False,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
