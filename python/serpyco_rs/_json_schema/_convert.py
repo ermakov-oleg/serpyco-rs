@@ -75,6 +75,11 @@ def _(arg: describe.StringType, doc: Optional[str] = None, *, config: Config) ->
 
 
 @to_json_schema.register
+def _(arg: describe.NoneType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Null(config=config)
+
+
+@to_json_schema.register
 def _(arg: describe.IntegerType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return IntegerType(minimum=arg.min, maximum=arg.max, description=doc, config=config)
 
@@ -161,6 +166,17 @@ def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) ->
     return ObjectType(
         properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
         required=[prop.dict_key for prop in arg.fields if prop.required] or None,
+        name=arg.ref_name,
+        description=arg.doc,
+        config=config,
+    )
+
+
+@to_json_schema.register
+def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return ObjectType(
+        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
+        required=[prop.dict_key for prop in arg.fields if prop.required] or None,
         name=arg.name,
         description=arg.doc,
         config=config,
@@ -180,13 +196,17 @@ def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config)
 
 @to_json_schema.register
 def _(arg: describe.ArrayType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return ArrayType(
+    schema = ArrayType(
         items=to_json_schema(arg.item_type, config=config),
         minItems=arg.min_length,
         maxItems=arg.max_length,
         description=doc,
         config=config,
     )
+
+    if arg.should_use_ref():
+        return RefType(description=doc, name=arg.ref_name, definition=schema, config=config)
+    return schema
 
 
 @to_json_schema.register
@@ -198,13 +218,16 @@ def _(arg: describe.DictionaryType, doc: Optional[str] = None, *, config: Config
 
 @to_json_schema.register
 def _(arg: describe.TupleType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return ArrayType(
+    schema = ArrayType(
         prefixItems=[to_json_schema(item, config=config) for item in arg.item_types],
         minItems=len(arg.item_types),
         maxItems=len(arg.item_types),
         description=doc,
         config=config,
     )
+    if arg.should_use_ref():
+        return RefType(description=doc, name=arg.ref_name, definition=schema, config=config)
+    return schema
 
 
 @to_json_schema.register
@@ -228,11 +251,16 @@ def _(arg: describe.LiteralType, doc: Optional[str] = None, *, config: Config) -
 
 @to_json_schema.register
 def _(arg: describe.UnionType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return Schema(
+    schema = Schema(
         oneOf=[to_json_schema(t, config=config) for t in arg.item_types],
         description=doc,
         config=config,
     )
+
+    if arg.should_use_ref():
+        return RefType(description=doc, name=arg.ref_name, definition=schema, config=config)
+
+    return schema
 
 
 @to_json_schema.register
@@ -243,7 +271,7 @@ def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None, *, config
         if (schema := to_json_schema(t, config=config)) and _check_unions_schema_types(schema)
     }
 
-    return DiscriminatedUnionType(
+    schema = DiscriminatedUnionType(
         oneOf=list(objects.values()),
         discriminator=Discriminator(
             property_name=arg.load_discriminator,
@@ -252,6 +280,10 @@ def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None, *, config
         description=doc,
         config=config,
     )
+    if arg.should_use_ref():
+        return RefType(description=doc, name=arg.ref_name, definition=schema, config=config)
+
+    return schema
 
 
 def _check_unions_schema_types(schema: Schema) -> TypeGuard[Union[ObjectType, RefType]]:

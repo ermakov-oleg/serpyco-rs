@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Any, Optional, TypeVar, overload
 
 from typing_extensions import Self
@@ -12,7 +13,8 @@ class ResolverContext:
     """Context for the type resolution process"""
 
     globals: dict[str, Any]
-    type_cache: dict[str, Optional[BaseType]]
+    type_cache: dict[str, Optional[BaseType]] = field(default_factory=dict)
+    usage_count: defaultdict[str, int] = field(default_factory=lambda: defaultdict[str, int](int))
     discriminator_field: Optional[str] = None
 
     def cache_type(self, key: str, value: Optional[BaseType]) -> None:
@@ -28,7 +30,12 @@ class ResolverContext:
 
     def has_cached_type(self, key: str) -> bool:
         """Check if a type is cached"""
+        self.usage_count[key] += 1
         return key in self.type_cache
+
+    def get_usage_count(self, key: str) -> int:
+        """Get the usage count of a type"""
+        return self.usage_count[key]
 
 
 _T = TypeVar('_T')

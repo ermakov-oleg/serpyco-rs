@@ -268,4 +268,6 @@ def test_load_union_simple_types__invalid_type():
     with pytest.raises(SchemaValidationError) as exc_info:
         serializer.load(123.0)
 
-    assert exc_info.value.errors == [ErrorItem(message='123.0 is not of type "Union[int, str]"', instance_path='')]
+    assert exc_info.value.errors == [
+        ErrorItem(message='123.0 is not of type "typing.Union[int, str]"', instance_path='')
+    ]

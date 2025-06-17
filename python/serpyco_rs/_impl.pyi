@@ -37,6 +37,15 @@ class BaseType:
 
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
 
+class ContainerBaseType(BaseType):
+    ref_name: str
+
+    def set_usages(self, val: int) -> None: ...
+    def should_use_ref(self) -> bool: ...
+
+class NoneType(BaseType):
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+
 class IntegerType(BaseType):
     min: int | None
     max: int | None
@@ -114,9 +123,9 @@ class EntityField(BaseType):
         doc: str | None = None,
     ): ...
 
-class EntityType(BaseType):
+class EntityType(ContainerBaseType):
     cls: type[Any]
-    name: str
+    ref_name: str
     fields: Sequence[EntityField]
     omit_none: bool
     is_frozen: bool
@@ -125,7 +134,7 @@ class EntityType(BaseType):
     def __init__(
         self,
         cls: type[Any],
-        name: str,
+        ref_name: str,
         fields: Sequence[EntityField],
         omit_none: bool = False,
         is_frozen: bool = False,
@@ -133,7 +142,7 @@ class EntityType(BaseType):
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-class TypedDictType(BaseType):
+class TypedDictType(ContainerBaseType):
     name: str
     fields: Sequence[EntityField]
     omit_none: bool
@@ -141,14 +150,14 @@ class TypedDictType(BaseType):
 
     def __init__(
         self,
-        name: str,
         fields: Sequence[EntityField],
+        ref_name: str,
         omit_none: bool = False,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-class ArrayType(BaseType):
+class ArrayType(ContainerBaseType):
     item_type: BaseType
     min_length: int | None
     max_length: int | None
@@ -156,6 +165,7 @@ class ArrayType(BaseType):
     def __init__(
         self,
         item_type: BaseType,
+        ref_name: str,
         min_length: int | None = None,
         max_length: int | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
@@ -174,7 +184,7 @@ class OptionalType(BaseType):
 
     def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
-class DictionaryType(BaseType):
+class DictionaryType(ContainerBaseType):
     key_type: BaseType
     value_type: BaseType
     omit_none: bool
@@ -183,14 +193,20 @@ class DictionaryType(BaseType):
         self,
         key_type: BaseType,
         value_type: BaseType,
+        ref_name: str,
         omit_none: bool = False,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-class TupleType(BaseType):
+class TupleType(ContainerBaseType):
     item_types: list[BaseType]
 
-    def __init__(self, item_types: list[BaseType], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(
+        self,
+        item_types: list[BaseType],
+        ref_name: str,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+    ): ...
 
 class BytesType(BaseType):
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
@@ -198,18 +214,17 @@ class BytesType(BaseType):
 class AnyType(BaseType):
     def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
 
-class UnionType(BaseType):
+class UnionType(ContainerBaseType):
     item_types: list[BaseType]
-    union_repr: str
 
     def __init__(
         self,
         item_types: list[BaseType],
-        union_repr: str,
+        ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
-class DiscriminatedUnionType(BaseType):
+class DiscriminatedUnionType(ContainerBaseType):
     item_types: dict[str, BaseType]
     dump_discriminator: str
     load_discriminator: str
@@ -219,6 +234,7 @@ class DiscriminatedUnionType(BaseType):
         item_types: dict[str, BaseType],
         dump_discriminator: str,
         load_discriminator: str,
+        ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 
@@ -235,7 +251,7 @@ class RecursionHolder(BaseType):
     def __init__(
         self, name: str, state_key: str, meta: ResolverContext, custom_encoder: CustomEncoder[Any, Any] | None = None
     ): ...
-    def get_type(self) -> BaseType: ...
+    def get_inner_type(self) -> BaseType: ...
 
 class CustomType(BaseType):
     json_schema: dict[str, Any]

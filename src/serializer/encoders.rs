@@ -85,6 +85,29 @@ impl Encoder for NoopEncoder {
 }
 
 #[derive(Debug, Clone)]
+pub struct NoneEncoder;
+
+impl Encoder for NoneEncoder {
+    #[inline]
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        Ok(value.clone())
+    }
+
+    #[inline]
+    fn load<'a>(
+        &self,
+        value: &Bound<'a, PyAny>,
+        instance_path: &InstancePath,
+        _ctx: &Context,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        if value.is_none() {
+            return Ok(value.clone());
+        }
+        invalid_type!("None", value, instance_path)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct IntEncoder {
     pub(crate) type_info: IntegerType,
 }
@@ -785,7 +808,7 @@ impl Encoder for TupleEncoder {
 #[derive(Debug, Clone)]
 pub struct UnionEncoder {
     pub(crate) encoders: Vec<Box<TEncoder>>,
-    pub(crate) union_repr: String,
+    pub(crate) repr: String,
 }
 
 impl Encoder for UnionEncoder {
@@ -797,7 +820,7 @@ impl Encoder for UnionEncoder {
                 return result;
             }
         }
-        invalid_type_dump!(&self.union_repr, value)
+        invalid_type_dump!(&self.repr, value)
     }
 
     #[inline]
@@ -813,7 +836,7 @@ impl Encoder for UnionEncoder {
                 return result;
             }
         }
-        invalid_type!(&self.union_repr, value, instance_path)
+        invalid_type!(&self.repr, value, instance_path)
     }
 }
 

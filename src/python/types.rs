@@ -5,12 +5,13 @@ use pyo3::{PyAny, PyResult};
 use crate::validator::types::{
     AnyType, ArrayType, BaseType, BooleanType, BytesType, CustomType, DateTimeType, DateType,
     DecimalType, DictionaryType, DiscriminatedUnionType, EntityType, EnumType, FloatType,
-    IntegerType, LiteralType, OptionalType, RecursionHolder, StringType, TimeType, TupleType,
-    TypedDictType, UUIDType, UnionType,
+    IntegerType, LiteralType, NoneType, OptionalType, RecursionHolder, StringType, TimeType,
+    TupleType, TypedDictType, UUIDType, UnionType,
 };
 
 #[derive(Clone, Debug)]
 pub enum Type<'a, Base = Bound<'a, BaseType>> {
+    None(Bound<'a, NoneType>, Base),
     Integer(Bound<'a, IntegerType>, Base),
     Float(Bound<'a, FloatType>, Base),
     Decimal(Bound<'a, DecimalType>, Base),
@@ -47,6 +48,7 @@ pub enum Type<'a, Base = Bound<'a, BaseType>> {
 pub fn get_object_type<'a>(type_info: &Bound<'a, PyAny>) -> PyResult<Type<'a>> {
     let base_type = type_info.extract::<Bound<'_, BaseType>>()?;
     let python_object_id = type_info.as_ptr() as *const _ as usize;
+    check_type!(type_info, base_type, None, NoneType);
     check_type!(type_info, base_type, Integer, IntegerType);
     check_type!(type_info, base_type, String, StringType);
     check_type!(type_info, base_type, Float, FloatType);

@@ -11,7 +11,12 @@ from serpyco_rs import JsonSchemaBuilder, Serializer
 from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, OmitNone
 
 
-def test_to_json_schema():
+@pytest.fixture
+def ns(request) -> str:
+    return f'tests.json_schema.test_convert.{request.node.name}'
+
+
+def test_to_json_schema(ns):
     class EnumCls(Enum):
         a = 'a'
 
@@ -59,11 +64,11 @@ def test_to_json_schema():
     serializer = Serializer(Data)
 
     assert serializer.get_json_schema() == {
-        '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.Data',
+        '$ref': f'#/components/schemas/{ns}.<locals>.Data',
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
         'components': {
             'schemas': {
-                'tests.json_schema.test_convert.test_to_json_schema.<locals>.Data': {
+                f'{ns}.<locals>.Data': {
                     'description': 'Docs',
                     'properties': {
                         'a': {
@@ -89,9 +94,7 @@ def test_to_json_schema():
                             'type': 'string',
                         },
                         'i': {'enum': ['a'], 'type': 'string'},
-                        'j': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData'
-                        },
+                        'j': {'$ref': f'#/components/schemas/{ns}.<locals>.InnerData'},
                         'k': {'items': {'type': 'integer', 'format': 'int64'}, 'type': 'array'},
                         'l': {
                             'maxItems': 3,
@@ -99,23 +102,15 @@ def test_to_json_schema():
                             'prefixItems': [
                                 {'type': 'integer', 'format': 'int64'},
                                 {'type': 'string'},
-                                {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData'
-                                },
+                                {'$ref': f'#/components/schemas/{ns}.<locals>.InnerData'},
                             ],
                             'type': 'array',
                         },
                         'm': {'additionalProperties': {'type': 'integer', 'format': 'int64'}, 'type': 'object'},
                         'n': {},
-                        'p': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.OtherInnerData'
-                        },
-                        'o': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData1'
-                        },
-                        'q': {
-                            '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.AnotherInnerData'
-                        },
+                        'p': {'$ref': f'#/components/schemas/{ns}.<locals>.OtherInnerData'},
+                        'o': {'$ref': f'#/components/schemas/{ns}.<locals>.InnerData1'},
+                        'q': {'$ref': f'#/components/schemas/{ns}.<locals>.AnotherInnerData'},
                         'fooFiled': {'type': 'string'},
                     },
                     'required': [
@@ -140,39 +135,37 @@ def test_to_json_schema():
                     ],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData': {
+                f'{ns}.<locals>.InnerData': {
                     'description': 'Some important entity',
                     'properties': {'foo_filed': {'type': 'string'}},
                     'required': ['foo_filed'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData2': {
+                f'{ns}.<locals>.InnerData2': {
                     'description': 'Some important entity',
                     'properties': {'foo_filed': {'type': 'string'}},
                     'required': ['foo_filed'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData1': {
+                f'{ns}.<locals>.InnerData1': {
                     'description': 'Some important entity',
                     'properties': {'fooFiled': {'type': 'string'}},
                     'required': ['fooFiled'],
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.test_to_json_schema.<locals>.OtherInnerData': {
+                f'{ns}.<locals>.OtherInnerData': {
                     'description': 'OtherInnerData',
                     'properties': {
                         'optional_filed': {
                             'anyOf': [
                                 {'type': 'null'},
-                                {
-                                    '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema.<locals>.InnerData2'
-                                },
+                                {'$ref': f'#/components/schemas/{ns}.<locals>.InnerData2'},
                             ]
                         }
                     },
                     'type': 'object',
                 },
-                'tests.json_schema.test_convert.test_to_json_schema.<locals>.AnotherInnerData': {
+                f'{ns}.<locals>.AnotherInnerData': {
                     'description': 'AnotherInnerData',
                     'properties': {'bar': {'type': 'string'}},
                     'required': ['bar'],
@@ -425,6 +418,36 @@ def test_to_json_schema__bytes():
                     'type': 'object',
                     'required': ['a'],
                 }
+            }
+        },
+    }
+
+
+def test_to_json_schema__use_ref_for_repeated_types():
+    @dataclass
+    class Data:
+        a: list[str]
+        b: list[str]
+
+    ref = 'tests.json_schema.test_convert.test_to_json_schema__use_ref_for_repeated_types.<locals>.Data'
+    serializer = Serializer(Data)
+    assert serializer.get_json_schema() == {
+        '$ref': f'#/components/schemas/{ref}',
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'components': {
+            'schemas': {
+                ref: {
+                    'properties': {
+                        'a': {'$ref': '#/components/schemas/list[str]'},
+                        'b': {'$ref': '#/components/schemas/list[str]'},
+                    },
+                    'type': 'object',
+                    'required': ['a', 'b'],
+                },
+                'list[str]': {
+                    'items': {'type': 'string'},
+                    'type': 'array',
+                },
             }
         },
     }
