@@ -24,18 +24,27 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
-          - "3.13.3" # wait https://github.com/python/cpython/issues/135151
+          - "3.13"
         include:
           - os: macos-latest
             target: universal2-apple-darwin
+          # wait https://github.com/python/cpython/issues/135151
+          - os: windows-latest
+            python-version: "3.13"
+            python-version-full: "3.13.3"
     name: Build on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Set Python version
+        id: full-python-version
+        run: |
+          echo "version=${{ matrix.python-version-full || matrix.python-version }}" >> $GITHUB_OUTPUT
+
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         id: python
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ steps.full-python-version.outputs.version }}
           allow-prereleases: true
           cache: "pip"
 
