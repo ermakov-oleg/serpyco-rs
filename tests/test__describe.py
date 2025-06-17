@@ -45,12 +45,7 @@ T = TypeVar('T')
 U = TypeVar('U')
 
 
-@pytest.fixture
-def ns(request) -> str:
-    return f'tests.test__describe.{request.node.name}'
-
-
-def test_describe__dataclass__supported(ns):
+def test_describe__dataclass__supported():
     class SomeEnum(Enum):
         a = 'a'
 
@@ -314,7 +309,7 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
     )
 
 
-def test_describe_dataclass__generic_with_type_params__expected_right_type(ns):
+def test_describe_dataclass__generic_with_type_params__expected_right_type():
     @dataclass
     class SomeOtherEntity(Generic[T]):
         x: T
@@ -369,7 +364,7 @@ def test_describe__dataclass_with_invalid_forward_ref_annotation__parsed():
     assert exc_info.match(r"name 'intt' is not defined")
 
 
-def test_describe__dataclass_and_annotated_with_min_max__parsed(ns):
+def test_describe__dataclass_and_annotated_with_min_max__parsed():
     @dataclass
     class SomeEntity:
         x: Annotated[int, Min(10), Max(20)]
@@ -390,7 +385,7 @@ def test_describe__dataclass_and_annotated_with_min_max__parsed(ns):
     )
 
 
-def test_describe__dataclass_and_annotated_with_min_max_length__parsed(ns):
+def test_describe__dataclass_and_annotated_with_min_max_length__parsed():
     @dataclass
     class SomeEntity:
         x: Annotated[str, MinLength(10), MaxLength(20)]
@@ -463,7 +458,7 @@ def test_describe__attrs_with_invalid_forward_ref_annotation__parsed():
     assert exc_info.match(r"name 'intt' is not defined")
 
 
-def test_describe__attrs_and_annotated_with_min_max__parsed(ns):
+def test_describe__attrs_and_annotated_with_min_max__parsed():
     @attr.define
     class SomeEntity:
         x: Annotated[int, Min(10), Max(20)]
@@ -484,7 +479,7 @@ def test_describe__attrs_and_annotated_with_min_max__parsed(ns):
     )
 
 
-def test_describe__attrs_and_annotated_with_min_max_length__parsed(ns):
+def test_describe__attrs_and_annotated_with_min_max_length__parsed():
     @dataclass
     class SomeEntity:
         x: Annotated[str, MinLength(10), MaxLength(20)]
@@ -552,7 +547,7 @@ def test_describe__invalid_tuple__error(t):
     assert exc_info.match('Variable length tuples are not supported')
 
 
-def test_describe__dataclass_field_format__parsed(ns):
+def test_describe__dataclass_field_format__parsed():
     @dataclass
     class InnerEntity:
         foo_field: str
@@ -608,7 +603,7 @@ def test_describe__literal():
     assert describe_type(Literal['foo', 'bar']) == LiteralType(args=['foo', 'bar'], custom_encoder=None)
 
 
-def test_describe__tagged_union(ns):
+def test_describe__tagged_union():
     @dataclass
     class Foo:
         val: int
@@ -683,7 +678,7 @@ def test_describe__tagged_union(ns):
     )
 
 
-def test_describe__typed_dict(ns):
+def test_describe__typed_dict():
     class Entity(TypedDict, Generic[T]):
         foo_filed: int
         bar_field: Annotated[NotRequired[str], Alias('barField')]
@@ -714,7 +709,7 @@ def test_describe__typed_dict(ns):
     )
 
 
-def test_describe__typed_dict__total_false(ns):
+def test_describe__typed_dict__total_false():
     class Entity(TypedDict, total=False):
         foo: int
         bar: Required[str]
@@ -785,7 +780,7 @@ def test_describe__dataclass__partial_typevars():
     )
 
 
-def test_describe__dataclass__multiple_generic_inheritance(ns):
+def test_describe__dataclass__multiple_generic_inheritance():
     @dataclass
     class Foo(Generic[T, U]):
         arr: list[T]
