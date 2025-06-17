@@ -35,16 +35,11 @@ jobs:
     name: Build on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Set Python version
-        id: full-python-version
-        run: |
-          echo "version=${{ matrix.python-version-full || matrix.python-version }}" >> $GITHUB_OUTPUT
-
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         id: python
         with:
-          python-version: ${{ steps.full-python-version.outputs.version }}
+          python-version: ${{ matrix.python-version-full || matrix.python-version }}
           allow-prereleases: true
           cache: "pip"
 
