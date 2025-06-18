@@ -10,7 +10,7 @@ use pyo3::{intern, PyAny, PyResult};
 use crate::python::{get_object_type, Type};
 use crate::serializer::encoders::{
     BooleanEncoder, BytesEncoder, CustomTypeEncoder, DiscriminatorKey, FloatEncoder, IntEncoder,
-    LiteralEncoder, QueryFields, StringEncoder, TypedDictEncoder, UnionEncoder,
+    LiteralEncoder, NoneEncoder, QueryFields, StringEncoder, TypedDictEncoder, UnionEncoder,
 };
 use crate::validator::types::{BaseType, EntityField};
 use crate::validator::{types, Context, InstancePath};
@@ -125,6 +125,10 @@ pub fn get_encoder(
     naive_datetime_to_utc: bool,
 ) -> PyResult<Box<TEncoder>> {
     let encoder: Box<TEncoder> = match obj_type {
+        Type::None(_type_info, base_type) => {
+            let encoder = NoneEncoder {};
+            wrap_with_custom_encoder(py, base_type, Box::new(encoder))?
+        }
         Type::Integer(type_info, base_type) => {
             let type_info = type_info.get().clone();
             let encoder = IntEncoder { type_info };
@@ -285,7 +289,7 @@ pub fn get_encoder(
 
             let encoder = UnionEncoder {
                 encoders,
-                union_repr: type_info.get().union_repr.clone(),
+                repr: type_info.get().repr.clone(),
             };
 
             encoder_state.create_and_register(

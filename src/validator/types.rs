@@ -5,6 +5,8 @@ use pyo3::{intern, BoundObject};
 use crate::python::fmt_py;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyInt, PyList, PyNone};
+use pyo3::PyClassInitializer;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 macro_rules! py_eq {
     ($obj1:expr, $obj2:expr, $py:expr) => {
@@ -23,10 +25,10 @@ pub struct BaseType {
 impl BaseType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> Self {
-        BaseType {
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(BaseType {
             custom_encoder: custom_encoder.map(|x| x.clone().unbind()),
-        }
+        })
     }
 
     fn __repr__(&self) -> String {
@@ -39,6 +41,55 @@ impl BaseType {
             (None, None) => Ok(true),
             _ => Ok(false),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct UsageCounter(AtomicUsize);
+
+impl Clone for UsageCounter {
+    fn clone(&self) -> Self {
+        Self(AtomicUsize::new(self.0.load(Ordering::Relaxed)))
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module = "serpyco_rs", subclass)]
+#[derive(Debug, Clone)]
+pub struct ContainerBaseType {
+    usage_counter: UsageCounter,
+    #[pyo3(get)]
+    ref_name: String,
+}
+
+#[pymethods]
+impl ContainerBaseType {
+    #[new]
+    fn new(ref_name: &str, custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(ContainerBaseType {
+            usage_counter: UsageCounter(AtomicUsize::new(0)),
+            ref_name: ref_name.to_string(),
+        })
+    }
+
+    fn set_usages(&self, value: usize) {
+        self.usage_counter.0.store(value, Ordering::Relaxed);
+    }
+
+    fn should_use_ref(&self) -> bool {
+        self.usage_counter.0.load(Ordering::Relaxed) > 1
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<ContainerBaseType: usage_count={}>",
+            self.usage_counter.0.load(Ordering::Relaxed)
+        )
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_super();
+        let base_other = other.as_super();
+        base.__eq__(base_other, py)
     }
 }
 
@@ -55,14 +106,11 @@ pub struct CustomEncoder {
 impl CustomEncoder {
     #[new]
     #[pyo3(signature = (serialize=None, deserialize=None))]
-    fn new(
-        serialize: Option<&Bound<'_, PyAny>>,
-        deserialize: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<Self> {
-        Ok(CustomEncoder {
+    fn new(serialize: Option<&Bound<'_, PyAny>>, deserialize: Option<&Bound<'_, PyAny>>) -> Self {
+        CustomEncoder {
             serialize: serialize.map(|x| x.clone().unbind()),
             deserialize: deserialize.map(|x| x.clone().unbind()),
-        })
+        }
     }
 
     fn __repr__(&self) -> String {
@@ -70,6 +118,29 @@ impl CustomEncoder {
             "<CustomEncoder: serialize={:?}, deserialize={:?}>",
             self.serialize, self.deserialize
         )
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoneType {}
+
+#[pymethods]
+impl NoneType {
+    #[new]
+    #[pyo3(signature = (custom_encoder=None))]
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
+    }
+
+    fn __repr__(&self) -> String {
+        "<NoneType>".to_string()
     }
 }
 
@@ -90,8 +161,8 @@ impl IntegerType {
         min: Option<i64>,
         max: Option<i64>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (IntegerType { min, max }, BaseType::new(custom_encoder))
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self { min, max })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -122,8 +193,8 @@ impl FloatType {
         min: Option<f64>,
         max: Option<f64>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (FloatType { min, max }, BaseType::new(custom_encoder))
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self { min, max })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -154,8 +225,8 @@ impl DecimalType {
         min: Option<f64>,
         max: Option<f64>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (DecimalType { min, max }, BaseType::new(custom_encoder))
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self { min, max })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -186,14 +257,11 @@ impl StringType {
         min_length: Option<usize>,
         max_length: Option<usize>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            StringType {
-                min_length,
-                max_length,
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {
+            min_length,
+            max_length,
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -220,8 +288,8 @@ pub struct BooleanType {}
 impl BooleanType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (BooleanType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -243,8 +311,8 @@ pub struct UUIDType {}
 impl UUIDType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (UUIDType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -266,8 +334,8 @@ pub struct TimeType {}
 impl TimeType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (TimeType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -289,8 +357,8 @@ pub struct DateTimeType {}
 impl DateTimeType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (DateTimeType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -312,8 +380,8 @@ pub struct DateType {}
 impl DateType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (DateType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -423,23 +491,20 @@ impl EntityType {
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
-    ) -> (Self, BaseType) {
-        (
-            EntityType {
-                cls: cls.clone().unbind(),
-                name: name.clone().unbind(),
-                fields,
-                omit_none,
-                is_frozen,
-                doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(EntityType {
+            cls: cls.clone().unbind(),
+            name: name.clone().unbind(),
+            fields,
+            omit_none,
+            is_frozen,
+            doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
+        let base = self_.as_super();
+        let base_other = other.as_super();
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.cls, other.cls, py)
             && py_eq!(self_.name, other.name, py)
@@ -495,21 +560,18 @@ impl TypedDictType {
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
-    ) -> (Self, BaseType) {
-        (
-            TypedDictType {
-                name: name.clone().unbind(),
-                fields,
-                omit_none,
-                doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(TypedDictType {
+            name: name.clone().unbind(),
+            fields,
+            omit_none,
+            doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
+        let base = self_.as_super();
+        let base_other = other.as_super();
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.name, other.name, py)
             && self_.fields.len() == other.fields.len()
@@ -604,7 +666,7 @@ impl EntityField {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[pyclass(frozen, extends=ContainerBaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct ArrayType {
     #[pyo3(get)]
@@ -618,26 +680,24 @@ pub struct ArrayType {
 #[pymethods]
 impl ArrayType {
     #[new]
-    #[pyo3(signature = (item_type, min_length=None, max_length=None, custom_encoder=None))]
+    #[pyo3(signature = (item_type, ref_name, min_length=None, max_length=None, custom_encoder=None))]
     fn new(
         item_type: &Bound<'_, PyAny>,
+        ref_name: String,
         min_length: Option<usize>,
         max_length: Option<usize>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            ArrayType {
-                item_type: item_type.clone().unbind(),
-                min_length,
-                max_length,
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        ContainerBaseType::new(&ref_name, custom_encoder).add_subclass(ArrayType {
+            item_type: item_type.clone().unbind(),
+            min_length,
+            max_length,
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
+        let base = self_.as_super().as_super();
+        let base_other = other.as_super().as_super();
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.item_type, other.item_type, py)
             && self_.min_length == other.min_length
@@ -676,7 +736,7 @@ impl EnumType {
         cls: &Bound<'_, PyAny>,
         items: &Bound<'_, PyList>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<(Self, BaseType)> {
+    ) -> PyResult<PyClassInitializer<Self>> {
         let load_map = PyDict::new(cls.py());
         let mut dump_map = IntMap::default();
         let mut items_repr = Vec::with_capacity(items.len());
@@ -698,16 +758,13 @@ impl EnumType {
             }
         }
 
-        Ok((
-            EnumType {
-                cls: cls.clone().unbind(),
-                items: items.clone().unbind(),
-                items_repr: format!("[{}]", items_repr.join(", ")),
-                load_map: load_map.unbind(),
-                dump_map,
-            },
-            BaseType::new(custom_encoder),
-        ))
+        Ok(BaseType::new(custom_encoder).add_subclass(EnumType {
+            cls: cls.clone().unbind(),
+            items: items.clone().unbind(),
+            items_repr: format!("[{}]", items_repr.join(", ")),
+            load_map: load_map.unbind(),
+            dump_map,
+        }))
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -741,13 +798,10 @@ impl OptionalType {
     fn new(
         inner: &Bound<'_, PyAny>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            OptionalType {
-                inner: inner.clone().unbind(),
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {
+            inner: inner.clone().unbind(),
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -781,20 +835,17 @@ impl DictionaryType {
         value_type: &Bound<'_, PyAny>,
         omit_none: bool,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            DictionaryType {
-                key_type: key_type.clone().unbind(),
-                value_type: value_type.clone().unbind(),
-                omit_none,
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(DictionaryType {
+            key_type: key_type.clone().unbind(),
+            value_type: value_type.clone().unbind(),
+            omit_none,
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
+        let base = self_.as_super();
+        let base_other = other.as_super();
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.key_type, other.key_type, py)
             && py_eq!(self_.value_type, other.value_type, py)
@@ -811,7 +862,7 @@ impl DictionaryType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[pyclass(frozen, extends=ContainerBaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct TupleType {
     #[pyo3(get)]
@@ -821,22 +872,20 @@ pub struct TupleType {
 #[pymethods]
 impl TupleType {
     #[new]
-    #[pyo3(signature = (item_types, custom_encoder=None))]
+    #[pyo3(signature = (item_types, ref_name, custom_encoder=None))]
     fn new(
         item_types: Vec<Bound<'_, PyAny>>,
+        ref_name: String,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            TupleType {
-                item_types: item_types.into_iter().map(|x| x.unbind()).collect(),
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        ContainerBaseType::new(&ref_name, custom_encoder).add_subclass(TupleType {
+            item_types: item_types.into_iter().map(|x| x.unbind()).collect(),
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
+        let base = self_.as_super().as_super();
+        let base_other = other.as_super().as_super();
         Ok(base.__eq__(base_other, py)?
             && self_.item_types.len() == other.item_types.len()
             && self_
@@ -865,8 +914,8 @@ pub struct BytesType {}
 impl BytesType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (BytesType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(BytesType {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -888,8 +937,8 @@ pub struct AnyType {}
 impl AnyType {
     #[new]
     #[pyo3(signature = (custom_encoder=None))]
-    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> (Self, BaseType) {
-        (AnyType {}, BaseType::new(custom_encoder))
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(AnyType {})
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -903,7 +952,7 @@ impl AnyType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[pyclass(frozen, extends=ContainerBaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct DiscriminatedUnionType {
     #[pyo3(get)]
@@ -917,26 +966,24 @@ pub struct DiscriminatedUnionType {
 #[pymethods]
 impl DiscriminatedUnionType {
     #[new]
-    #[pyo3(signature = (item_types, dump_discriminator, load_discriminator, custom_encoder=None))]
+    #[pyo3(signature = (item_types, dump_discriminator, load_discriminator, ref_name, custom_encoder=None))]
     fn new(
         item_types: &Bound<'_, PyAny>,
         dump_discriminator: &Bound<'_, PyAny>,
         load_discriminator: &Bound<'_, PyAny>,
+        ref_name: String,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            DiscriminatedUnionType {
-                item_types: item_types.clone().unbind(),
-                dump_discriminator: dump_discriminator.clone().unbind(),
-                load_discriminator: load_discriminator.clone().unbind(),
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        ContainerBaseType::new(&ref_name, custom_encoder).add_subclass(DiscriminatedUnionType {
+            item_types: item_types.clone().unbind(),
+            dump_discriminator: dump_discriminator.clone().unbind(),
+            load_discriminator: load_discriminator.clone().unbind(),
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
+        let base = self_.as_super().as_super();
+        let base_other = other.as_super().as_super();
         Ok(base.__eq__(base_other, py)?
             && py_eq!(self_.item_types, other.item_types, py)
             && py_eq!(self_.dump_discriminator, other.dump_discriminator, py)
@@ -953,38 +1000,33 @@ impl DiscriminatedUnionType {
     }
 }
 
-#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[pyclass(frozen, extends=ContainerBaseType, module="serpyco_rs")]
 #[derive(Debug, Clone)]
 pub struct UnionType {
     #[pyo3(get)]
     pub item_types: Py<PyAny>,
-    pub union_repr: String,
+    pub repr: String,
 }
 
 #[pymethods]
 impl UnionType {
     #[new]
-    #[pyo3(signature = (item_types, union_repr, custom_encoder=None))]
+    #[pyo3(signature = (item_types, ref_name, custom_encoder=None))]
     fn new(
         item_types: &Bound<'_, PyAny>,
-        union_repr: String,
+        ref_name: String,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            UnionType {
-                item_types: item_types.clone().unbind(),
-                union_repr,
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        ContainerBaseType::new(&ref_name, custom_encoder).add_subclass(UnionType {
+            item_types: item_types.clone().unbind(),
+            repr: ref_name,
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
-        let base = self_.as_ref();
-        let base_other = other.as_ref();
-        Ok(base.__eq__(base_other, py)?
-            && py_eq!(self_.item_types, other.item_types, py)
-            && self_.union_repr == other.union_repr)
+        let base = self_.as_super().as_super();
+        let base_other = other.as_super().as_super();
+        Ok(base.__eq__(base_other, py)? && py_eq!(self_.item_types, other.item_types, py))
     }
 
     fn __repr__(&self) -> String {
@@ -1011,7 +1053,7 @@ impl LiteralType {
     fn new(
         args: &Bound<'_, PyList>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<(Self, BaseType)> {
+    ) -> PyResult<PyClassInitializer<Self>> {
         let len = args.len();
         let load_map = PyDict::new(args.py());
         let dump_map = PyDict::new(args.py());
@@ -1036,15 +1078,12 @@ impl LiteralType {
             }
         }
 
-        Ok((
-            LiteralType {
-                args: args.clone().unbind(),
-                items_repr: format!("[{}]", items_repr.join(", ")),
-                load_map: load_map.unbind(),
-                dump_map: dump_map.unbind(),
-            },
-            BaseType::new(custom_encoder),
-        ))
+        Ok(BaseType::new(custom_encoder).add_subclass(LiteralType {
+            args: args.clone().unbind(),
+            items_repr: format!("[{}]", items_repr.join(", ")),
+            load_map: load_map.unbind(),
+            dump_map: dump_map.unbind(),
+        }))
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
@@ -1076,15 +1115,12 @@ impl RecursionHolder {
         state_key: &Bound<'_, PyAny>,
         meta: &Bound<'_, PyAny>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
-    ) -> (Self, BaseType) {
-        (
-            RecursionHolder {
-                name: name.clone().unbind(),
-                state_key: state_key.clone().unbind(),
-                meta: meta.clone().unbind(),
-            },
-            BaseType::new(custom_encoder),
-        )
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(RecursionHolder {
+            name: name.clone().unbind(),
+            state_key: state_key.clone().unbind(),
+            meta: meta.clone().unbind(),
+        })
     }
 
     pub fn get_inner_type<'a>(&'a self, py: Python<'a>) -> PyResult<Bound<'a, pyo3::PyAny>> {
@@ -1125,13 +1161,13 @@ pub struct CustomType {
 #[pymethods]
 impl CustomType {
     #[new]
-    fn new(custom_encoder: &Bound<'_, PyAny>, json_schema: &Bound<'_, PyAny>) -> (Self, BaseType) {
-        (
-            CustomType {
-                json_schema: json_schema.clone().unbind(),
-            },
-            BaseType::new(Some(custom_encoder)),
-        )
+    fn new(
+        custom_encoder: &Bound<'_, PyAny>,
+        json_schema: &Bound<'_, PyAny>,
+    ) -> PyClassInitializer<Self> {
+        BaseType::new(Some(custom_encoder)).add_subclass(CustomType {
+            json_schema: json_schema.clone().unbind(),
+        })
     }
 
     fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
