@@ -32,6 +32,8 @@ from ._serpyco_rs import (
     UUIDType,
     ValidationError,
     CustomType,
+    ContainerBaseType,
+    NoneType,
 )
 
 __all__ = [
@@ -40,6 +42,7 @@ __all__ = [
     'BaseType',
     'BooleanType',
     'BytesType',
+    'ContainerBaseType',
     'CustomEncoder',
     'CustomType',
     'DateTimeType',
@@ -55,6 +58,7 @@ __all__ = [
     'FloatType',
     'IntegerType',
     'LiteralType',
+    'NoneType',
     'OptionalType',
     'RecursionHolder',
     'SchemaValidationError',

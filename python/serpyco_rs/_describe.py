@@ -34,6 +34,7 @@ from ._impl import (
     BaseType,
     BooleanType,
     BytesType,
+    ContainerBaseType,
     CustomEncoder,
     CustomType,
     DateTimeType,
@@ -48,6 +49,7 @@ from ._impl import (
     FloatType,
     IntegerType,
     LiteralType,
+    NoneType,
     OptionalType,
     RecursionHolder,
     StringType,
@@ -94,9 +96,6 @@ _NoneType = type(None)
 _T = TypeVar('_T')
 
 
-_CONTAINER_TYPES = (EntityType, TypedDictType, UnionType, TupleType, ArrayType, DiscriminatedUnionType)
-
-
 class _TypeResolver:
     resolver_context: _Stack[ResolverContext]
     annotations: _MergeStack[Annotations]
@@ -107,7 +106,7 @@ class _TypeResolver:
         globals: dict[str, Any],
         custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
     ):
-        self.resolver_context = _Stack(ResolverContext(globals=globals, type_cache={}))
+        self.resolver_context = _Stack(ResolverContext(globals=globals))
         self.custom_type_resolver = custom_type_resolver
         self.annotations = _MergeStack(Annotations(NoFormat, KeepNone, KeepNone))
 
@@ -122,13 +121,16 @@ class _TypeResolver:
             metadata = self.annotations.get()
 
             # Try find type in state
-            ref = f'{t!r}::{metadata.make_key()}'
+            ref = f'{t!r}::{metadata.key}'
             if context.has_cached_type(ref):
                 type_info = context.get_cached_type(ref)
 
                 # for non container types avoid wrap type_info
-                if type_info and not isinstance(type_info, _CONTAINER_TYPES):
+                if type_info and not isinstance(type_info, ContainerBaseType):
                     return type_info, metadata
+
+                if isinstance(type_info, ContainerBaseType):
+                    type_info.set_usages(context.get_usage_count(ref))
 
                 return (
                     RecursionHolder(
@@ -147,6 +149,8 @@ class _TypeResolver:
                 return self._resolve_with_meta(t)
 
             type_info = self._resolve_type(t, ref=ref)
+            if isinstance(type_info, ContainerBaseType):
+                type_info.set_usages(context.get_usage_count(ref))
             context.cache_type(ref, type_info)
 
             return type_info, metadata
@@ -154,6 +158,7 @@ class _TypeResolver:
     def _resolve_type(self, t: Any, ref: str) -> BaseType:
         annotations = self.annotations.get()
         custom_encoder = annotations.get(CustomEncoder)
+        name = _generate_name(t, ref)
 
         if self.custom_type_resolver and (custom_type := self.custom_type_resolver(t)):
             if custom_encoder is None:
@@ -179,6 +184,7 @@ class _TypeResolver:
 
             return ArrayType(
                 item_type=(self.resolve(args[0]) if args else AnyType(custom_encoder=None)),
+                ref_name=name,
                 min_length=min_length_meta.value if min_length_meta else None,
                 max_length=max_length_meta.value if max_length_meta else None,
                 custom_encoder=custom_encoder,
@@ -197,6 +203,7 @@ class _TypeResolver:
                 raise RuntimeError('Variable length tuples are not supported')
             return TupleType(
                 item_types=[self.resolve(arg) for arg in args],
+                ref_name=name,
                 custom_encoder=custom_encoder,
             )
 
@@ -214,11 +221,10 @@ class _TypeResolver:
             raise RuntimeError('Supported only Literal[str | int, ...]')
 
         if is_union_type(origin):
-            if _NoneType in args:
-                new_args = tuple(arg for arg in args if arg is not _NoneType)
-                new_t = Union[new_args] if len(new_args) > 1 else new_args[0]  # type: ignore[unused-ignore]
+            if _NoneType in args and len(args) == 2:
+                new_arg = next(arg for arg in args if arg is not _NoneType)
                 return OptionalType(
-                    inner=self.resolve(new_t),
+                    inner=self.resolve(new_arg),
                     custom_encoder=None,
                 )
 
@@ -226,7 +232,7 @@ class _TypeResolver:
             if not discriminator:
                 return UnionType(
                     item_types=[self.resolve(arg) for arg in args],
-                    union_repr=repr(t).removeprefix('typing.'),
+                    ref_name=name,
                     custom_encoder=custom_encoder,
                 )
 
@@ -244,6 +250,7 @@ class _TypeResolver:
                         _get_discriminator_value(get_origin(arg) or arg, discriminator.name): self.resolve(arg)
                         for arg in args
                     },
+                    ref_name=name,
                     dump_discriminator=discriminator.name,
                     load_discriminator=_apply_format(annotations.get(FieldFormat, NoFormat), discriminator.name),
                     custom_encoder=custom_encoder,
@@ -268,6 +275,7 @@ class _TypeResolver:
             time: TimeType,
             datetime: DateTimeType,
             UUID: UUIDType,
+            _NoneType: NoneType,
         }
 
         if simple := simple_type_mapping.get(t):

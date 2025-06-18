@@ -13,7 +13,7 @@ where
     if let Some(min) = min {
         if val <= min {
             raise_error(
-                format!("{} is less than the minimum of {}", val, min),
+                format!("{val} is less than the minimum of {min}"),
                 instance_path,
             )?;
         }
@@ -28,7 +28,7 @@ where
     if let Some(max) = max {
         if val > max {
             raise_error(
-                format!("{} is greater than the maximum of {}", val, max),
+                format!("{val} is greater than the maximum of {max}"),
                 instance_path,
             )?;
         }
@@ -68,7 +68,7 @@ pub fn check_min_length(
     if let Some(min) = min {
         if len <= min {
             raise_error(
-                format!(r#""{}" is shorter than {} characters"#, val, min),
+                format!(r#""{val}" is shorter than {min} characters"#),
                 instance_path,
             )?;
         }
@@ -85,7 +85,7 @@ pub fn check_max_length(
     if let Some(max) = max {
         if len > max {
             raise_error(
-                format!(r#""{}" is longer than {} characters"#, val, max),
+                format!(r#""{val}" is longer than {max} characters"#),
                 instance_path,
             )?;
         }
@@ -112,7 +112,7 @@ pub fn check_length(
 pub fn missing_required_property(property: &str, instance_path: &InstancePath) -> PyErr {
     let instance_path = instance_path.push(property);
     raise_error(
-        format!(r#""{}" is a required property"#, property),
+        format!(r#""{property}" is a required property"#),
         &instance_path,
     )
     .unwrap_err()
@@ -129,14 +129,14 @@ pub fn check_sequence_size(
         Ordering::Less => {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
-                format!(r#"{} has less than {} items"#, val, size),
+                format!(r#"{val} has less than {size} items"#),
                 &instance_path,
             )
         }
         Ordering::Greater => {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
-                format!(r#"{} has more than {} items"#, val, size),
+                format!(r#"{val} has more than {size} items"#),
                 &instance_path,
             )
         }
@@ -157,7 +157,7 @@ pub fn check_sequence_bounds(
         if seq_len < min {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
-                format!(r#"{} has less than {} items"#, val, min),
+                format!(r#"{val} has less than {min} items"#),
                 &instance_path,
             )?;
         }
@@ -166,7 +166,7 @@ pub fn check_sequence_bounds(
         if seq_len > max {
             let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
             raise_error(
-                format!(r#"{} has more than {} items"#, val, max),
+                format!(r#"{val} has more than {max} items"#),
                 &instance_path,
             )?;
         }
@@ -185,14 +185,11 @@ where
 {
     let items = discriminators
         .iter()
-        .map(|s| format!(r#""{}""#, s))
+        .map(|s| format!(r#""{s}""#))
         .collect::<Vec<_>>()
         .join(", ");
     raise_error(
-        format!(
-            r#""{}" is not one of [{}] discriminator values"#,
-            key, items
-        ),
+        format!(r#""{key}" is not one of [{items}] discriminator values"#),
         instance_path,
     )
     .unwrap_err()

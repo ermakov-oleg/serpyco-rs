@@ -185,6 +185,7 @@ def test_describe__dataclass__supported():
                 name='l',
                 field_type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
+                    ref_name='',
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -196,6 +197,7 @@ def test_describe__dataclass__supported():
                 name='m',
                 field_type=ArrayType(
                     item_type=IntegerType(min=None, max=None, custom_encoder=None),
+                    ref_name='',
                     custom_encoder=None,
                 ),
                 doc=None,
@@ -259,7 +261,9 @@ def test_describe_dataclass__list_type__works_without_type_parameters():
         x: list
 
     assert describe_type(SomeEntity).fields[0].field_type == ArrayType(
-        item_type=AnyType(custom_encoder=None), custom_encoder=None
+        item_type=AnyType(custom_encoder=None),
+        ref_name='',
+        custom_encoder=None,
     )
 
 
@@ -298,7 +302,11 @@ def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
         x: list[T]
 
     result: EntityType = describe_type(SomeEntity)
-    assert result.fields[0].field_type == ArrayType(item_type=AnyType(custom_encoder=None), custom_encoder=None)
+    assert result.fields[0].field_type == ArrayType(
+        item_type=AnyType(custom_encoder=None),
+        ref_name='',
+        custom_encoder=None,
+    )
 
 
 def test_describe_dataclass__generic_with_type_params__expected_right_type():
@@ -312,7 +320,11 @@ def test_describe_dataclass__generic_with_type_params__expected_right_type():
         y: SomeOtherEntity[T]
 
     result: EntityType = describe_type(SomeEntity[int])
-    assert result.fields[0].field_type == ArrayType(item_type=IntegerType(custom_encoder=None), custom_encoder=None)
+    assert result.fields[0].field_type == ArrayType(
+        item_type=IntegerType(custom_encoder=None),
+        ref_name='',
+        custom_encoder=None,
+    )
     assert result.fields[1].field_type == EntityType(
         cls=SomeOtherEntity,
         name=ANY,
@@ -455,6 +467,7 @@ def test_describe__attrs_and_annotated_with_min_max__parsed():
 
     assert result == EntityType(
         cls=SomeEntity,
+        name=ANY,
         fields=[
             EntityField(
                 name='x',
@@ -462,7 +475,6 @@ def test_describe__attrs_and_annotated_with_min_max__parsed():
                 field_type=IntegerType(min=10, max=20, custom_encoder=None),
             )
         ],
-        name=ANY,
         custom_encoder=None,
     )
 
@@ -509,7 +521,7 @@ def test_describe__optional__wrapped():
 def test_describe__unions():
     assert describe_type(Union[int, str]) == UnionType(
         item_types=[IntegerType(custom_encoder=None), StringType(custom_encoder=None)],
-        union_repr='Union[int, str]',
+        ref_name='Union[int, str]',
         custom_encoder=None,
     )
 
@@ -522,6 +534,7 @@ def test_describe__new_style_union_type__wrapped():
 def test_describe__tuple__parsed():
     assert describe_type(tuple[int, str]) == TupleType(
         item_types=[IntegerType(custom_encoder=None), StringType(custom_encoder=None)],
+        ref_name='tuple[int, str]',
         custom_encoder=None,
     )
 
@@ -555,6 +568,7 @@ def test_describe__dataclass_field_format__parsed():
                 dict_key='innerEntity',
                 field_type=ArrayType(
                     custom_encoder=None,
+                    ref_name='',
                     item_type=EntityType(
                         name=ANY,
                         cls=InnerEntity,
@@ -606,7 +620,7 @@ def test_describe__tagged_union():
 
     assert describe_type(Base) == EntityType(
         cls=Base,
-        name=mock.ANY,
+        name=ANY,
         fields=[
             EntityField(
                 name='field',
@@ -615,7 +629,7 @@ def test_describe__tagged_union():
                     item_types={
                         'foo': EntityType(
                             cls=Foo,
-                            name=mock.ANY,
+                            name=ANY,
                             fields=[
                                 EntityField(
                                     name='val',
@@ -634,7 +648,7 @@ def test_describe__tagged_union():
                         ),
                         'bar': EntityType(
                             cls=Bar,
-                            name=mock.ANY,
+                            name=ANY,
                             fields=[
                                 EntityField(
                                     name='val',
@@ -654,6 +668,7 @@ def test_describe__tagged_union():
                     },
                     load_discriminator='filedType',
                     dump_discriminator='filed_type',
+                    ref_name='',
                     custom_encoder=None,
                 ),
             )
@@ -670,7 +685,7 @@ def test_describe__typed_dict():
         generic_field: T
 
     assert describe_type(Entity[bool]) == TypedDictType(
-        name=mock.ANY,
+        name=ANY,
         fields=[
             EntityField(
                 name='foo_filed',
@@ -699,8 +714,8 @@ def test_describe__typed_dict__total_false():
         foo: int
         bar: Required[str]
 
-    assert describe_type(Entity[bool]) == TypedDictType(
-        name=mock.ANY,
+    assert describe_type(Entity) == TypedDictType(
+        name=ANY,
         fields=[
             EntityField(
                 name='foo',
@@ -736,7 +751,11 @@ def test_describe__dataclass__partial_typevars():
             EntityField(
                 name='arr',
                 dict_key='arr',
-                field_type=ArrayType(item_type=StringType(custom_encoder=None), custom_encoder=None),
+                field_type=ArrayType(
+                    item_type=StringType(custom_encoder=None),
+                    ref_name='',
+                    custom_encoder=None,
+                ),
             ),
             EntityField(name='key', dict_key='key', field_type=AnyType(custom_encoder=None)),
         ],
@@ -749,7 +768,11 @@ def test_describe__dataclass__partial_typevars():
             EntityField(
                 name='arr',
                 dict_key='arr',
-                field_type=ArrayType(item_type=StringType(custom_encoder=None), custom_encoder=None),
+                field_type=ArrayType(
+                    item_type=StringType(custom_encoder=None),
+                    ref_name='',
+                    custom_encoder=None,
+                ),
             ),
             EntityField(name='key', dict_key='key', field_type=BooleanType(custom_encoder=None)),
         ],
@@ -783,7 +806,11 @@ def test_describe__dataclass__multiple_generic_inheritance():
             EntityField(
                 name='arr',
                 dict_key='arr',
-                field_type=ArrayType(item_type=IntegerType(custom_encoder=None), custom_encoder=None),
+                field_type=ArrayType(
+                    item_type=IntegerType(custom_encoder=None),
+                    ref_name='',
+                    custom_encoder=None,
+                ),
             ),
             EntityField(name='key', dict_key='key', field_type=BooleanType(custom_encoder=None)),
         ],
@@ -797,7 +824,11 @@ def test_describe__dataclass__multiple_generic_inheritance():
             EntityField(
                 name='arr',
                 dict_key='arr',
-                field_type=ArrayType(item_type=IntegerType(custom_encoder=None), custom_encoder=None),
+                field_type=ArrayType(
+                    item_type=IntegerType(custom_encoder=None),
+                    ref_name='',
+                    custom_encoder=None,
+                ),
             ),
             EntityField(name='key', dict_key='key', field_type=BooleanType(custom_encoder=None)),
         ],
