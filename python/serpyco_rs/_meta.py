@@ -1,5 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Optional, TypeVar, overload
 
 from typing_extensions import Self
@@ -70,7 +71,8 @@ class Annotations:
         }
         return new_data
 
-    def make_key(self) -> str:
+    @cached_property
+    def key(self) -> str:
         d = list(map(str, self._data.values()))
         d.sort()
         return str(d)
@@ -79,6 +81,9 @@ class Annotations:
         if isinstance(value, self.__class__):
             return self._data == value._data
         return False
+
+    def __hash__(self) -> int:
+        return hash(self.key)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}({tuple(self._data.values())})'
