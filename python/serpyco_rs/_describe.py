@@ -121,7 +121,7 @@ class _TypeResolver:
             metadata = self.annotations.get()
 
             # Try find type in state
-            ref = f'{t!r}::{metadata.key}'
+            ref = f'{t!r}::{id(t)}::{metadata.key}'
             if context.has_cached_type(ref):
                 type_info = context.get_cached_type(ref)
 
