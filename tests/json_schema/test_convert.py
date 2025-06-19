@@ -423,13 +423,14 @@ def test_to_json_schema__bytes():
     }
 
 
-def test_to_json_schema__use_ref_for_repeated_types():
+def test_to_json_schema__no_ref_sharing_between_different_generic_instances():
     @dataclass
     class Data:
         a: list[str]
         b: list[str]
 
-    ref = 'tests.json_schema.test_convert.test_to_json_schema__use_ref_for_repeated_types.<locals>.Data'
+    prefix = 'tests.json_schema.test_convert.test_to_json_schema__no_ref_sharing_between_different_generic_instances'
+    ref = f'{prefix}.<locals>.Data'
     serializer = Serializer(Data)
     assert serializer.get_json_schema() == {
         '$ref': f'#/components/schemas/{ref}',
@@ -438,16 +439,18 @@ def test_to_json_schema__use_ref_for_repeated_types():
             'schemas': {
                 ref: {
                     'properties': {
-                        'a': {'$ref': '#/components/schemas/list[str]'},
-                        'b': {'$ref': '#/components/schemas/list[str]'},
+                        'a': {
+                            'items': {'type': 'string'},
+                            'type': 'array',
+                        },
+                        'b': {
+                            'items': {'type': 'string'},
+                            'type': 'array',
+                        },
                     },
                     'type': 'object',
                     'required': ['a', 'b'],
-                },
-                'list[str]': {
-                    'items': {'type': 'string'},
-                    'type': 'array',
-                },
+                }
             }
         },
     }
