@@ -456,6 +456,36 @@ def test_to_json_schema__no_ref_sharing_between_different_generic_instances():
     }
 
 
+def test_to_json_schema__enums_have_some_namespace_repr():
+    class Foo(Enum):
+        a = 'a'
+
+    class NewNamespace:
+        class Foo(Enum):
+            b = 'b'
+
+    assert repr(Foo) == repr(NewNamespace.Foo)
+
+    serializer = Serializer(Union[Foo, NewNamespace.Foo])
+    assert serializer.get_json_schema() == {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'oneOf': [
+            {
+                'enum': [
+                    'a',
+                ],
+                'type': 'string',
+            },
+            {
+                'enum': [
+                    'b',
+                ],
+                'type': 'string',
+            },
+        ],
+    }
+
+
 def test_enum_x_attrs():
     class EnumCls(Enum):
         a = 'a'
