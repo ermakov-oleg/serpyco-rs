@@ -4,7 +4,7 @@ use pyo3::{Bound, PyAny};
 
 pub fn fmt_py(value: &Bound<'_, PyAny>) -> String {
     match value.is_instance_of::<PyString>() {
-        true => format!(r#""{}""#, value),
-        false => format!(r"{}", value),
+        true => format!(r#""{value}""#),
+        false => format!(r"{value}"),
     }
 }

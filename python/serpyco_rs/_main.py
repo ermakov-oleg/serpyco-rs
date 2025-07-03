@@ -34,7 +34,7 @@ class Serializer(Generic[_T]):
 
     def __init__(
         self,
-        t: Union[type[_T], Any],
+        t: type[_T],
         *,
         camelcase_fields: bool = False,
         omit_none: bool = False,

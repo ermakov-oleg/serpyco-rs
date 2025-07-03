@@ -320,7 +320,7 @@ pub fn get_encoder(
 
             for (key, value) in item_types.iter() {
                 let key = DiscriminatorKey::try_from(&key).map_err(|e| {
-                    PyRuntimeError::new_err(format!("Invalid key for DiscriminatedUnion: {:?}", e))
+                    PyRuntimeError::new_err(format!("Invalid key for DiscriminatedUnion: {e:?}"))
                 })?;
                 let encoder = get_encoder(
                     py,

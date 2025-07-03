@@ -902,7 +902,7 @@ impl TupleType {
             .map(|f| f.to_string())
             .collect::<Vec<String>>()
             .join(", ");
-        format!("<TupleType: item_types={:?}>", item_types)
+        format!("<TupleType: item_types={item_types:?}>")
     }
 }
 
@@ -1127,8 +1127,7 @@ impl RecursionHolder {
         match self.meta.bind(py).get_item(&self.state_key) {
             Ok(type_) => Ok(type_),
             Err(e) => Err(PyErr::new::<PyRuntimeError, _>(format!(
-                "Recursive type not resolved: {}",
-                e
+                "Recursive type not resolved: {e}"
             ))),
         }
     }
