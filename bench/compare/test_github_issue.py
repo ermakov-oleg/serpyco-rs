@@ -1,10 +1,11 @@
-from typing import Any
 from pathlib import Path
-import orjson
+from typing import Any
 
+import orjson
 import pytest
 
 from .github_issue import mashumaro, serpyco_rs
+
 
 serializers = {
     'serpyco_rs': serpyco_rs,

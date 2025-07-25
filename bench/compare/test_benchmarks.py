@@ -2,6 +2,7 @@ import pytest
 
 from .libs import marshmallow, mashumaro, pydantic, serpyco, serpyco_rs
 
+
 serializers = {
     'serpyco_rs': serpyco_rs,
     'serpyco': serpyco,

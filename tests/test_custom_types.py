@@ -1,10 +1,9 @@
 from dataclasses import dataclass
-from ipaddress import IPv4Address, AddressValueError
+from ipaddress import AddressValueError, IPv4Address
 from typing import Optional
 
 import pytest
-
-from serpyco_rs import Serializer, SchemaValidationError, ErrorItem
+from serpyco_rs import ErrorItem, SchemaValidationError, Serializer
 from serpyco_rs._custom_types import CustomType
 
 

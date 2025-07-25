@@ -163,12 +163,32 @@ def _(arg: describe.OptionalType, doc: Optional[str] = None, *, config: Config) 
 
 @to_json_schema.register
 def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    properties: dict[str, Schema] = {}
+    required: list[str] = []
+    dict_flatten_value_schema = None
+
+    for prop in arg.fields:
+        if prop.is_flattened:
+            if isinstance(prop.field_type, describe.EntityType):
+                flattened_schema = to_json_schema(prop.field_type, prop.doc, config=config)
+                if isinstance(flattened_schema, ObjectType) and flattened_schema.properties:
+                    properties.update(flattened_schema.properties)
+                    if flattened_schema.required:
+                        required.extend(flattened_schema.required)
+            elif isinstance(prop.field_type, describe.DictionaryType):
+                dict_flatten_value_schema = to_json_schema(prop.field_type.value_type, config=config)
+        else:
+            properties[prop.dict_key] = to_json_schema(prop.field_type, prop.doc, config=config)
+            if prop.required:
+                required.append(prop.dict_key)
+
     return ObjectType(
-        properties={prop.dict_key: to_json_schema(prop.field_type, prop.doc, config=config) for prop in arg.fields},
-        required=[prop.dict_key for prop in arg.fields if prop.required] or None,
+        properties=properties,
+        required=required or None,
         name=arg.name,
         description=arg.doc,
         config=config,
+        additionalProperties=dict_flatten_value_schema,
     )
 
 

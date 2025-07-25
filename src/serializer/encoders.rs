@@ -8,8 +8,8 @@ use dyn_clone::{clone_trait_object, DynClone};
 use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{
-    PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PyString,
-    PyTime,
+    PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PySet,
+    PyString, PyTime,
 };
 use pyo3::{intern, Bound, Py, PyAny, PyResult};
 use pyo3::{prelude::*, IntoPyObjectExt};
@@ -436,6 +436,7 @@ pub struct EntityEncoder {
     pub(crate) fields: Vec<Field>,
     pub(crate) create_object: Py<PyAny>,
     pub(crate) object_set_attr: Py<PyAny>,
+    pub(crate) used_keys: Py<PySet>,
 }
 
 #[derive(Debug, Clone)]
@@ -447,21 +448,65 @@ pub struct Field {
     pub(crate) required: bool,
     pub(crate) default: Option<Py<PyAny>>,
     pub(crate) default_factory: Option<Py<PyAny>>,
+    pub(crate) is_flattened: bool,
+    pub(crate) is_dict_flatten: bool,
+}
+
+impl Field {
+    pub(crate) fn get_default<'a>(
+        &self,
+        py: Python<'a>,
+        instance_path: &InstancePath,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        match (&self.default, &self.default_factory) {
+            (Some(val), _) => Ok(val.bind(py).clone()),
+            (_, Some(factory)) => Ok(factory.bind(py).call0()?),
+            (None, _) => Err(missing_required_property(&self.dict_key_rs, instance_path)),
+        }
+    }
+
+    pub(crate) fn load_value<'a>(
+        &self,
+        val: &Bound<'a, PyDict>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+        used_keys: &Py<PySet>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        if self.is_flattened {
+            if self.is_dict_flatten {
+                let remaining_dict = create_remaining_dict(val, used_keys)?;
+                self.encoder.load(&remaining_dict, instance_path, ctx)
+            } else {
+                self.encoder.load(val, instance_path, ctx)
+            }
+        } else {
+            match val.get_item(&self.dict_key)? {
+                Some(field_val) => {
+                    let field_instance_path =
+                        instance_path.push(self.dict_key.bind(val.py()).as_any());
+                    self.encoder.load(&field_val, &field_instance_path, ctx)
+                }
+                None => self.get_default(val.py(), instance_path),
+            }
+        }
+    }
 }
 
 impl Encoder for EntityEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
         let dict = create_py_dict_known_size(value.py(), self.fields.len());
-
         for field in &self.fields {
             let field_val = value.getattr(&field.name)?;
             let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
-                py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
+                if field.is_flattened {
+                    dict.update(dump_result.downcast::<pyo3::types::PyMapping>()?)?;
+                } else {
+                    py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
+                }
             }
         }
-
         Ok(dict.into_any())
     }
 
@@ -472,42 +517,25 @@ impl Encoder for EntityEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let py_frozen_object_set_attr = self.object_set_attr.bind(value.py());
-        if let Ok(val) = value.downcast::<PyDict>() {
-            let obj = self
-                .create_object
-                .bind(value.py())
-                .call1((self.cls.bind(value.py()),))?;
-            for field in &self.fields {
-                let val = match val.get_item(&field.dict_key)? {
-                    Some(val) => {
-                        let instance_path =
-                            instance_path.push(field.dict_key.bind(value.py()).as_any());
-                        field.encoder.load(&val, &instance_path, ctx)?
-                    }
-                    None => match (&field.default, &field.default_factory) {
-                        (Some(val), _) => val.bind(value.py()).clone(),
-                        (_, Some(val)) => val.bind(value.py()).call0()?,
-                        (None, _) => {
-                            return Err(missing_required_property(
-                                &field.dict_key_rs,
-                                instance_path,
-                            ));
-                        }
-                    },
-                };
-
-                if self.is_frozen {
-                    py_frozen_object_set_attr.call1((&obj, &field.name, val))?;
-                } else {
-                    obj.setattr(&field.name, val)?;
-                };
-            }
-
-            Ok(obj)
-        } else {
+        let Ok(val) = value.downcast::<PyDict>() else {
             invalid_type!("object", value, instance_path)
+        };
+        let py_frozen_object_set_attr = self.object_set_attr.bind(value.py());
+        let obj = self
+            .create_object
+            .bind(value.py())
+            .call1((self.cls.bind(value.py()),))?;
+
+        for field in &self.fields {
+            let val = field.load_value(val, instance_path, ctx, &self.used_keys)?;
+            if self.is_frozen {
+                py_frozen_object_set_attr.call1((&obj, &field.name, val))?;
+            } else {
+                obj.setattr(&field.name, val)?;
+            };
         }
+
+        Ok(obj)
     }
 
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
@@ -515,17 +543,36 @@ impl Encoder for EntityEncoder {
     }
 }
 
+fn create_remaining_dict<'a>(
+    val: &Bound<'a, PyDict>,
+    used_keys: &Py<PySet>,
+) -> PyResult<Bound<'a, PyDict>> {
+    let used_keys_set = used_keys.bind(val.py());
+    let len = val.len().saturating_sub(used_keys_set.len());
+    let remaining_dict = create_py_dict_known_size(val.py(), len);
+    for (k, v) in val.iter() {
+        if !used_keys_set.contains(&k)? {
+            remaining_dict.set_item(k, v)?;
+        }
+    }
+    Ok(remaining_dict)
+}
+
+fn get_fields_query(fields: &[Field]) -> QueryFields {
+    QueryFields::Object(
+        fields
+            .iter()
+            .map(|f| EncoderField {
+                name: &f.dict_key,
+                is_sequence: f.encoder.is_sequence(),
+            })
+            .collect(),
+    )
+}
+
 impl ContainerEncoder for EntityEncoder {
     fn get_fields(&self) -> QueryFields {
-        QueryFields::Object(
-            self.fields
-                .iter()
-                .map(|f| EncoderField {
-                    name: &f.dict_key,
-                    is_sequence: f.encoder.is_sequence(),
-                })
-                .collect(),
-        )
+        get_fields_query(&self.fields)
     }
 }
 
@@ -533,6 +580,7 @@ impl ContainerEncoder for EntityEncoder {
 pub struct TypedDictEncoder {
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
+    pub(crate) used_keys: Py<PySet>,
 }
 
 impl Encoder for TypedDictEncoder {
@@ -558,7 +606,11 @@ impl Encoder for TypedDictEncoder {
             };
             let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
-                py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
+                if field.is_flattened {
+                    dict.update(dump_result.downcast::<pyo3::types::PyMapping>()?)?;
+                } else {
+                    py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
+                }
             }
         }
         Ok(dict.into_any())
@@ -571,26 +623,13 @@ impl Encoder for TypedDictEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let value = match value.downcast::<PyDict>() {
-            Ok(val) => val,
-            Err(_) => {
-                invalid_type_dump!("dict", value);
-            }
+        let Ok(value) = value.downcast::<PyDict>() else {
+            invalid_type_dump!("dict", value);
         };
         let dict = create_py_dict_known_size(value.py(), self.fields.len());
         for field in &self.fields {
-            let field_val = match value.get_item(&field.dict_key) {
-                Ok(Some(val)) => val,
-                _ => {
-                    if field.required {
-                        return Err(missing_required_property(&field.dict_key_rs, instance_path));
-                    }
-                    continue;
-                }
-            };
-            let instance_path = instance_path.push(field.dict_key_rs.as_str());
-            let dump_result = field.encoder.load(&field_val, &instance_path, ctx)?;
-            py_dict_set_item(&dict, field.name.as_ptr(), dump_result)?;
+            let val = field.load_value(value, instance_path, ctx, &self.used_keys)?;
+            py_dict_set_item(&dict, field.name.as_ptr(), val)?;
         }
         Ok(dict.into_any())
     }
@@ -601,15 +640,7 @@ impl Encoder for TypedDictEncoder {
 
 impl ContainerEncoder for TypedDictEncoder {
     fn get_fields(&self) -> QueryFields {
-        QueryFields::Object(
-            self.fields
-                .iter()
-                .map(|f| EncoderField {
-                    name: &f.dict_key,
-                    is_sequence: f.encoder.is_sequence(),
-                })
-                .collect(),
-        )
+        get_fields_query(&self.fields)
     }
 }
 

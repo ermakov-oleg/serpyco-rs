@@ -1,9 +1,8 @@
+import sys
 from dataclasses import dataclass
-from typing import Annotated, Generic, Literal, TypeVar, Optional, Union
+from typing import Annotated, Generic, Literal, Optional, TypeVar, Union
 
 import pytest
-import sys
-
 from serpyco_rs import Serializer
 from serpyco_rs.metadata import Discriminator
 

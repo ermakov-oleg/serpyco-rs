@@ -1,5 +1,4 @@
 import pytest
-
 import serpyco_rs
 
 from .compare.libs import serpyco_rs as serializer

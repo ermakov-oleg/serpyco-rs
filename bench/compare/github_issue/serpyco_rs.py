@@ -1,11 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Union
-from typing import Optional, Annotated
+from typing import Annotated, Any, Optional, Union
 
-from serpyco_rs.metadata import Alias
 import serpyco_rs
+from serpyco_rs.metadata import Alias
 
 from ._utils import get_dataclass_args
 

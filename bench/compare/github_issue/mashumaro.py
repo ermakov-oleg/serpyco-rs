@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Union, Any
+from typing import Any, Optional, Union
 
 from mashumaro import DataClassDictMixin, field_options, pass_through
 from mashumaro.config import BaseConfig

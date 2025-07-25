@@ -3,7 +3,6 @@ from typing import Any, Optional
 
 from mashumaro import DataClassDictMixin
 from mashumaro.mixins.json import DataClassJSONMixin
-from orjson import orjson
 
 from .base import make_test_object
 

@@ -31,7 +31,7 @@ def lint(session):
 
     session.cd('python/serpyco_rs')
     paths = ['.', '../../tests', '../../bench']
-    session.run('ruff', 'format',  *(['--check', '--diff', *paths] if _is_ci() else paths))
+    session.run('ruff', 'format', *(['--check', '--diff', *paths] if _is_ci() else paths))
     session.run('ruff', 'check', '.', *([] if _is_ci() else ['--fix']))
 
 

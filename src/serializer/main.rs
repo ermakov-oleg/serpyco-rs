@@ -365,6 +365,7 @@ pub fn get_encoder(
                 create_object: create_object.unbind(),
                 object_set_attr: object_set_attr.unbind(),
                 cls: type_info.cls.clone(),
+                used_keys: type_info.used_keys.clone(),
             };
 
             encoder_state.create_and_register(
@@ -386,6 +387,7 @@ pub fn get_encoder(
             let encoder = TypedDictEncoder {
                 fields,
                 omit_none: type_info.get().omit_none,
+                used_keys: type_info.get().used_keys.clone(),
             };
 
             encoder_state.create_and_register(
@@ -480,6 +482,8 @@ fn iterate_on_fields(
             required: field.required,
             default: field.default.clone().into(),
             default_factory: field.default_factory.clone().into(),
+            is_flattened: field.is_flattened,
+            is_dict_flatten: field.is_dict_flatten,
         };
         fields.push(fld);
     }
