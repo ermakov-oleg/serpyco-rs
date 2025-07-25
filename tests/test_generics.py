@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Generic, Optional, TypeVar
-from unittest import mock
 
 from serpyco_rs import Serializer
 

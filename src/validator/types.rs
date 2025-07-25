@@ -4,7 +4,7 @@ use pyo3::{intern, BoundObject};
 
 use crate::python::fmt_py;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyInt, PyList, PyNone};
+use pyo3::types::{PyDict, PyInt, PyList, PyNone, PySet};
 use pyo3::PyClassInitializer;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -475,12 +475,14 @@ pub struct EntityType {
     pub is_frozen: bool,
     #[pyo3(get)]
     pub doc: Py<PyAny>,
+    #[pyo3(get)]
+    pub used_keys: Py<PySet>,
 }
 
 #[pymethods]
 impl EntityType {
     #[new]
-    #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (cls, name, fields, omit_none=false, is_frozen=false, used_keys=None, doc=None, custom_encoder=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         cls: &Bound<'_, PyAny>,
@@ -488,6 +490,7 @@ impl EntityType {
         fields: Vec<EntityField>,
         omit_none: bool,
         is_frozen: bool,
+        used_keys: Option<&Bound<'_, PySet>>,
         doc: Option<&Bound<'_, PyAny>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
@@ -499,6 +502,14 @@ impl EntityType {
             omit_none,
             is_frozen,
             doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
+            used_keys: used_keys.map_or_else(
+                || {
+                    PySet::empty(py)
+                        .expect("Failed to create empty set")
+                        .unbind()
+                },
+                |x| x.clone().unbind(),
+            ),
         })
     }
 
@@ -547,17 +558,20 @@ pub struct TypedDictType {
     pub omit_none: bool,
     #[pyo3(get)]
     pub doc: Py<PyAny>,
+    #[pyo3(get)]
+    pub used_keys: Py<PySet>,
 }
 
 #[pymethods]
 impl TypedDictType {
     #[new]
-    #[pyo3(signature = (name, fields, omit_none=false, doc=None, custom_encoder=None))]
+    #[pyo3(signature = (name, fields, omit_none=false, doc=None, used_keys=None, custom_encoder=None))]
     fn new(
         name: &Bound<'_, PyAny>,
         fields: Vec<EntityField>,
         omit_none: bool,
         doc: Option<&Bound<'_, PyAny>>,
+        used_keys: Option<&Bound<'_, PySet>>,
         custom_encoder: Option<&Bound<'_, PyAny>>,
         py: Python<'_>,
     ) -> PyClassInitializer<Self> {
@@ -566,6 +580,7 @@ impl TypedDictType {
             fields,
             omit_none,
             doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
+            used_keys: used_keys.map_or(PySet::empty(py).unwrap().unbind(), |x| x.clone().unbind()),
         })
     }
 
@@ -620,12 +635,16 @@ pub struct EntityField {
     pub default_factory: DefaultValue,
     #[pyo3(get)]
     pub doc: Py<PyAny>,
+    #[pyo3(get)]
+    pub is_flattened: bool,
+    #[pyo3(get)]
+    pub is_dict_flatten: bool,
 }
 
 #[pymethods]
 impl EntityField {
     #[new]
-    #[pyo3(signature = (name, dict_key, field_type, required=true, is_discriminator_field=false, default=DefaultValue(DefaultValueEnum::None), default_factory=DefaultValue(DefaultValueEnum::None), doc=None))]
+    #[pyo3(signature = (name, dict_key, field_type, required=true, is_discriminator_field=false, default=DefaultValue(DefaultValueEnum::None), default_factory=DefaultValue(DefaultValueEnum::None), doc=None, is_flattened=false, is_dict_flatten=false))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         name: &Bound<'_, PyAny>,
@@ -636,6 +655,8 @@ impl EntityField {
         default: DefaultValue,
         default_factory: DefaultValue,
         doc: Option<&Bound<'_, PyAny>>,
+        is_flattened: bool,
+        is_dict_flatten: bool,
         py: Python<'_>,
     ) -> Self {
         EntityField {
@@ -647,6 +668,8 @@ impl EntityField {
             doc: doc.map_or(PyNone::get(py).into_any().unbind(), |x| x.clone().unbind()),
             default,
             default_factory,
+            is_flattened,
+            is_dict_flatten,
         }
     }
 
@@ -658,11 +681,13 @@ impl EntityField {
             && self.is_discriminator_field == other.is_discriminator_field
             && self.default == other.default
             && self.default_factory == other.default_factory
-            && py_eq!(self.doc, other.doc, py))
+            && py_eq!(self.doc, other.doc, py)
+            && self.is_flattened == other.is_flattened
+            && self.is_dict_flatten == other.is_dict_flatten)
     }
 
     fn __repr__(&self) -> String {
-        format!("<EntityField: name={:?}, dict_key={:?}, field_type={:?}, required={:?}, is_discriminator_field={:?}, default={:?}, default_factory={:?}, doc={:?}>", self.name.to_string(), self.dict_key.to_string(), self.field_type.to_string(), self.required, self.is_discriminator_field, self.default, self.default_factory, self.doc.to_string())
+        format!("<EntityField: name={:?}, dict_key={:?}, field_type={:?}, required={:?}, is_discriminator_field={:?}, default={:?}, default_factory={:?}, doc={:?}, is_flattened={:?}, is_dict_flatten={:?}>", self.name.to_string(), self.dict_key.to_string(), self.field_type.to_string(), self.required, self.is_discriminator_field, self.default, self.default_factory, self.doc.to_string(), self.is_flattened, self.is_dict_flatten)
     }
 }
 

@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Optional, Union
 
 from serpyco_rs import Serializer
+
 from .utils import repeat
 
 

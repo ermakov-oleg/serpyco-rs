@@ -28,7 +28,7 @@ print(result)
 
 Inspired by [serpyco](https://pypi.org/project/serpyco/).
 
-serpyco-rs works by analysing the dataclass fields and can recognize many types : `list`, `tuple`, `Optional`... 
+serpyco-rs works by analysing the dataclass fields and can recognize many types : `list`, `tuple`, `Optional`...
 You can also embed other dataclasses in a definition.
 
 The main use-case for serpyco-rs is to serialize objects for an API, but it can be helpful whenever you need to transform objects to/from builtin Python types.
@@ -49,7 +49,7 @@ $ pip install serpyco-rs
 - Support recursive schemas
 - Generate JSON Schema Specification (Draft 2020-12)
 - Support custom encoders/decoders for fields
-- Support deserialization from query string parameters (MultiDict like structures) with from string coercion 
+- Support deserialization from query string parameters (MultiDict like structures) with from string coercion
 
 ## Supported field types
 There is support for generic types from the standard typing module:
@@ -76,9 +76,9 @@ There is support for generic types from the standard typing module:
 
 <details>
   <summary>Linux</summary>
-  
+
   #### Load
-  
+
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
   | serpyco_rs  |                            0.16 |                  6318.1 |                 1    |
@@ -86,9 +86,9 @@ There is support for generic types from the standard typing module:
   | pydantic    |                            0.57 |                  1753.9 |                 3.56 |
   | serpyco     |                            0.82 |                  1228.3 |                 5.17 |
   | marshmallow |                            8.49 |                   117.4 |                53.35 |
-  
+
   #### Dump
-  
+
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
   | serpyco_rs  |                            0.07 |                 13798   |                 1    |
@@ -102,9 +102,9 @@ There is support for generic types from the standard typing module:
 <details>
   <summary>MacOS</summary>
   macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
-  
+
   #### Load
-  
+
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
   | serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
@@ -114,7 +114,7 @@ There is support for generic types from the standard typing module:
   | marshmallow |                            4.14 |                   241.8 |                41.05 |
 
   #### Dump
-  
+
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
   | serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
@@ -138,6 +138,7 @@ Currently available:
 * MinLength / MaxLength
 * CustomEncoder
 * NoneAsDefaultForOptional (ForceDefaultForOptional)
+* Flatten
 
 
 ### Alias
@@ -308,12 +309,57 @@ ser_force_default = Serializer(Foo, force_default_for_optional=True)  # or Seria
 ser = Serializer(Foo)
 
 # all fields except val are optional and nullable
-assert ser_force_default.load({'val': 1}) == Foo(val=1, val1=None, val2=None) 
+assert ser_force_default.load({'val': 1}) == Foo(val=1, val1=None, val2=None)
 
 # val1 field is required and nullable and val1 should be present in the dict
 ser.load({'val': 1})
 >> SchemaValidationError: [ErrorItem(message='"val1" is a required property', instance_path='')]
 ```
+
+### Flatten
+
+`Flatten` allows you to flatten nested structures into the parent structure, similar to serde's `flatten` attribute in Rust.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated, Any
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Flatten
+
+@dataclass
+class Address:
+    street: str
+    city: str
+
+@dataclass
+class Person:
+    name: str
+    address: Annotated[Address, Flatten]        # Flatten struct fields
+    extra: Annotated[dict[str, Any], Flatten]   # Collect additional properties
+
+ser = Serializer(Person)
+
+person = Person(
+    name="John",
+    address=Address(street="123 Main St", city="New York"),
+    extra={"phone": "555-1234"}
+)
+
+# Serialization flattens all nested fields
+result = ser.dump(person)
+>> {'name': 'John', 'street': '123 Main St', 'city': 'New York', 'phone': '555-1234'}
+
+# Deserialization reconstructs nested structures and collects extra fields
+loaded = ser.load({'name': 'Jane', 'street': '456 Oak Ave', 'city': 'LA', 'email': 'jane@example.com'})
+>> Person(name='Jane', address=Address(street='456 Oak Ave', city='LA'), extra={'email': 'jane@example.com'})
+```
+
+**Validation Rules:**
+- Only one dict flatten field per dataclass/TypedDict
+- No field name conflicts between regular and struct flatten fields (use `Alias` to resolve)
+- Only dataclass, TypedDict, and dict types can be flattened
+
+**JSON Schema:** Flattened struct fields appear as top-level properties; objects with dict flatten have `additionalProperties: true`
 
 
 ### Custom encoders for fields
@@ -333,7 +379,7 @@ class Foo:
 ser = Serializer(Foo)
 val = ser.dump(Foo(val='bar'))
 >> {'val': 'BAR'}
-assert ser.load(val) == Foo(val='bar') 
+assert ser.load(val) == Foo(val='bar')
 ```
 
 **Note:** `CustomEncoder` has no effect to validation and JSON Schema generation.
@@ -423,17 +469,17 @@ ser = Serializer(A)
 
 print(ser.get_json_schema())
 >> {
-    '$schema': 'https://json-schema.org/draft/2020-12/schema', 
-    '$ref': '#/components/schemas/A', 
+    '$schema': 'https://json-schema.org/draft/2020-12/schema',
+    '$ref': '#/components/schemas/A',
     'components': {
         'schemas': {
             'A': {
                 'properties': {
-                    'foo': {'type': 'integer'}, 
+                    'foo': {'type': 'integer'},
                     'bar': {'type': 'string'}
-                }, 
-                'required': ['foo', 'bar'], 
-                'type': 'object', 
+                },
+                'required': ['foo', 'bar'],
+                'type': 'object',
                 'description': 'Description of A'
             }
         }

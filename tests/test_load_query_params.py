@@ -1,13 +1,12 @@
 """Query params in most cases, field values are of string type"""
 
 from dataclasses import dataclass
-from typing import Annotated, Literal, TypedDict, Union
 from enum import Enum
+from typing import Annotated, Literal, TypedDict, Union
 
 import pytest
-from multidict import MultiDict
-
 import serpyco_rs
+from multidict import MultiDict
 from serpyco_rs import metadata
 
 

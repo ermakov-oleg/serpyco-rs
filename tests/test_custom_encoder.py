@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated
 
 import pytest
-from serpyco_rs import Serializer, SchemaValidationError, ErrorItem
+from serpyco_rs import ErrorItem, SchemaValidationError, Serializer
 from serpyco_rs.metadata import CustomEncoder, deserialize_with, serialize_with
 
 

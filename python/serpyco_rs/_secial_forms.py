@@ -75,7 +75,7 @@ def is_annotated(origin: Any) -> bool:
 
 
 def is_typealiastype(annotation: Any) -> bool:
-    return TypeAliasType and isinstance(annotation, TypeAliasType)  # type: ignore[truthy-function]
+    return TypeAliasType is not None and isinstance(annotation, TypeAliasType)
 
 
 def is_newtype(annotation: Any) -> bool:

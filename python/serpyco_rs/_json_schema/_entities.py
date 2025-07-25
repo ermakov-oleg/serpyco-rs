@@ -109,11 +109,7 @@ class ObjectType(Schema):
         data = super().dump(definitions)
         data = {
             'properties': {k: v.dump(definitions) for k, v in self.properties.items()} if self.properties else None,
-            'additionalProperties': (
-                self.additionalProperties.dump(definitions)
-                if isinstance(self.additionalProperties, Schema)
-                else self.additionalProperties
-            ),
+            'additionalProperties': self._resolve_additional_properties(definitions),
             'required': self.required,
             **data,
         }
@@ -124,6 +120,12 @@ class ObjectType(Schema):
         return {
             '$ref': self.ref,
         }
+
+    def _resolve_additional_properties(self, definitions: dict[str, Any]) -> bool | dict[str, Any] | None:
+        if not isinstance(self.additionalProperties, Schema):
+            return self.additionalProperties
+        schema_data = self.additionalProperties.dump(definitions)
+        return True if schema_data == {} else schema_data
 
 
 @dataclass

@@ -77,6 +77,7 @@ from .metadata import (
     NoneAsDefaultForOptional,
     NoneFormat,
     OmitNone,
+    _Flatten,
 )
 
 
@@ -319,6 +320,61 @@ class _TypeResolver:
 
         return None
 
+    def _validate_flatten_fields(self, fields: list[EntityField], t: Any) -> None:
+        dict_flatten_fields = []
+        struct_flatten_fields = []
+        regular_field_keys = set()
+
+        for field in fields:
+            if field.is_flattened:
+                if isinstance(field.field_type, DictionaryType):
+                    dict_flatten_fields.append(field)
+                elif isinstance(field.field_type, (EntityType, TypedDictType)):
+                    struct_flatten_fields.append(field)
+                else:
+                    raise RuntimeError(
+                        f"Flatten field '{field.name}' has type '{type(field.field_type).__name__}' "
+                        f'which cannot be flattened. Only dataclasses, TypedDict, and dict types '
+                        f'can be used with Flatten annotation.'
+                    )
+            else:
+                regular_field_keys.add(field.dict_key)
+
+        if len(dict_flatten_fields) > 1:
+            field_names = [field.name for field in dict_flatten_fields]
+            raise RuntimeError(
+                f'Multiple dict flatten fields are not allowed in {t!r}. '
+                f'Found flatten dict fields: {field_names}. '
+                f'Use only one Annotated[dict[str, Any], Flatten] field per dataclass.'
+            )
+
+        for struct_field in struct_flatten_fields:
+            struct_type = cast(Union[EntityType, TypedDictType], struct_field.field_type)
+            for nested_field in struct_type.fields:
+                if nested_field.dict_key in regular_field_keys:
+                    raise RuntimeError(
+                        f"Field name conflict in {t!r}: '{nested_field.dict_key}' from "
+                        f"flattened struct field '{struct_field.name}' conflicts with regular field. "
+                        f'Use Alias annotation to rename one of the conflicting fields.'
+                    )
+
+    def _compute_used_keys(self, fields: list[EntityField]) -> set[str]:
+        has_dict_flatten = any(field.is_dict_flatten for field in fields)
+        if not has_dict_flatten:
+            return set()
+
+        used_keys: set[str] = set()
+
+        for field in fields:
+            if field.is_flattened and isinstance(field.field_type, (EntityType, TypedDictType)):
+                struct_type = field.field_type
+                for nested_field in struct_type.fields:
+                    used_keys.add(nested_field.dict_key)
+            else:
+                used_keys.add(field.dict_key)
+
+        return used_keys
+
     def _describe_entity(
         self,
         t: Any,
@@ -357,6 +413,7 @@ class _TypeResolver:
                 with self.annotations.merge(field_metadata) as field_annotations:
                     alias = field_annotations.get(Alias)
                     none_as_default_for_optional = field_annotations.get(NoneAsDefaultForOptional)
+                    flatten = field_annotations.get(_Flatten)
 
                     is_discriminator_field = field.name == discriminator_field
                     required = (
@@ -373,6 +430,9 @@ class _TypeResolver:
                         default = DefaultValue.some(None)
                         required = False
 
+                    is_flattened = flatten is not None
+                    is_dict_flatten = is_flattened and isinstance(field_type, DictionaryType)
+
                     fields.append(
                         EntityField(
                             name=field.name,
@@ -385,8 +445,13 @@ class _TypeResolver:
                             default_factory=field.default_factory,
                             is_discriminator_field=is_discriminator_field,
                             required=required,
+                            is_flattened=is_flattened,
+                            is_dict_flatten=is_dict_flatten,
                         )
                     )
+
+            self._validate_flatten_fields(fields, t)
+            used_keys = self._compute_used_keys(fields)
 
             if is_typeddict(origin):
                 return TypedDictType(
@@ -395,6 +460,7 @@ class _TypeResolver:
                     omit_none=cls_annotations.get(NoneFormat) is OmitNone,
                     doc=t.__doc__,
                     custom_encoder=custom_encoder,
+                    used_keys=used_keys,
                 )
 
             return EntityType(
@@ -405,6 +471,7 @@ class _TypeResolver:
                 is_frozen=_is_frozen_dataclass(origin, fields[0]) if fields else False,
                 doc=_get_dataclass_doc(t),
                 custom_encoder=custom_encoder,
+                used_keys=used_keys,
             )
 
 

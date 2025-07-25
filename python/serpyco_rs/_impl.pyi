@@ -110,6 +110,8 @@ class EntityField(BaseType):
     default: DefaultValue[Any]
     default_factory: DefaultValue[Callable[[], Any]]
     doc: str | None
+    is_flattened: bool = False
+    is_dict_flatten: bool = False
 
     def __init__(
         self,
@@ -121,6 +123,8 @@ class EntityField(BaseType):
         default: DefaultValue[Any] = ...,
         default_factory: DefaultValue[Callable[[], Any]] | DefaultValue[None] = ...,
         doc: str | None = None,
+        is_flattened: bool = False,
+        is_dict_flatten: bool = False,
     ): ...
 
 class EntityType(BaseType):
@@ -129,6 +133,7 @@ class EntityType(BaseType):
     fields: Sequence[EntityField]
     omit_none: bool
     is_frozen: bool
+    used_keys: set[str] | None
     doc: str | None
 
     def __init__(
@@ -138,6 +143,7 @@ class EntityType(BaseType):
         fields: Sequence[EntityField],
         omit_none: bool = False,
         is_frozen: bool = False,
+        used_keys: set[str] | None = None,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
@@ -147,6 +153,7 @@ class TypedDictType(BaseType):
     fields: Sequence[EntityField]
     omit_none: bool
     doc: str | None
+    used_keys: set[str] | None
 
     def __init__(
         self,
@@ -154,6 +161,7 @@ class TypedDictType(BaseType):
         fields: Sequence[EntityField],
         omit_none: bool = False,
         doc: str | None = None,
+        used_keys: set[str] | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
     ): ...
 

@@ -31,10 +31,6 @@ jobs:
         include:
           - os: macos-latest
             target: universal2-apple-darwin
-          # wait https://github.com/python/cpython/issues/135151
-          - os: windows-latest
-            python-version: "3.13"
-            python-version-full: "3.13.3"
     name: Build on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     steps:

@@ -1,6 +1,7 @@
-from typing import TypeVar, Generic, TypeVarTuple, Tuple, Unpack
+from typing import Generic, Tuple, TypeVar, TypeVarTuple, Unpack
 
 from serpyco_rs._type_utils import get_type_hints
+
 
 T = TypeVar('T')
 U = TypeVar('U')

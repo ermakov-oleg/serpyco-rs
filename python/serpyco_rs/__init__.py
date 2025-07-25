@@ -4,4 +4,11 @@ from ._main import Serializer
 from .exceptions import ErrorItem, SchemaValidationError, ValidationError
 
 
-__all__ = ['CustomType', 'ErrorItem', 'JsonSchemaBuilder', 'SchemaValidationError', 'Serializer', 'ValidationError']
+__all__ = [
+    'CustomType',
+    'ErrorItem',
+    'JsonSchemaBuilder',
+    'SchemaValidationError',
+    'Serializer',
+    'ValidationError',
+]
