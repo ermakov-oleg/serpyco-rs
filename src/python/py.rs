@@ -65,6 +65,6 @@ pub(crate) fn error_on_minusone(result: c_int) -> PyResult<()> {
     if result != -1 {
         Ok(())
     } else {
-        Err(Python::with_gil(PyErr::fetch))
+        Err(Python::attach(PyErr::fetch))
     }
 }

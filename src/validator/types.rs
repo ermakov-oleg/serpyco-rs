@@ -453,7 +453,7 @@ impl PartialEq<Self> for DefaultValue {
         match (&self.0, &other.0) {
             (DefaultValueEnum::None, DefaultValueEnum::None) => true,
             (DefaultValueEnum::Value(a), DefaultValueEnum::Value(b)) => {
-                Python::with_gil(|py| a.bind(py).eq(b.bind(py)).unwrap_or(false))
+                Python::attach(|py| a.bind(py).eq(b.bind(py)).unwrap_or(false))
             }
             _ => false,
         }
