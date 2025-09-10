@@ -225,9 +225,9 @@ dependencies = [
 
 [[package]]
 name = "speedate"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc823f2eb39713ef0d286058af264ce0d8ddcf62b8a78a0aec02cd0105576d87"
+checksum = "aba069c070b5e213f2a094deb7e5ed50ecb092be36102a4f4042e8d2056d060e"
 dependencies = [
  "lexical-parse-float",
  "strum",
