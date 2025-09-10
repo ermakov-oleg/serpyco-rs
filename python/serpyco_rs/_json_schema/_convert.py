@@ -261,7 +261,7 @@ def _(arg: describe.LiteralType, doc: Optional[str] = None, *, config: Config) -
 @to_json_schema.register
 def _(arg: describe.UnionType, doc: Optional[str] = None, *, config: Config) -> Schema:
     schema = Schema(
-        oneOf=[to_json_schema(t, config=config) for t in arg.item_types],
+        anyOf=[to_json_schema(t, config=config) for t in arg.item_types],
         description=doc,
         config=config,
     )

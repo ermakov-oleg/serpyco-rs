@@ -14,8 +14,8 @@ def test_to_json_schema_json_type():
         '$ref': f'#/components/schemas/{ref_name}',
         'components': {
             'schemas': {
-                f'{ref_name}': {
-                    'oneOf': [
+                ref_name: {
+                    'anyOf': [
                         {'type': 'null'},
                         {'type': 'string'},
                         {'type': 'integer', 'format': 'int64'},

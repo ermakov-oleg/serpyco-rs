@@ -358,7 +358,7 @@ def test_to_json_schema__union():
                 'tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Base': {
                     'properties': {
                         'field': {
-                            'oneOf': [
+                            'anyOf': [
                                 {
                                     '$ref': '#/components/schemas/tests.json_schema.test_convert.test_to_json_schema__union.<locals>.Foo'
                                 },
@@ -469,7 +469,7 @@ def test_to_json_schema__enums_have_some_namespace_repr():
     serializer = Serializer(Union[Foo, NewNamespace.Foo])
     assert serializer.get_json_schema() == {
         '$schema': 'https://json-schema.org/draft/2020-12/schema',
-        'oneOf': [
+        'anyOf': [
             {
                 'enum': [
                     'a',

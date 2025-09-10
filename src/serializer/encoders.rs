@@ -59,7 +59,7 @@ pub enum QueryFields<'a> {
 }
 
 pub trait ContainerEncoder: Encoder {
-    fn get_fields(&self) -> QueryFields;
+    fn get_fields(&self) -> QueryFields<'_>;
 }
 
 clone_trait_object!(Encoder);
@@ -362,7 +362,7 @@ impl Encoder for DictionaryEncoder {
 }
 
 impl ContainerEncoder for DictionaryEncoder {
-    fn get_fields(&self) -> QueryFields {
+    fn get_fields(&self) -> QueryFields<'_> {
         QueryFields::Dict(self.value_encoder.is_sequence())
     }
 }
@@ -558,7 +558,7 @@ fn create_remaining_dict<'a>(
     Ok(remaining_dict)
 }
 
-fn get_fields_query(fields: &[Field]) -> QueryFields {
+fn get_fields_query(fields: &[Field]) -> QueryFields<'_> {
     QueryFields::Object(
         fields
             .iter()
@@ -571,7 +571,7 @@ fn get_fields_query(fields: &[Field]) -> QueryFields {
 }
 
 impl ContainerEncoder for EntityEncoder {
-    fn get_fields(&self) -> QueryFields {
+    fn get_fields(&self) -> QueryFields<'_> {
         get_fields_query(&self.fields)
     }
 }
@@ -639,7 +639,7 @@ impl Encoder for TypedDictEncoder {
 }
 
 impl ContainerEncoder for TypedDictEncoder {
-    fn get_fields(&self) -> QueryFields {
+    fn get_fields(&self) -> QueryFields<'_> {
         get_fields_query(&self.fields)
     }
 }
