@@ -45,7 +45,7 @@ impl<'a> InstancePath<'a> {
         }
     }
 
-    pub(crate) fn to_vec(&self) -> Vec<PathChunk> {
+    pub(crate) fn to_vec(&self) -> Vec<PathChunk<'_>> {
         // The path capacity should be the average depth so we avoid extra allocations
         let mut result = Vec::with_capacity(6);
         let mut current = self;
