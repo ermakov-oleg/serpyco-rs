@@ -125,7 +125,7 @@ impl Encoder for IntEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyInt>() {
+        if let Ok(val) = value.downcast_exact::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }

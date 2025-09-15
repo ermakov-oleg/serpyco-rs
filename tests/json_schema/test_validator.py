@@ -136,6 +136,7 @@ def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:
             _mk_e(m='"aaa" is longer than 2 characters'),
         ),
         (int, 9.1, _mk_e(m='9.1 is not of type "integer"')),
+        (int, True, _mk_e(m='True is not of type "integer"')),
         (int, '9', _mk_e(m='"9" is not of type "integer"')),
         (
             Annotated[int, Min(1)],
