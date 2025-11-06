@@ -17,6 +17,7 @@ class ResolverContext:
     type_cache: dict[str, Optional[BaseType]] = field(default_factory=dict)
     usage_count: defaultdict[str, int] = field(default_factory=lambda: defaultdict[str, int](int))
     discriminator_field: Optional[str] = None
+    discriminator_dict_key: Optional[str] = None
 
     def cache_type(self, key: str, value: Optional[BaseType]) -> None:
         """Cache a resolved type"""

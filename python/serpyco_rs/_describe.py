@@ -247,9 +247,15 @@ class _TypeResolver:
             python_field_name = discriminator.python_field or discriminator.field
             # JSON field name before FieldFormat transformation
             json_field_name = discriminator.field
+            # JSON field name after FieldFormat transformation (e.g., camelCase)
+            json_field_name_formatted = _apply_format(annotations.get(FieldFormat, NoFormat), json_field_name)
 
             with self.resolver_context.push(
-                dataclasses.replace(self.resolver_context.get(), discriminator_field=python_field_name)
+                dataclasses.replace(
+                    self.resolver_context.get(),
+                    discriminator_field=python_field_name,
+                    discriminator_dict_key=json_field_name_formatted,
+                )
             ):
                 return DiscriminatedUnionType(
                     item_types={
@@ -258,7 +264,7 @@ class _TypeResolver:
                     },
                     ref_name=name,
                     dump_discriminator=python_field_name,
-                    load_discriminator=_apply_format(annotations.get(FieldFormat, NoFormat), json_field_name),
+                    load_discriminator=json_field_name_formatted,
                     custom_encoder=custom_encoder,
                 )
 
@@ -398,11 +404,17 @@ class _TypeResolver:
             types = {}
 
         discriminator_field = self.resolver_context.get().discriminator_field
+        discriminator_dict_key = self.resolver_context.get().discriminator_dict_key
 
         cls_annotations = self.annotations.get()
 
         with self.resolver_context.push(
-            dataclasses.replace(self.resolver_context.get(), globals=_get_globals(t), discriminator_field=None)
+            dataclasses.replace(
+                self.resolver_context.get(),
+                globals=_get_globals(t),
+                discriminator_field=None,
+                discriminator_dict_key=None,
+            )
         ):
             fields = []
             for field in _get_entity_fields(origin):
@@ -438,12 +450,19 @@ class _TypeResolver:
                     is_flattened = flatten is not None
                     is_dict_flatten = is_flattened and isinstance(field_type, DictionaryType)
 
+                    # For discriminator fields, use the dict_key from saved value (JSON field name)
+                    # For other fields, use alias or apply field format
+                    if is_discriminator_field:
+                        dict_key = discriminator_dict_key
+                    elif alias:
+                        dict_key = alias.value
+                    else:
+                        dict_key = _apply_format(cls_annotations.get(FieldFormat), field.name)
+
                     fields.append(
                         EntityField(
                             name=field.name,
-                            dict_key=(
-                                alias.value if alias else _apply_format(cls_annotations.get(FieldFormat), field.name)
-                            ),
+                            dict_key=dict_key,
                             doc=docs.get(field.name),
                             field_type=field_type,
                             default=default,
