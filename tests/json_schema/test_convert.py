@@ -604,3 +604,105 @@ class TestJsonSchemaBuilder:
             '$schema': 'https://json-schema.org/draft/2020-12/schema',
         }
         assert schema_builder.get_definitions() == {}
+
+
+def test_to_json_schema__tagged_union_with_python_field_for_keyword(ns):
+    """Test JSON schema for discriminator with python_field to handle Python keywords."""
+    @dataclass
+    class FooWithUnderscore:
+        type_: Literal['foo']
+        value: int
+
+    @dataclass
+    class BarWithUnderscore:
+        type_: Literal['bar']
+        value: str
+
+    serializer = Serializer(
+        list[Annotated[Union[FooWithUnderscore, BarWithUnderscore], Discriminator('type', python_field='type_')]]
+    )
+
+    schema = serializer.get_json_schema()
+
+    # Check discriminator propertyName uses JSON field name 'type', not Python field name 'type_'
+    assert schema['items']['discriminator']['propertyName'] == 'type'
+
+    # Check object properties use JSON field name 'type'
+    foo_schema = schema['components']['schemas'][f'{ns}.<locals>.FooWithUnderscore']
+    assert 'type' in foo_schema['properties']
+    assert 'type_' not in foo_schema['properties']
+    assert foo_schema['properties']['type'] == {'enum': ['foo']}
+
+    bar_schema = schema['components']['schemas'][f'{ns}.<locals>.BarWithUnderscore']
+    assert 'type' in bar_schema['properties']
+    assert 'type_' not in bar_schema['properties']
+    assert bar_schema['properties']['type'] == {'enum': ['bar']}
+
+
+def test_to_json_schema__tagged_union_with_python_field_different_names(ns):
+    """Test JSON schema for discriminator with different Python and JSON field names."""
+    @dataclass
+    class FooWithKind:
+        kind: Literal['foo']
+        value: int
+
+    @dataclass
+    class BarWithKind:
+        kind: Literal['bar']
+        value: str
+
+    serializer = Serializer(
+        list[Annotated[Union[FooWithKind, BarWithKind], Discriminator('type', python_field='kind')]]
+    )
+
+    schema = serializer.get_json_schema()
+
+    # Check discriminator propertyName uses JSON field name 'type', not Python field name 'kind'
+    assert schema['items']['discriminator']['propertyName'] == 'type'
+
+    # Check object properties use JSON field name 'type', not 'kind'
+    foo_schema = schema['components']['schemas'][f'{ns}.<locals>.FooWithKind']
+    assert 'type' in foo_schema['properties']
+    assert 'kind' not in foo_schema['properties']
+    assert foo_schema['properties']['type'] == {'enum': ['foo']}
+
+    bar_schema = schema['components']['schemas'][f'{ns}.<locals>.BarWithKind']
+    assert 'type' in bar_schema['properties']
+    assert 'kind' not in bar_schema['properties']
+    assert bar_schema['properties']['type'] == {'enum': ['bar']}
+
+
+def test_to_json_schema__tagged_union_with_python_field_and_camelcase(ns):
+    """Test JSON schema for discriminator with python_field and camelcase_fields."""
+    @dataclass
+    class FooWithUnderscore:
+        type_: Literal['foo']
+        some_field: int
+
+    @dataclass
+    class BarWithUnderscore:
+        type_: Literal['bar']
+        another_field: str
+
+    serializer = Serializer(
+        list[Annotated[Union[FooWithUnderscore, BarWithUnderscore], Discriminator('type', python_field='type_')]],
+        camelcase_fields=True,
+    )
+
+    schema = serializer.get_json_schema()
+
+    # Check discriminator propertyName uses JSON field name 'type' (not camelCased)
+    assert schema['items']['discriminator']['propertyName'] == 'type'
+
+    # Check object properties use JSON field name 'type' and other fields are camelCased
+    foo_schema = schema['components']['schemas'][f'{ns}.<locals>.FooWithUnderscore']
+    assert 'type' in foo_schema['properties']
+    assert 'type_' not in foo_schema['properties']
+    assert 'someField' in foo_schema['properties']  # camelCase applied to other fields
+    assert 'some_field' not in foo_schema['properties']
+
+    bar_schema = schema['components']['schemas'][f'{ns}.<locals>.BarWithUnderscore']
+    assert 'type' in bar_schema['properties']
+    assert 'type_' not in bar_schema['properties']
+    assert 'anotherField' in bar_schema['properties']  # camelCase applied to other fields
+    assert 'another_field' not in bar_schema['properties']
