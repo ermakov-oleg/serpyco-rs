@@ -262,6 +262,49 @@ print(ser.load([{'type': 'foo', 'value': 1}, {'type': 'bar', 'value': 'buz'}]))
 >>> [Foo(type='foo', value=1), Bar(type='bar', value='buz')]
 ```
 
+#### Handling Python keywords with `python_field`
+
+When the discriminator field name conflicts with Python keywords (like `type`, `from`, etc.),
+you can use a trailing underscore in the Python field name and specify the JSON field name separately:
+
+```python
+from typing import Annotated, Literal
+from dataclasses import dataclass
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Discriminator
+
+@dataclass
+class Foo:
+    type_: Literal['foo']  # Python field name with underscore
+    value: int
+
+@dataclass
+class Bar:
+    type_: Literal['bar']  # Python field name with underscore
+    value: str
+
+# Specify JSON field name ('type') and Python field name ('type_')
+ser = Serializer(list[Annotated[Foo | Bar, Discriminator('type', python_field='type_')]])
+
+# JSON uses 'type' (without underscore)
+print(ser.load([{'type': 'foo', 'value': 1}, {'type': 'bar', 'value': 'buz'}]))
+>>> [Foo(type_='foo', value=1), Bar(type_='bar', value='buz')]
+```
+
+You can also use `python_field` to map different field names:
+
+```python
+@dataclass
+class Foo:
+    kind: Literal['foo']  # Python field name
+    value: int
+
+# JSON field 'type' maps to Python field 'kind'
+ser = Serializer(Annotated[Foo, Discriminator('type', python_field='kind')])
+print(ser.load({'type': 'foo', 'value': 1}))
+>>> Foo(kind='foo', value=1)
+```
+
 ### Min / Max
 
 Supported for `int` / `float` / `Decimal` types and only for validation on load.

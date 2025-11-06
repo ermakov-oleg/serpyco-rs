@@ -243,17 +243,22 @@ class _TypeResolver:
             ):
                 raise RuntimeError(f'Unions supported only for dataclasses or attrs. Provided: {t}')
 
+            # Python field name (can differ from JSON field name for keywords like 'type_')
+            python_field_name = discriminator.python_field or discriminator.field
+            # JSON field name before FieldFormat transformation
+            json_field_name = discriminator.field
+
             with self.resolver_context.push(
-                dataclasses.replace(self.resolver_context.get(), discriminator_field=discriminator.name)
+                dataclasses.replace(self.resolver_context.get(), discriminator_field=python_field_name)
             ):
                 return DiscriminatedUnionType(
                     item_types={
-                        _get_discriminator_value(get_origin(arg) or arg, discriminator.name): self.resolve(arg)
+                        _get_discriminator_value(get_origin(arg) or arg, python_field_name): self.resolve(arg)
                         for arg in args
                     },
                     ref_name=name,
-                    dump_discriminator=discriminator.name,
-                    load_discriminator=_apply_format(annotations.get(FieldFormat, NoFormat), discriminator.name),
+                    dump_discriminator=python_field_name,
+                    load_discriminator=_apply_format(annotations.get(FieldFormat, NoFormat), json_field_name),
                     custom_encoder=custom_encoder,
                 )
 

@@ -271,3 +271,91 @@ def test_load_union_simple_types__invalid_type():
     assert exc_info.value.errors == [
         ErrorItem(message='123.0 is not of type "typing.Union[int, str]"', instance_path='')
     ]
+
+
+def test_tagged_union__python_field_for_keyword():
+    """Test discriminator with python_field to handle Python keywords like 'type'."""
+    @dataclass
+    class FooWithUnderscore:
+        type_: Literal['foo']
+        value: int
+
+    @dataclass
+    class BarWithUnderscore:
+        type_: Literal['bar']
+        value: str
+
+    serializer = Serializer(
+        list[Annotated[Union[FooWithUnderscore, BarWithUnderscore], Discriminator('type', python_field='type_')]]
+    )
+
+    obj = [
+        FooWithUnderscore(type_='foo', value=1),
+        BarWithUnderscore(type_='bar', value='test'),
+    ]
+    raw = [
+        {'type': 'foo', 'value': 1},
+        {'type': 'bar', 'value': 'test'},
+    ]
+
+    assert serializer.dump(obj) == raw
+    assert serializer.load(raw) == obj
+
+
+def test_tagged_union__python_field_with_camelcase():
+    """Test discriminator with python_field and camelcase_fields."""
+    @dataclass
+    class FooWithUnderscore:
+        type_: Literal['foo']
+        some_field: int
+
+    @dataclass
+    class BarWithUnderscore:
+        type_: Literal['bar']
+        another_field: str
+
+    serializer = Serializer(
+        list[Annotated[Union[FooWithUnderscore, BarWithUnderscore], Discriminator('type', python_field='type_')]],
+        camelcase_fields=True,
+    )
+
+    obj = [
+        FooWithUnderscore(type_='foo', some_field=1),
+        BarWithUnderscore(type_='bar', another_field='test'),
+    ]
+    raw = [
+        {'type': 'foo', 'someField': 1},
+        {'type': 'bar', 'anotherField': 'test'},
+    ]
+
+    assert serializer.dump(obj) == raw
+    assert serializer.load(raw) == obj
+
+
+def test_tagged_union__python_field_different_names():
+    """Test discriminator with different Python and JSON field names."""
+    @dataclass
+    class FooWithKind:
+        kind: Literal['foo']
+        value: int
+
+    @dataclass
+    class BarWithKind:
+        kind: Literal['bar']
+        value: str
+
+    serializer = Serializer(
+        list[Annotated[Union[FooWithKind, BarWithKind], Discriminator('type', python_field='kind')]]
+    )
+
+    obj = [
+        FooWithKind(kind='foo', value=1),
+        BarWithKind(kind='bar', value='test'),
+    ]
+    raw = [
+        {'type': 'foo', 'value': 1},
+        {'type': 'bar', 'value': 'test'},
+    ]
+
+    assert serializer.dump(obj) == raw
+    assert serializer.load(raw) == obj

@@ -28,7 +28,8 @@ class MaxLength:
 
 @dataclass(frozen=True)
 class Discriminator:
-    name: str
+    field: str
+    python_field: str | None = None
 
 
 @dataclass(frozen=True)
