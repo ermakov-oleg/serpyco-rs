@@ -22,6 +22,7 @@ from uuid import UUID
 from typing_extensions import (
     TypeGuard,
     assert_never,
+    evaluate_forward_ref,
     get_args,
     is_typeddict,
 )
@@ -60,7 +61,7 @@ from ._impl import (
     UUIDType,
 )
 from ._meta import Annotations, ResolverContext
-from ._secial_forms import is_union_type, unwrap_special_forms
+from ._secial_forms import is_typealiastype, is_union_type, unwrap_special_forms
 from ._type_utils import get_type_hints  # type: ignore[attr-defined]
 from ._utils import _MergeStack, _Stack, get_attributes_doc, to_camelcase
 from .metadata import (
@@ -116,13 +117,20 @@ class _TypeResolver:
         return type_info
 
     def _resolve_with_meta(self, t: Any) -> tuple[BaseType, Annotations]:
+        # Compute cache key BEFORE unwrapping to handle recursive type aliases.
+        # For TypeAliasType[args], use id of the TypeAliasType itself (stable across calls).
+        origin = get_origin(t)
+        if is_typealiastype(origin):
+            cache_key_base = f'{t!r}::{id(origin)}'
+        else:
+            cache_key_base = f'{t!r}::{id(t)}'
+
         t, metadata = unwrap_special_forms(t)
         with self.annotations.merge(other=metadata):
             context = self.resolver_context.get()
             metadata = self.annotations.get()
 
-            # Try find type in state
-            ref = f'{t!r}::{id(t)}::{metadata.key}'
+            ref = f'{cache_key_base}::{metadata.key}'
             if context.has_cached_type(ref):
                 type_info = context.get_cached_type(ref)
 
@@ -586,7 +594,7 @@ def _get_globals(t: Any) -> dict[str, Any]:
 
 
 def _evaluate_forwardref(t: ForwardRef, meta: ResolverContext) -> Any:
-    return t._evaluate(meta.globals, {}, recursive_guard=frozenset[str]())
+    return evaluate_forward_ref(t, globals=meta.globals, locals={})
 
 
 def _get_discriminator_value(t: Any, name: str) -> str:
