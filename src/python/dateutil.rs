@@ -65,7 +65,7 @@ fn time_as_tzinfo<'py>(py: Python<'py>, time: &Time) -> PyResult<Option<Bound<'p
             let tzinfo =
                 unsafe { Bound::from_owned_ptr(py, PyTimeZone_FromOffset(delta.as_ptr())) };
 
-            Ok(Some(tzinfo.downcast_into()?))
+            Ok(Some(tzinfo.cast_into()?))
         }
         None => Ok(None),
     }
@@ -148,6 +148,6 @@ fn to_tz_offset(
     if offset.is_none() {
         return Ok(None);
     }
-    let offset = offset.downcast::<PyDelta>()?;
+    let offset = offset.cast::<PyDelta>()?;
     Ok(Some(offset.get_days() * 86400 + offset.get_seconds()))
 }

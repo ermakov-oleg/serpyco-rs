@@ -10,7 +10,7 @@ use super::macros::ffi;
 #[inline]
 pub(crate) fn create_py_list(py: Python, size: usize) -> Bound<PyList> {
     let size: Py_ssize_t = size.try_into().expect("size is too large");
-    unsafe { Bound::from_owned_ptr(py, ffi::PyList_New(size)).downcast_into_unchecked() }
+    unsafe { Bound::from_owned_ptr(py, ffi::PyList_New(size)).cast_into_unchecked() }
 }
 
 #[inline]
@@ -34,7 +34,7 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
 #[inline]
 pub(crate) fn create_py_dict_known_size(py: Python, size: usize) -> Bound<PyDict> {
     let size: Py_ssize_t = size.try_into().expect("size is too large");
-    unsafe { Bound::from_owned_ptr(py, ffi::_PyDict_NewPresized(size)).downcast_into_unchecked() }
+    unsafe { Bound::from_owned_ptr(py, ffi::_PyDict_NewPresized(size)).cast_into_unchecked() }
 }
 
 #[inline]
@@ -51,7 +51,7 @@ pub(crate) fn py_dict_set_item(
 #[inline]
 pub(crate) fn create_py_tuple(py: Python, size: usize) -> Bound<PyTuple> {
     let size: Py_ssize_t = size.try_into().expect("size is too large");
-    unsafe { Bound::from_owned_ptr(py, ffi::PyTuple_New(size)).downcast_into_unchecked() }
+    unsafe { Bound::from_owned_ptr(py, ffi::PyTuple_New(size)).cast_into_unchecked() }
 }
 
 #[inline]
