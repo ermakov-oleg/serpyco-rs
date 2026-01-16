@@ -20,7 +20,6 @@ from typing import (
 from uuid import UUID
 
 from typing_extensions import (
-    TypeAliasType,
     TypeGuard,
     assert_never,
     evaluate_forward_ref,
@@ -62,7 +61,7 @@ from ._impl import (
     UUIDType,
 )
 from ._meta import Annotations, ResolverContext
-from ._secial_forms import is_union_type, unwrap_special_forms
+from ._secial_forms import is_typealiastype, is_union_type, unwrap_special_forms
 from ._type_utils import get_type_hints  # type: ignore[attr-defined]
 from ._utils import _MergeStack, _Stack, get_attributes_doc, to_camelcase
 from .metadata import (
@@ -121,7 +120,7 @@ class _TypeResolver:
         # Compute cache key BEFORE unwrapping to handle recursive type aliases.
         # For TypeAliasType[args], use id of the TypeAliasType itself (stable across calls).
         origin = get_origin(t)
-        if isinstance(origin, TypeAliasType):
+        if is_typealiastype(origin):
             cache_key_base = f'{t!r}::{id(origin)}'
         else:
             cache_key_base = f'{t!r}::{id(t)}'
