@@ -77,7 +77,7 @@ impl Serializer {
             ))?
         };
 
-        let data = data.downcast::<PyMapping>()?;
+        let data = data.cast::<PyMapping>()?;
         let fields = encoder.get_fields();
 
         let new_data = match fields {
@@ -273,7 +273,7 @@ pub fn get_encoder(
             )?
         }
         Type::Union(type_info, base_type, python_object_id) => {
-            let item_types = type_info.get().item_types.bind(py).downcast::<PyList>()?;
+            let item_types = type_info.get().item_types.bind(py).cast::<PyList>()?;
 
             let mut encoders = vec![];
 
@@ -305,15 +305,15 @@ pub fn get_encoder(
                 .get()
                 .dump_discriminator
                 .bind(py)
-                .downcast::<PyString>()?;
+                .cast::<PyString>()?;
 
             let load_discriminator = type_info
                 .get()
                 .load_discriminator
                 .bind(py)
-                .downcast::<PyString>()?;
+                .cast::<PyString>()?;
 
-            let item_types = type_info.get().item_types.bind(py).downcast::<PyDict>()?;
+            let item_types = type_info.get().item_types.bind(py).cast::<PyDict>()?;
 
             let mut encoders = HashMap::new();
             let mut keys = vec![];
@@ -470,8 +470,8 @@ fn iterate_on_fields(
 ) -> PyResult<Vec<Field>> {
     let mut fields = vec![];
     for field in entity_fields {
-        let f_name = field.name.downcast_bound::<PyString>(py)?;
-        let dict_key = field.dict_key.downcast_bound::<PyString>(py)?;
+        let f_name = field.name.cast_bound::<PyString>(py)?;
+        let dict_key = field.dict_key.cast_bound::<PyString>(py)?;
         let f_type = get_object_type(field.field_type.bind(py))?;
 
         let fld = Field {

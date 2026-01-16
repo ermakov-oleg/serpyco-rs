@@ -777,7 +777,7 @@ impl EnumType {
 
             // For support fast load with try_cast_from_string option enabled
             // we need to add additional mapping for string values
-            if let Ok(value) = value.downcast::<PyInt>() {
+            if let Ok(value) = value.cast::<PyInt>() {
                 let str_value = value.str().unwrap();
                 load_map.set_item((&str_value, false), &py_value)?;
             }
@@ -1097,7 +1097,7 @@ impl LiteralType {
 
             // For support fast load with try_cast_from_string option enabled
             // we need to add additional mapping for string values
-            if let Ok(value) = value.downcast::<PyInt>() {
+            if let Ok(value) = value.cast::<PyInt>() {
                 let str_value = value.str().unwrap();
                 load_map.set_item((&str_value, false), &py_value)?;
             }

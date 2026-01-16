@@ -125,12 +125,12 @@ impl Encoder for IntEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast_exact::<PyInt>() {
+        if let Ok(val) = value.cast_exact::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
         if ctx.try_cast_from_string {
-            if let Ok(val) = value.downcast::<PyString>() {
+            if let Ok(val) = value.cast::<PyString>() {
                 if let Ok(val) = val.to_str()?.parse::<i64>() {
                     check_bounds!(val, self.type_info, instance_path)?;
                     return val.into_bound_py_any(value.py());
@@ -158,16 +158,16 @@ impl Encoder for FloatEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyInt>() {
+        if let Ok(val) = value.cast::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
-        if let Ok(val) = value.downcast::<PyFloat>() {
+        if let Ok(val) = value.cast::<PyFloat>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             return Ok(value.clone());
         }
         if ctx.try_cast_from_string {
-            if let Ok(val) = value.downcast::<PyString>() {
+            if let Ok(val) = value.cast::<PyString>() {
                 if let Ok(val) = val.to_str()?.parse::<f64>() {
                     check_bounds!(val, self.type_info, instance_path)?;
                     return val.into_bound_py_any(value.py());
@@ -197,13 +197,13 @@ impl Encoder for DecimalEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let valid = if let Ok(val) = value.downcast::<PyFloat>() {
+        let valid = if let Ok(val) = value.cast::<PyFloat>() {
             check_bounds!(val.value(), self.type_info, instance_path)?;
             true
-        } else if let Ok(val) = value.downcast::<PyInt>() {
+        } else if let Ok(val) = value.cast::<PyInt>() {
             check_bounds!(val.extract()?, self.type_info, instance_path)?;
             true
-        } else if let Ok(val) = value.downcast::<PyString>() {
+        } else if let Ok(val) = value.cast::<PyString>() {
             match val.to_str()?.parse::<f64>() {
                 Ok(val_f64) => {
                     check_bounds!(val_f64, self.type_info, instance_path)?;
@@ -241,7 +241,7 @@ impl Encoder for StringEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyString>() {
+        if let Ok(val) = value.cast::<PyString>() {
             check_length(
                 val,
                 self.type_info.min_length,
@@ -271,11 +271,11 @@ impl Encoder for BooleanEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(_val) = value.downcast::<PyBool>() {
+        if let Ok(_val) = value.cast::<PyBool>() {
             return Ok(value.clone());
         }
         if ctx.try_cast_from_string {
-            if let Ok(val) = value.downcast::<PyString>() {
+            if let Ok(val) = value.cast::<PyString>() {
                 if let Some(val) = str_as_bool(val.to_str()?) {
                     return val.into_bound_py_any(value.py());
                 }
@@ -302,7 +302,7 @@ impl Encoder for BytesEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(_val) = value.downcast::<PyBytes>() {
+        if let Ok(_val) = value.cast::<PyBytes>() {
             Ok(value.clone())
         } else {
             invalid_type!("bytes", value, instance_path)
@@ -320,7 +320,7 @@ pub struct DictionaryEncoder {
 impl Encoder for DictionaryEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(dict) = value.downcast::<PyDict>() {
+        if let Ok(dict) = value.cast::<PyDict>() {
             let result_dict = create_py_dict_known_size(dict.py(), dict.len());
             for (k, v) in dict.iter() {
                 let key = self.key_encoder.dump(&k)?;
@@ -342,7 +342,7 @@ impl Encoder for DictionaryEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyDict>() {
+        if let Ok(val) = value.cast::<PyDict>() {
             let result_dict = create_py_dict_known_size(val.py(), val.len());
             for (k, v) in val.iter() {
                 let instance_path = instance_path.push(&k);
@@ -377,7 +377,7 @@ pub struct ArrayEncoder {
 impl Encoder for ArrayEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(list) = value.downcast::<PyList>() {
+        if let Ok(list) = value.cast::<PyList>() {
             let size = list.len();
             let result = create_py_list(value.py(), size);
 
@@ -400,7 +400,7 @@ impl Encoder for ArrayEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyList>() {
+        if let Ok(val) = value.cast::<PyList>() {
             let size = val.len();
             check_sequence_bounds(
                 val,
@@ -501,7 +501,7 @@ impl Encoder for EntityEncoder {
             let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
-                    dict.update(dump_result.downcast::<pyo3::types::PyMapping>()?)?;
+                    dict.update(dump_result.cast::<pyo3::types::PyMapping>()?)?;
                 } else {
                     py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
                 }
@@ -517,7 +517,7 @@ impl Encoder for EntityEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let Ok(val) = value.downcast::<PyDict>() else {
+        let Ok(val) = value.cast::<PyDict>() else {
             invalid_type!("object", value, instance_path)
         };
         let py_frozen_object_set_attr = self.object_set_attr.bind(value.py());
@@ -586,7 +586,7 @@ pub struct TypedDictEncoder {
 impl Encoder for TypedDictEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let value = match value.downcast::<PyDict>() {
+        let value = match value.cast::<PyDict>() {
             Ok(val) => val,
             _ => invalid_type_dump!("dict", value),
         };
@@ -607,7 +607,7 @@ impl Encoder for TypedDictEncoder {
             let dump_result = field.encoder.dump(&field_val)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
-                    dict.update(dump_result.downcast::<pyo3::types::PyMapping>()?)?;
+                    dict.update(dump_result.cast::<pyo3::types::PyMapping>()?)?;
                 } else {
                     py_dict_set_item(&dict, field.dict_key.as_ptr(), dump_result)?;
                 }
@@ -623,7 +623,7 @@ impl Encoder for TypedDictEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let Ok(value) = value.downcast::<PyDict>() else {
+        let Ok(value) = value.cast::<PyDict>() else {
             invalid_type_dump!("dict", value);
         };
         let dict = create_py_dict_known_size(value.py(), self.fields.len());
@@ -662,7 +662,7 @@ impl Encoder for UUIDEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyString>() {
+        if let Ok(val) = value.cast::<PyString>() {
             if Uuid::parse_str(val.to_str()?).is_ok() {
                 if let Ok(result) = self.uuid_cls.bind(value.py()).call1((val,)) {
                     return Ok(result);
@@ -788,7 +788,7 @@ pub struct TupleEncoder {
 impl Encoder for TupleEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(seq) = value.downcast::<PySequence>() {
+        if let Ok(seq) = value.cast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
             let result = create_py_list(value.py(), seq_len);
@@ -812,7 +812,7 @@ impl Encoder for TupleEncoder {
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
         // Check sequence is not str
-        if let Ok(seq) = value.downcast::<PySequence>() {
+        if let Ok(seq) = value.cast::<PySequence>() {
             if value.is_instance_of::<PyString>() {
                 invalid_type!("sequence", value, instance_path);
             }
@@ -878,7 +878,7 @@ impl TryFrom<&Bound<'_, PyAny>> for DiscriminatorKey {
     type Error = ();
 
     fn try_from(value: &Bound<'_, PyAny>) -> Result<Self, Self::Error> {
-        if let Ok(val) = value.downcast::<PyString>() {
+        if let Ok(val) = value.cast::<PyString>() {
             Ok(DiscriminatorKey(val.to_string()))
         } else if let Ok(value) = value.getattr(intern!(value.py(), "value")) {
             DiscriminatorKey::try_from(&value)
@@ -933,7 +933,7 @@ impl Encoder for DiscriminatedUnionEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyDict>() {
+        if let Ok(val) = value.cast::<PyDict>() {
             let key = match val.get_item(&self.load_discriminator) {
                 Ok(Some(k)) => k,
                 _ => {
@@ -965,7 +965,7 @@ pub struct TimeEncoder {}
 impl Encoder for TimeEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let py_time = value.downcast::<PyTime>()?;
+        let py_time = value.cast::<PyTime>()?;
         let result = dump_time(py_time)?;
         result.into_bound_py_any(value.py())
     }
@@ -977,7 +977,7 @@ impl Encoder for TimeEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyString>() {
+        if let Ok(val) = value.cast::<PyString>() {
             if let Ok(result) = parse_time(value.py(), val.to_str()?) {
                 return Ok(result.into_any());
             }
@@ -994,7 +994,7 @@ pub struct DateTimeEncoder {
 impl Encoder for DateTimeEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let py_datetime = value.downcast::<PyDateTime>()?;
+        let py_datetime = value.cast::<PyDateTime>()?;
         let result = dump_datetime(py_datetime, self.naive_datetime_to_utc)?;
         result.into_bound_py_any(value.py())
     }
@@ -1006,7 +1006,7 @@ impl Encoder for DateTimeEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyString>() {
+        if let Ok(val) = value.cast::<PyString>() {
             if let Ok(result) = parse_datetime(value.py(), val.to_str()?) {
                 return Ok(result.into_any());
             }
@@ -1021,7 +1021,7 @@ pub struct DateEncoder {}
 impl Encoder for DateEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
-        let py_date = value.downcast::<PyDate>()?;
+        let py_date = value.cast::<PyDate>()?;
         let result = dump_date(py_date);
         result.into_bound_py_any(value.py())
     }
@@ -1033,7 +1033,7 @@ impl Encoder for DateEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> PyResult<Bound<'a, PyAny>> {
-        if let Ok(val) = value.downcast::<PyString>() {
+        if let Ok(val) = value.cast::<PyString>() {
             if let Ok(result) = parse_date(value.py(), val.to_str()?) {
                 return Ok(result.into_any());
             }
