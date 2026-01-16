@@ -361,7 +361,7 @@ def test_describe__dataclass_with_invalid_forward_ref_annotation__parsed():
     with pytest.raises(NameError) as exc_info:
         describe_type(SomeEntity)
 
-    assert exc_info.match(r"name 'intt' is not defined")
+    assert exc_info.match(r'intt')
 
 
 def test_describe__dataclass_and_annotated_with_min_max__parsed():
@@ -455,7 +455,7 @@ def test_describe__attrs_with_invalid_forward_ref_annotation__parsed():
     with pytest.raises(NameError) as exc_info:
         describe_type(SomeEntity)
 
-    assert exc_info.match(r"name 'intt' is not defined")
+    assert exc_info.match('intt')
 
 
 def test_describe__attrs_and_annotated_with_min_max__parsed():

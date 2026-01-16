@@ -21,7 +21,15 @@ from typing import (
     get_origin,
 )
 
-from typing_extensions import NotRequired, ParamSpec, Required, TypeVarTuple, is_typeddict
+from typing_extensions import (
+    Format,
+    NotRequired,
+    ParamSpec,
+    Required,
+    TypeVarTuple,
+    get_annotations,
+    is_typeddict,
+)
 
 
 _allowed_types = (
@@ -110,9 +118,8 @@ def get_type_hints(
                 base_globals = getattr(sys.modules.get(base.__module__, None), '__dict__', {})
             else:
                 base_globals = globalns
-            ann = base.__dict__.get('__annotations__', {})
-            if isinstance(ann, types.GetSetDescriptorType):
-                ann = {}
+
+            ann = get_annotations(base, format=Format.FORWARDREF)
             base_locals = dict(vars(base)) if localns is None else localns
             if localns is None and globalns is None:
                 # This is surprising, but required.  Before Python 3.10,
@@ -133,7 +140,11 @@ def get_type_hints(
                     value = type(None)
                 if isinstance(value, str):
                     value = ForwardRef(value, is_argument=False, is_class=True)
-                value = _eval_type(value, base_globals, base_locals)
+                # Python 3.14+ requires type_params argument
+                if sys.version_info >= (3, 14):
+                    value = _eval_type(value, base_globals, base_locals, type_params=())
+                else:
+                    value = _eval_type(value, base_globals, base_locals)
                 hint_tracking[base][name] = value
                 hints[name] = value
 
@@ -179,7 +190,11 @@ def get_type_hints(
                 is_argument=not isinstance(obj, types.ModuleType),
                 is_class=False,
             )
-        hints[name] = _eval_type(value, globalns, localns)
+        # Python 3.14+ requires type_params argument
+        if sys.version_info >= (3, 14):
+            hints[name] = _eval_type(value, globalns, localns, type_params=())
+        else:
+            hints[name] = _eval_type(value, globalns, localns)
     return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
 
 

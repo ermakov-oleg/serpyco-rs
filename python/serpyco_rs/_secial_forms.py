@@ -4,15 +4,9 @@ import typing
 from contextlib import suppress
 from typing import Annotated, Any, ClassVar, Final, ForwardRef, Union, get_origin
 
-from typing_extensions import NotRequired, ReadOnly, Required, get_args
+from typing_extensions import NotRequired, ReadOnly, Required, TypeAliasType, get_args
 
 from ._meta import Annotations
-
-
-if sys.version_info >= (3, 12):
-    from typing import TypeAliasType
-else:
-    TypeAliasType = None
 
 
 def unwrap_special_forms(annotation: Any) -> tuple[Any, Annotations]:
@@ -75,7 +69,7 @@ def is_annotated(origin: Any) -> bool:
 
 
 def is_typealiastype(annotation: Any) -> bool:
-    return TypeAliasType is not None and isinstance(annotation, TypeAliasType)
+    return isinstance(annotation, TypeAliasType)
 
 
 def is_newtype(annotation: Any) -> bool:

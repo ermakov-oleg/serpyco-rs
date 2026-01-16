@@ -85,9 +85,7 @@ def test_tagged_union__unsupported_types():
         Serializer(Inner)
 
     assert exc_info.type is RuntimeError
-    assert exc_info.value.args[0] == (
-        'Unions supported only for dataclasses or attrs. Provided: typing.Union[int, str]'
-    )
+    assert 'Unions supported only for dataclasses or attrs.' in exc_info.value.args[0]
 
 
 @dataclass
@@ -268,6 +266,6 @@ def test_load_union_simple_types__invalid_type():
     with pytest.raises(SchemaValidationError) as exc_info:
         serializer.load(123.0)
 
-    assert exc_info.value.errors == [
-        ErrorItem(message='123.0 is not of type "typing.Union[int, str]"', instance_path='')
-    ]
+    assert len(exc_info.value.errors) == 1
+    assert exc_info.value.errors[0].instance_path == ''
+    assert '123.0 is not of type' in exc_info.value.errors[0].message
