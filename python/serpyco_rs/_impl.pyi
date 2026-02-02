@@ -15,13 +15,13 @@ class ErrorItem:
     message: str
     instance_path: str
 
-    def __init__(self, message: str, instance_path: str): ...
+    def __init__(self, message: str, instance_path: str) -> None: ...
 
 class SchemaValidationError(ValidationError):
     errors: list[ErrorItem]
 
 class Serializer(Generic[_T]):
-    def __init__(self, py_class: BaseType, naive_datetime_to_utc: bool): ...
+    def __init__(self, py_class: BaseType, naive_datetime_to_utc: bool) -> None: ...
     def dump(self, value: _T) -> Any: ...
     def load(self, data: Any) -> _T: ...
     def load_query_params(self, data: Any) -> _T: ...
@@ -30,12 +30,14 @@ class CustomEncoder(Generic[_I, _O]):
     serialize: Callable[[_I], _O] | None
     deserialize: Callable[[_O], _I] | None
 
-    def __init__(self, serialize: Callable[[_I], _O] | None = None, deserialize: Callable[[_O], _I] | None = None): ...
+    def __init__(
+        self, serialize: Callable[[_I], _O] | None = None, deserialize: Callable[[_O], _I] | None = None
+    ) -> None: ...
 
 class BaseType:
     custom_encoder: CustomEncoder[Any, Any] | None
 
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
 
 class ContainerBaseType(BaseType):
     ref_name: str
@@ -44,7 +46,10 @@ class ContainerBaseType(BaseType):
     def should_use_ref(self) -> bool: ...
 
 class NoneType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+
+class NeverType(BaseType):
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
 
 class IntegerType(BaseType):
     min: int | None
@@ -52,19 +57,23 @@ class IntegerType(BaseType):
 
     def __init__(
         self, min: int | None = None, max: int | None = None, custom_encoder: CustomEncoder[Any, Any] | None = None
-    ): ...
+    ) -> None: ...
 
 class FloatType(BaseType):
     min: float | None
     max: float | None
 
-    def __init__(self, min: float | None, max: float | None, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(
+        self, min: float | None, max: float | None, custom_encoder: CustomEncoder[Any, Any] | None
+    ) -> None: ...
 
 class DecimalType(BaseType):
     min: float | None
     max: float | None
 
-    def __init__(self, min: float | None, max: float | None, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(
+        self, min: float | None, max: float | None, custom_encoder: CustomEncoder[Any, Any] | None
+    ) -> None: ...
 
 class StringType(BaseType):
     min_length: int | None
@@ -75,22 +84,22 @@ class StringType(BaseType):
         min_length: int | None = None,
         max_length: int | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class BooleanType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
 
 class UUIDType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
 
 class TimeType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
 
 class DateTimeType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
 
 class DateType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
 
 class DefaultValue(Generic[_T]):
     @staticmethod
@@ -125,7 +134,7 @@ class EntityField(BaseType):
         doc: str | None = None,
         is_flattened: bool = False,
         is_dict_flatten: bool = False,
-    ): ...
+    ) -> None: ...
 
 class EntityType(BaseType):
     cls: type[Any]
@@ -146,7 +155,7 @@ class EntityType(BaseType):
         used_keys: set[str] | None = None,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class TypedDictType(BaseType):
     name: str
@@ -163,7 +172,7 @@ class TypedDictType(BaseType):
         doc: str | None = None,
         used_keys: set[str] | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class ArrayType(ContainerBaseType):
     item_type: BaseType
@@ -177,7 +186,7 @@ class ArrayType(ContainerBaseType):
         min_length: int | None = None,
         max_length: int | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class EnumType(BaseType):
     cls: type[Enum | IntEnum]
@@ -185,12 +194,12 @@ class EnumType(BaseType):
 
     def __init__(
         self, cls: type[Enum | IntEnum], items: list[Any], custom_encoder: CustomEncoder[Any, Any] | None = None
-    ): ...
+    ) -> None: ...
 
 class OptionalType(BaseType):
     inner: BaseType
 
-    def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
 
 class DictionaryType(BaseType):
     key_type: BaseType
@@ -203,7 +212,7 @@ class DictionaryType(BaseType):
         value_type: BaseType,
         omit_none: bool = False,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class TupleType(ContainerBaseType):
     item_types: list[BaseType]
@@ -213,13 +222,13 @@ class TupleType(ContainerBaseType):
         item_types: list[BaseType],
         ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class BytesType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
 
 class AnyType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
 
 class UnionType(ContainerBaseType):
     item_types: list[BaseType]
@@ -229,7 +238,7 @@ class UnionType(ContainerBaseType):
         item_types: list[BaseType],
         ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class DiscriminatedUnionType(ContainerBaseType):
     item_types: dict[str, BaseType]
@@ -243,12 +252,12 @@ class DiscriminatedUnionType(ContainerBaseType):
         load_discriminator: str,
         ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
-    ): ...
+    ) -> None: ...
 
 class LiteralType(BaseType):
     args: list[str | int | Enum]
 
-    def __init__(self, args: list[str | int | Enum], custom_encoder: CustomEncoder[Any, Any] | None = None): ...
+    def __init__(self, args: list[str | int | Enum], custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
 
 class RecursionHolder(BaseType):
     name: str
@@ -257,10 +266,10 @@ class RecursionHolder(BaseType):
 
     def __init__(
         self, name: str, state_key: str, meta: ResolverContext, custom_encoder: CustomEncoder[Any, Any] | None = None
-    ): ...
+    ) -> None: ...
     def get_inner_type(self) -> BaseType: ...
 
 class CustomType(BaseType):
     json_schema: dict[str, Any]
 
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any], json_schema: dict[str, Any]): ...
+    def __init__(self, custom_encoder: CustomEncoder[Any, Any], json_schema: dict[str, Any]) -> None: ...

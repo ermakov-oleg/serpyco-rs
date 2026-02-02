@@ -4,6 +4,7 @@ from typing import Annotated, Any, Optional
 import pytest
 from serpyco_rs import Serializer
 from serpyco_rs.metadata import Alias, Flatten
+from typing_extensions import Never
 
 
 @pytest.fixture
@@ -317,6 +318,37 @@ def test_flatten_mixed_struct_and_dict_json_schema(ns):
                     'required': ['name', 'info_field'],
                     'type': 'object',
                     'additionalProperties': True,
+                },
+            },
+        },
+    }
+
+
+def test_flatten_dict_never_forbids_extra_properties_json_schema(ns):
+    """Test that dict[str, Never] with Flatten generates additionalProperties: false"""
+
+    @dataclass
+    class StrictPerson:
+        name: str
+        age: int
+        _forbid_extra: Annotated[dict[str, Never], Flatten]
+
+    serializer = Serializer(StrictPerson)
+    schema = serializer.get_json_schema()
+
+    assert schema == {
+        '$ref': f'#/components/schemas/{ns}.<locals>.StrictPerson',
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        'components': {
+            'schemas': {
+                f'{ns}.<locals>.StrictPerson': {
+                    'properties': {
+                        'name': {'type': 'string'},
+                        'age': {'type': 'integer', 'format': 'int64'},
+                    },
+                    'required': ['name', 'age'],
+                    'type': 'object',
+                    'additionalProperties': False,
                 },
             },
         },

@@ -4,13 +4,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Generic, Literal, TypeVar
+from typing import Generic, Literal, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
-from serpyco_rs import Serializer, ValidationError
-from typing_extensions import TypedDict
+from serpyco_rs import SchemaValidationError, Serializer, ValidationError
+from typing_extensions import Never, TypedDict
 
 
 @pytest.mark.parametrize(
@@ -262,3 +262,64 @@ def test_bytes():
     serializer = Serializer(bytes)
     assert serializer.dump(b'foo') == b'foo'
     assert serializer.load(b'foo') == b'foo'
+
+
+def test_never_type_in_dataclass():
+    """Test that Never type field rejects any value during deserialization"""
+
+    @dataclass
+    class DataWithNever:
+        name: str
+        impossible: Never
+
+    serializer = Serializer(DataWithNever)
+
+    # Deserialization should fail for any value of 'impossible' field
+    with pytest.raises(SchemaValidationError, match='impossible'):
+        serializer.load({'name': 'test', 'impossible': 'any_value'})
+
+    with pytest.raises(SchemaValidationError, match='impossible'):
+        serializer.load({'name': 'test', 'impossible': 123})
+
+    with pytest.raises(SchemaValidationError, match='impossible'):
+        serializer.load({'name': 'test', 'impossible': None})
+
+
+def test_never_type_in_dict():
+    """Test that dict[str, Never] rejects any values during [de]serialization"""
+
+    serializer = Serializer(dict[str, Never])
+
+    # Empty dict should work
+    assert serializer.load({}) == {}
+    assert serializer.dump({}) == {}
+
+    # Any non-empty dict should fail
+    with pytest.raises(SchemaValidationError):
+        serializer.load({'key': 'value'})
+
+    with pytest.raises(SchemaValidationError, match=r'Schema validation failed:\n- "value" is not of type "Never"'):
+        serializer.dump({'key': 'value'})
+
+
+def test_never_type_optional():
+    """Test Never type with Optional wrapper"""
+
+    @dataclass
+    class DataWithOptionalNever:
+        name: str
+        impossible: Optional[Never] = None
+
+    serializer = Serializer(DataWithOptionalNever)
+
+    # None should be valid for Optional[Never]
+    result = serializer.load({'name': 'test'})
+    assert result.name == 'test'
+    assert result.impossible is None
+
+    result = serializer.load({'name': 'test', 'impossible': None})
+    assert result.impossible is None
+
+    # Any non-None value should fail
+    with pytest.raises(SchemaValidationError, match='impossible'):
+        serializer.load({'name': 'test', 'impossible': 'value'})

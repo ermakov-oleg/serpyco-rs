@@ -146,6 +146,29 @@ impl NoneType {
 
 #[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NeverType {}
+
+#[pymethods]
+impl NeverType {
+    #[new]
+    #[pyo3(signature = (custom_encoder=None))]
+    fn new(custom_encoder: Option<&Bound<'_, PyAny>>) -> PyClassInitializer<Self> {
+        BaseType::new(custom_encoder).add_subclass(Self {})
+    }
+
+    fn __eq__(self_: PyRef<'_, Self>, other: PyRef<'_, Self>, py: Python<'_>) -> PyResult<bool> {
+        let base = self_.as_ref();
+        let base_other = other.as_ref();
+        base.__eq__(base_other, py)
+    }
+
+    fn __repr__(&self) -> String {
+        "<NeverType>".to_string()
+    }
+}
+
+#[pyclass(frozen, extends=BaseType, module="serpyco_rs")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntegerType {
     #[pyo3(get)]
     pub min: Option<i64>,

@@ -108,6 +108,28 @@ impl Encoder for NoneEncoder {
 }
 
 #[derive(Debug, Clone)]
+pub struct NeverEncoder;
+
+impl Encoder for NeverEncoder {
+    #[inline]
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> PyResult<Bound<'a, PyAny>> {
+        // Never type should not have any values to dump
+        invalid_type_dump!("Never", value)
+    }
+
+    #[inline]
+    fn load<'a>(
+        &self,
+        value: &Bound<'a, PyAny>,
+        instance_path: &InstancePath,
+        _ctx: &Context,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        // Never type cannot be loaded - any value is invalid
+        invalid_type!("Never (no value allowed)", value, instance_path)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct IntEncoder {
     pub(crate) type_info: IntegerType,
 }

@@ -80,6 +80,12 @@ def _(arg: describe.NoneType, doc: Optional[str] = None, *, config: Config) -> S
 
 
 @to_json_schema.register
+def _(arg: describe.NeverType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    # Never type in JSON Schema is represented as a schema that matches nothing
+    return Schema(additionalArgs={'not': {}}, description=doc, config=config)
+
+
+@to_json_schema.register
 def _(arg: describe.IntegerType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return IntegerType(minimum=arg.min, maximum=arg.max, description=doc, config=config)
 
@@ -165,7 +171,7 @@ def _(arg: describe.OptionalType, doc: Optional[str] = None, *, config: Config) 
 def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) -> Schema:
     properties: dict[str, Schema] = {}
     required: list[str] = []
-    dict_flatten_value_schema = None
+    dict_flatten_additional_properties: bool | Schema | None = None
 
     for prop in arg.fields:
         if prop.is_flattened:
@@ -176,7 +182,10 @@ def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) ->
                     if flattened_schema.required:
                         required.extend(flattened_schema.required)
             elif isinstance(prop.field_type, describe.DictionaryType):
-                dict_flatten_value_schema = to_json_schema(prop.field_type.value_type, config=config)
+                if isinstance(prop.field_type.value_type, describe.NeverType):
+                    dict_flatten_additional_properties = False
+                else:
+                    dict_flatten_additional_properties = to_json_schema(prop.field_type.value_type, config=config)
         else:
             properties[prop.dict_key] = to_json_schema(prop.field_type, prop.doc, config=config)
             if prop.required:
@@ -188,7 +197,7 @@ def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) ->
         name=arg.name,
         description=arg.doc,
         config=config,
-        additionalProperties=dict_flatten_value_schema,
+        additionalProperties=dict_flatten_additional_properties,
     )
 
 

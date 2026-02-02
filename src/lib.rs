@@ -15,6 +15,7 @@ fn _serpyco_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<types::BaseType>()?;
     m.add_class::<types::ContainerBaseType>()?;
     m.add_class::<types::NoneType>()?;
+    m.add_class::<types::NeverType>()?;
     m.add_class::<types::IntegerType>()?;
     m.add_class::<types::StringType>()?;
     m.add_class::<types::FloatType>()?;
