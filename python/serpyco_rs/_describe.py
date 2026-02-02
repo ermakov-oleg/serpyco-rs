@@ -20,6 +20,7 @@ from typing import (
 from uuid import UUID
 
 from typing_extensions import (
+    Never,
     TypeGuard,
     assert_never,
     evaluate_forward_ref,
@@ -50,6 +51,7 @@ from ._impl import (
     FloatType,
     IntegerType,
     LiteralType,
+    NeverType,
     NoneType,
     OptionalType,
     RecursionHolder,
@@ -179,6 +181,9 @@ class _TypeResolver:
 
         if t is Any:
             return AnyType(custom_encoder=custom_encoder)
+
+        if t is Never:
+            return NeverType(custom_encoder=custom_encoder)
 
         if res := self._match_simple_types(t):
             return res

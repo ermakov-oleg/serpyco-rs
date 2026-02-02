@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Annotated, Literal, Optional, Union
 
 import pytest
-from serpyco_rs import ErrorItem, SchemaValidationError, Serializer
+from serpyco_rs import SchemaValidationError, Serializer
 from serpyco_rs.metadata import Discriminator
 
 

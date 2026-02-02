@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import Annotated, Any, Optional
 
 import pytest
-from serpyco_rs import Serializer
+from serpyco_rs import SchemaValidationError, Serializer
 from serpyco_rs.metadata import Alias, Flatten
-from typing_extensions import TypedDict
+from typing_extensions import Never, TypedDict
 
 
 @dataclass
@@ -431,3 +431,87 @@ def test_typeddict_mixed_dataclass_and_typeddict_flatten():
 
     assert serializer.dump(data) == expected
     assert serializer.load(expected) == data
+
+
+def test_flatten_dict_never_forbids_extra_properties():
+    """Test that dict[str, Never] with Flatten forbids extra properties"""
+
+    @dataclass
+    class StrictPerson:
+        name: str
+        age: int
+        _forbid_extra: Annotated[dict[str, Never], Flatten]
+
+    serializer = Serializer(StrictPerson)
+
+    # Test serialization
+    person = StrictPerson(name='John', age=30, _forbid_extra={})
+    result = serializer.dump(person)
+    assert result == {'name': 'John', 'age': 30}
+
+    # Test valid deserialization (no extra fields)
+    valid_data = {'name': 'John', 'age': 30}
+    loaded = serializer.load(valid_data)
+    assert loaded == person
+
+    # Test invalid deserialization (with extra fields)
+    invalid_data = {'name': 'John', 'age': 30, 'extra_field': 'value'}
+    with pytest.raises(SchemaValidationError, match='extra_field'):
+        serializer.load(invalid_data)
+
+
+def test_flatten_dict_never_with_struct_flatten():
+    """Test dict[str, Never] combined with struct flatten"""
+
+    @dataclass
+    class Address:
+        street: str
+        city: str
+
+    @dataclass
+    class StrictPersonWithAddress:
+        name: str
+        address: Annotated[Address, Flatten]
+        _forbid_extra: Annotated[dict[str, Never], Flatten]
+
+    serializer = Serializer(StrictPersonWithAddress)
+
+    # Test serialization
+    person = StrictPersonWithAddress(name='John', address=Address(street='123 Main St', city='NYC'), _forbid_extra={})
+    result = serializer.dump(person)
+    assert result == {'name': 'John', 'street': '123 Main St', 'city': 'NYC'}
+
+    # Test valid deserialization
+    valid_data = {'name': 'John', 'street': '123 Main St', 'city': 'NYC'}
+    loaded = serializer.load(valid_data)
+    assert loaded == person
+
+    # Test invalid deserialization (extra field should fail)
+    invalid_data = {'name': 'John', 'street': '123 Main St', 'city': 'NYC', 'extra': 'value'}
+    with pytest.raises(SchemaValidationError, match='extra'):
+        serializer.load(invalid_data)
+
+
+def test_typeddict_flatten_dict_never():
+    """Test dict[str, Never] with Flatten in TypedDict"""
+
+    class StrictTypedDict(TypedDict):
+        name: str
+        _forbid_extra: Annotated[dict[str, Never], Flatten]
+
+    serializer = Serializer(StrictTypedDict)
+
+    # Test serialization
+    data = {'name': 'John', '_forbid_extra': {}}
+    result = serializer.dump(data)
+    assert result == {'name': 'John'}
+
+    # Test valid deserialization
+    valid_data = {'name': 'John'}
+    loaded = serializer.load(valid_data)
+    assert loaded == data
+
+    # Test invalid deserialization
+    invalid_data = {'name': 'John', 'extra': 'value'}
+    with pytest.raises(SchemaValidationError, match='extra'):
+        serializer.load(invalid_data)

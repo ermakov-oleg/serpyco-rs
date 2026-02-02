@@ -361,6 +361,37 @@ loaded = ser.load({'name': 'Jane', 'street': '456 Oak Ave', 'city': 'LA', 'email
 
 **JSON Schema:** Flattened struct fields appear as top-level properties; objects with dict flatten have `additionalProperties: true`
 
+#### Forbidding Extra Properties
+
+Use `dict[str, Never]` with `Flatten` to forbid any additional properties not defined in the schema:
+
+```python
+from dataclasses import dataclass
+from typing import Annotated, Never
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import Flatten
+
+@dataclass
+class StrictPerson:
+    name: str
+    age: int
+    _: Annotated[dict[str, Never], Flatten]  # Forbid extra properties
+
+ser = Serializer(StrictPerson)
+
+# Valid data loads successfully
+ser.load({'name': 'John', 'age': 30})
+>> StrictPerson(name='John', age=30, _={})
+
+# Extra properties cause validation error
+ser.load({'name': 'John', 'age': 30, 'extra': 'field'})
+>> SchemaValidationError: [ErrorItem(message='"field" is not of type "Never (no value allowed)"', instance_path='extra')]
+
+# JSON Schema has additionalProperties: false
+ser.get_json_schema()
+>> {..., 'additionalProperties': False, ...}
+```
+
 
 ### Custom encoders for fields
 

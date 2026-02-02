@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 from serpyco_rs import JsonSchemaBuilder, Serializer
 from serpyco_rs.metadata import Alias, CamelCase, Discriminator, Max, MaxLength, Min, MinLength, OmitNone
+from typing_extensions import Never
 
 
 @pytest.fixture
@@ -604,3 +605,24 @@ class TestJsonSchemaBuilder:
             '$schema': 'https://json-schema.org/draft/2020-12/schema',
         }
         assert schema_builder.get_definitions() == {}
+
+
+def test_to_json_schema__never():
+    """Test that Never type generates a schema that matches nothing"""
+
+    @dataclass
+    class DataWithNever:
+        value: Never
+
+    serializer = Serializer(DataWithNever)
+    schema = serializer.get_json_schema()
+
+    assert schema['components']['schemas'][
+        'tests.json_schema.test_convert.test_to_json_schema__never.<locals>.DataWithNever'
+    ] == {
+        'properties': {
+            'value': {'not': {}},
+        },
+        'required': ['value'],
+        'type': 'object',
+    }
