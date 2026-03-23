@@ -71,18 +71,29 @@ def to_json_schema(_: Any, doc: Optional[str] = None, *, config: Config) -> Sche
 
 @to_json_schema.register
 def _(arg: describe.StringType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return StringType(minLength=arg.min_length, maxLength=arg.max_length, description=doc, config=config)
+    return StringType(
+        minLength=arg.min_length,
+        maxLength=arg.max_length,
+        description=doc,
+        config=config,
+        json_schema_extensions=arg.json_schema_extensions,
+    )
 
 
 @to_json_schema.register
 def _(arg: describe.NoneType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return Null(config=config)
+    return Null(config=config, json_schema_extensions=arg.json_schema_extensions)
 
 
 @to_json_schema.register
 def _(arg: describe.NeverType, doc: Optional[str] = None, *, config: Config) -> Schema:
     # Never type in JSON Schema is represented as a schema that matches nothing
-    return Schema(additionalArgs={'not': {}}, description=doc, config=config)
+    return Schema(
+        additionalArgs={'not': {}},
+        description=doc,
+        config=config,
+        json_schema_extensions=arg.json_schema_extensions,
+    )
 
 
 @to_json_schema.register
@@ -94,12 +105,18 @@ def _(arg: describe.IntegerType, doc: Optional[str] = None, *, config: Config) -
         exclusiveMaximum=arg.max if not arg.inclusive_max else None,
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
 @to_json_schema.register
-def _(_: describe.BytesType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return StringType(format='binary', description=doc, config=config)
+def _(arg: describe.BytesType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(
+        format='binary',
+        description=doc,
+        config=config,
+        json_schema_extensions=arg.json_schema_extensions,
+    )
 
 
 @to_json_schema.register
@@ -111,11 +128,12 @@ def _(arg: describe.FloatType, doc: Optional[str] = None, *, config: Config) -> 
         exclusiveMaximum=arg.max if not arg.inclusive_max else None,
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
 @to_json_schema.register
-def _(_: describe.DecimalType, doc: Optional[str] = None, *, config: Config) -> Schema:
+def _(arg: describe.DecimalType, doc: Optional[str] = None, *, config: Config) -> Schema:
     # todo: support min/max
     return Schema(
         oneOf=[
@@ -124,32 +142,35 @@ def _(_: describe.DecimalType, doc: Optional[str] = None, *, config: Config) -> 
         ],
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
 @to_json_schema.register
-def _(_: describe.BooleanType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return Boolean(config=config, description=doc)
+def _(arg: describe.BooleanType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Boolean(config=config, description=doc, json_schema_extensions=arg.json_schema_extensions)
 
 
 @to_json_schema.register
-def _(_: describe.UUIDType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return StringType(format='uuid', description=doc, config=config)
+def _(arg: describe.UUIDType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='uuid', description=doc, config=config, json_schema_extensions=arg.json_schema_extensions)
 
 
 @to_json_schema.register
-def _(_: describe.TimeType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return StringType(format='time', description=doc, config=config)
+def _(arg: describe.TimeType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='time', description=doc, config=config, json_schema_extensions=arg.json_schema_extensions)
 
 
 @to_json_schema.register
-def _(_: describe.DateTimeType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return StringType(format='date-time', description=doc, config=config)
+def _(arg: describe.DateTimeType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(
+        format='date-time', description=doc, config=config, json_schema_extensions=arg.json_schema_extensions
+    )
 
 
 @to_json_schema.register
-def _(_: describe.DateType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return StringType(format='date', description=doc, config=config)
+def _(arg: describe.DateType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return StringType(format='date', description=doc, config=config, json_schema_extensions=arg.json_schema_extensions)
 
 
 @to_json_schema.register
@@ -166,6 +187,7 @@ def _(arg: describe.EnumType, doc: Optional[str] = None, *, config: Config) -> S
         description=doc,
         config=config,
         additionalArgs={f'x-{item.value}': docs.get(item.name) for item in arg.items},
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
@@ -178,6 +200,7 @@ def _(arg: describe.OptionalType, doc: Optional[str] = None, *, config: Config) 
         ],
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
@@ -212,6 +235,7 @@ def _(arg: describe.EntityType, doc: Optional[str] = None, *, config: Config) ->
         description=arg.doc,
         config=config,
         additionalProperties=dict_flatten_additional_properties,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
@@ -223,6 +247,7 @@ def _(arg: describe.TypedDictType, doc: Optional[str] = None, *, config: Config)
         name=arg.name,
         description=arg.doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
@@ -234,6 +259,7 @@ def _(arg: describe.ArrayType, doc: Optional[str] = None, *, config: Config) -> 
         maxItems=arg.max_length,
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
     if arg.should_use_ref():
@@ -244,7 +270,10 @@ def _(arg: describe.ArrayType, doc: Optional[str] = None, *, config: Config) -> 
 @to_json_schema.register
 def _(arg: describe.DictionaryType, doc: Optional[str] = None, *, config: Config) -> Schema:
     return ObjectType(
-        additionalProperties=to_json_schema(arg.value_type, config=config), description=doc, config=config
+        additionalProperties=to_json_schema(arg.value_type, config=config),
+        description=doc,
+        config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
@@ -256,6 +285,7 @@ def _(arg: describe.TupleType, doc: Optional[str] = None, *, config: Config) -> 
         maxItems=len(arg.item_types),
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
     if arg.should_use_ref():
         return RefType(description=doc, name=arg.ref_name, definition=schema, config=config)
@@ -263,13 +293,15 @@ def _(arg: describe.TupleType, doc: Optional[str] = None, *, config: Config) -> 
 
 
 @to_json_schema.register
-def _(_: describe.AnyType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return Schema(description=doc, config=config)
+def _(arg: describe.AnyType, doc: Optional[str] = None, *, config: Config) -> Schema:
+    return Schema(description=doc, config=config, json_schema_extensions=arg.json_schema_extensions)
 
 
 @to_json_schema.register
 def _(holder: describe.RecursionHolder, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return RefType(description=doc, name=holder.name, config=config)
+    return RefType(
+        description=doc, name=holder.name, config=config, json_schema_extensions=holder.json_schema_extensions
+    )
 
 
 @to_json_schema.register
@@ -278,6 +310,7 @@ def _(arg: describe.LiteralType, doc: Optional[str] = None, *, config: Config) -
         enum=[arg.value if isinstance(arg, Enum) else arg for arg in arg.args],
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
 
@@ -287,6 +320,7 @@ def _(arg: describe.UnionType, doc: Optional[str] = None, *, config: Config) -> 
         anyOf=[to_json_schema(t, config=config) for t in arg.item_types],
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
 
     if arg.should_use_ref():
@@ -311,6 +345,7 @@ def _(arg: describe.DiscriminatedUnionType, doc: Optional[str] = None, *, config
         ),
         description=doc,
         config=config,
+        json_schema_extensions=arg.json_schema_extensions,
     )
     if arg.should_use_ref():
         return RefType(description=doc, name=arg.ref_name, definition=schema, config=config)
@@ -326,4 +361,9 @@ def _check_unions_schema_types(schema: Schema) -> TypeGuard[Union[ObjectType, Re
 
 @to_json_schema.register
 def _(arg: describe.CustomType, doc: Optional[str] = None, *, config: Config) -> Schema:
-    return Schema(additionalArgs=arg.json_schema, description=doc, config=config)
+    return Schema(
+        additionalArgs=arg.json_schema,
+        description=doc,
+        config=config,
+        json_schema_extensions=arg.json_schema_extensions,
+    )

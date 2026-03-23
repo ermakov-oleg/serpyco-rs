@@ -7,6 +7,7 @@ from typing import Annotated, Any, ClassVar, Final, ForwardRef, Union, get_origi
 from typing_extensions import NotRequired, ReadOnly, Required, get_args
 
 from ._meta import Annotations
+from .metadata import JsonSchemaExtension
 
 
 if sys.version_info >= (3, 12):
@@ -72,6 +73,14 @@ def unwrap_special_forms(annotation: Any) -> tuple[Any, Annotations]:
                 break
         else:
             break
+
+    json_schema_extensions: dict[str, Any] = {}
+    for item in metadata:
+        if isinstance(item, JsonSchemaExtension):
+            json_schema_extensions.update(item.schema)
+    if json_schema_extensions:
+        metadata = [m for m in metadata if not isinstance(m, JsonSchemaExtension)]
+        metadata.append(JsonSchemaExtension(json_schema_extensions))
 
     return annotation, Annotations(*metadata)
 

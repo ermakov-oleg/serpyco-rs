@@ -139,6 +139,7 @@ Currently available:
 * CustomEncoder
 * NoneAsDefaultForOptional (ForceDefaultForOptional)
 * Flatten
+* JsonSchemaExtension
 
 
 ### Alias
@@ -402,6 +403,28 @@ ser.get_json_schema()
 >> {..., 'additionalProperties': False, ...}
 ```
 
+
+### JsonSchemaExtension
+
+`JsonSchemaExtension` allows attaching arbitrary extension fields to the generated JSON Schema via `Annotated`. Multiple extensions on the same type are merged automatically.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import JsonSchemaExtension
+
+@dataclass
+class User:
+    email: Annotated[str, JsonSchemaExtension({"x-custom-tag": "pii"})]
+    name: str
+
+ser = Serializer(User)
+schema = ser.get_json_schema()
+# schema["components"]["schemas"]["User"]["properties"]["email"]["x-custom-tag"] == "pii"
+```
+
+Extensions only affect JSON Schema output — serialization and deserialization behavior is unchanged.
 
 ### Custom encoders for fields
 

@@ -71,6 +71,7 @@ from .metadata import (
     Discriminator,
     FieldFormat,
     Format,
+    JsonSchemaExtension,
     KeepNone,
     Max,
     MaxLength,
@@ -149,6 +150,7 @@ class _TypeResolver:
                         state_key=ref,
                         meta=context,
                         custom_encoder=None,
+                        json_schema_extensions=None,
                     ),
                     metadata,
                 )
@@ -169,6 +171,8 @@ class _TypeResolver:
     def _resolve_type(self, t: Any, ref: str) -> BaseType:
         annotations = self.annotations.get()
         custom_encoder = annotations.get(CustomEncoder)
+        json_ext = annotations.get(JsonSchemaExtension)
+        json_schema_extensions = json_ext.schema if json_ext else None
         name = _generate_name(t, ref)
 
         if self.custom_type_resolver and (custom_type := self.custom_type_resolver(t)):
@@ -177,13 +181,17 @@ class _TypeResolver:
                     serialize=custom_type.serialize,
                     deserialize=custom_type.deserialize,
                 )
-            return CustomType(custom_encoder=custom_encoder, json_schema=custom_type.get_json_schema())
+            return CustomType(
+                custom_encoder=custom_encoder,
+                json_schema=custom_type.get_json_schema(),
+                json_schema_extensions=json_schema_extensions,
+            )
 
         if t is Any:
-            return AnyType(custom_encoder=custom_encoder)
+            return AnyType(custom_encoder=custom_encoder, json_schema_extensions=json_schema_extensions)
 
         if t is Never:
-            return NeverType(custom_encoder=custom_encoder)
+            return NeverType(custom_encoder=custom_encoder, json_schema_extensions=json_schema_extensions)
 
         if res := self._match_simple_types(t):
             return res
@@ -202,6 +210,7 @@ class _TypeResolver:
                 min_length=min_length_meta.value if min_length_meta else None,
                 max_length=max_length_meta.value if max_length_meta else None,
                 custom_encoder=custom_encoder,
+                json_schema_extensions=json_schema_extensions,
             )
 
         if origin in {Mapping, dict}:
@@ -210,6 +219,7 @@ class _TypeResolver:
                 value_type=(self.resolve(args[1]) if args else AnyType(custom_encoder=None)),
                 omit_none=annotations.get(NoneFormat, KeepNone).omit,
                 custom_encoder=custom_encoder,
+                json_schema_extensions=json_schema_extensions,
             )
 
         if origin is tuple:
@@ -219,6 +229,7 @@ class _TypeResolver:
                 item_types=[self.resolve(arg) for arg in args],
                 ref_name=name,
                 custom_encoder=custom_encoder,
+                json_schema_extensions=json_schema_extensions,
             )
 
         if dataclasses.is_dataclass(origin) or _is_attrs(origin) or is_typeddict(origin):
@@ -231,7 +242,9 @@ class _TypeResolver:
 
         if _is_literal_type(origin):
             if args and _is_supported_literal_args(args):
-                return LiteralType(args=list(args), custom_encoder=custom_encoder)
+                return LiteralType(
+                    args=list(args), custom_encoder=custom_encoder, json_schema_extensions=json_schema_extensions
+                )
             raise RuntimeError('Supported only Literal[str | int, ...]')
 
         if is_union_type(origin):
@@ -240,6 +253,7 @@ class _TypeResolver:
                 return OptionalType(
                     inner=self.resolve(new_arg),
                     custom_encoder=None,
+                    json_schema_extensions=json_schema_extensions,
                 )
 
             discriminator = annotations.get(Discriminator)
@@ -248,6 +262,7 @@ class _TypeResolver:
                     item_types=[self.resolve(arg) for arg in args],
                     ref_name=name,
                     custom_encoder=custom_encoder,
+                    json_schema_extensions=json_schema_extensions,
                 )
 
             if not all(
@@ -268,6 +283,7 @@ class _TypeResolver:
                     dump_discriminator=discriminator.name,
                     load_discriminator=_apply_format(annotations.get(FieldFormat, NoFormat), discriminator.name),
                     custom_encoder=custom_encoder,
+                    json_schema_extensions=json_schema_extensions,
                 )
 
         if isinstance(t, TypeVar):
@@ -281,6 +297,8 @@ class _TypeResolver:
 
         annotations = self.annotations.get()
         custom_encoder = annotations.get(CustomEncoder)
+        json_ext = annotations.get(JsonSchemaExtension)
+        json_schema_extensions = json_ext.schema if json_ext else None
 
         simple_type_mapping: Mapping[type, type[BaseType]] = {
             bytes: BytesType,
@@ -293,7 +311,7 @@ class _TypeResolver:
         }
 
         if simple := simple_type_mapping.get(t):
-            return simple(custom_encoder=custom_encoder)
+            return simple(custom_encoder=custom_encoder, json_schema_extensions=json_schema_extensions)
 
         number_type_mapping: Mapping[type, type[Union[IntegerType, FloatType]]] = {
             int: IntegerType,
@@ -309,6 +327,7 @@ class _TypeResolver:
                 inclusive_min=min_meta.inclusive if min_meta else True,
                 inclusive_max=max_meta.inclusive if max_meta else True,
                 custom_encoder=custom_encoder,
+                json_schema_extensions=json_schema_extensions,
             )
 
         if t is Decimal:
@@ -320,6 +339,7 @@ class _TypeResolver:
                 inclusive_min=min_meta.inclusive if min_meta else True,
                 inclusive_max=max_meta.inclusive if max_meta else True,
                 custom_encoder=custom_encoder,
+                json_schema_extensions=json_schema_extensions,
             )
 
         if t is str:
@@ -330,10 +350,13 @@ class _TypeResolver:
                 min_length=min_length_meta.value if min_length_meta else None,
                 max_length=max_length_meta.value if max_length_meta else None,
                 custom_encoder=custom_encoder,
+                json_schema_extensions=json_schema_extensions,
             )
 
         if issubclass(t, (Enum, IntEnum)):
-            return EnumType(cls=t, items=list(t), custom_encoder=custom_encoder)
+            return EnumType(
+                cls=t, items=list(t), custom_encoder=custom_encoder, json_schema_extensions=json_schema_extensions
+            )
 
         return None
 
@@ -470,6 +493,9 @@ class _TypeResolver:
             self._validate_flatten_fields(fields, t)
             used_keys = self._compute_used_keys(fields)
 
+            json_ext = cls_annotations.get(JsonSchemaExtension)
+            json_schema_extensions = json_ext.schema if json_ext else None
+
             if is_typeddict(origin):
                 return TypedDictType(
                     name=name,
@@ -478,6 +504,7 @@ class _TypeResolver:
                     doc=t.__doc__,
                     custom_encoder=custom_encoder,
                     used_keys=used_keys,
+                    json_schema_extensions=json_schema_extensions,
                 )
 
             return EntityType(
@@ -489,6 +516,7 @@ class _TypeResolver:
                 doc=_get_dataclass_doc(t),
                 custom_encoder=custom_encoder,
                 used_keys=used_keys,
+                json_schema_extensions=json_schema_extensions,
             )
 
 

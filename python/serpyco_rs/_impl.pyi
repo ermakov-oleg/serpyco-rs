@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from enum import Enum, IntEnum
 from typing import Any, Callable, Generic, TypeVar
 
@@ -36,8 +36,13 @@ class CustomEncoder(Generic[_I, _O]):
 
 class BaseType:
     custom_encoder: CustomEncoder[Any, Any] | None
+    json_schema_extensions: Mapping[str, Any] | None
 
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class ContainerBaseType(BaseType):
     ref_name: str
@@ -46,10 +51,18 @@ class ContainerBaseType(BaseType):
     def should_use_ref(self) -> bool: ...
 
 class NoneType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class NeverType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class IntegerType(BaseType):
     min: int | None
@@ -64,6 +77,7 @@ class IntegerType(BaseType):
         inclusive_min: bool = True,
         inclusive_max: bool = True,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class FloatType(BaseType):
@@ -79,6 +93,7 @@ class FloatType(BaseType):
         inclusive_min: bool = True,
         inclusive_max: bool = True,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class DecimalType(BaseType):
@@ -94,6 +109,7 @@ class DecimalType(BaseType):
         inclusive_min: bool = True,
         inclusive_max: bool = True,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class StringType(BaseType):
@@ -105,22 +121,43 @@ class StringType(BaseType):
         min_length: int | None = None,
         max_length: int | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class BooleanType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class UUIDType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class TimeType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class DateTimeType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class DateType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class DefaultValue(Generic[_T]):
     @staticmethod
@@ -176,6 +213,7 @@ class EntityType(BaseType):
         used_keys: set[str] | None = None,
         doc: str | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class TypedDictType(BaseType):
@@ -193,6 +231,7 @@ class TypedDictType(BaseType):
         doc: str | None = None,
         used_keys: set[str] | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class ArrayType(ContainerBaseType):
@@ -207,6 +246,7 @@ class ArrayType(ContainerBaseType):
         min_length: int | None = None,
         max_length: int | None = None,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class EnumType(BaseType):
@@ -214,13 +254,22 @@ class EnumType(BaseType):
     items: list[Any]
 
     def __init__(
-        self, cls: type[Enum | IntEnum], items: list[Any], custom_encoder: CustomEncoder[Any, Any] | None = None
+        self,
+        cls: type[Enum | IntEnum],
+        items: list[Any],
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class OptionalType(BaseType):
     inner: BaseType
 
-    def __init__(self, inner: BaseType, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+    def __init__(
+        self,
+        inner: BaseType,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class DictionaryType(BaseType):
     key_type: BaseType
@@ -233,6 +282,7 @@ class DictionaryType(BaseType):
         value_type: BaseType,
         omit_none: bool = False,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class TupleType(ContainerBaseType):
@@ -243,13 +293,22 @@ class TupleType(ContainerBaseType):
         item_types: list[BaseType],
         ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class BytesType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class AnyType(BaseType):
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class UnionType(ContainerBaseType):
     item_types: list[BaseType]
@@ -259,6 +318,7 @@ class UnionType(ContainerBaseType):
         item_types: list[BaseType],
         ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class DiscriminatedUnionType(ContainerBaseType):
@@ -273,12 +333,18 @@ class DiscriminatedUnionType(ContainerBaseType):
         load_discriminator: str,
         ref_name: str,
         custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
 
 class LiteralType(BaseType):
     args: list[str | int | Enum]
 
-    def __init__(self, args: list[str | int | Enum], custom_encoder: CustomEncoder[Any, Any] | None = None) -> None: ...
+    def __init__(
+        self,
+        args: list[str | int | Enum],
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...
 
 class RecursionHolder(BaseType):
     name: str
@@ -286,11 +352,21 @@ class RecursionHolder(BaseType):
     meta: ResolverContext
 
     def __init__(
-        self, name: str, state_key: str, meta: ResolverContext, custom_encoder: CustomEncoder[Any, Any] | None = None
+        self,
+        name: str,
+        state_key: str,
+        meta: ResolverContext,
+        custom_encoder: CustomEncoder[Any, Any] | None = None,
+        json_schema_extensions: Mapping[str, Any] | None = None,
     ) -> None: ...
     def get_inner_type(self) -> BaseType: ...
 
 class CustomType(BaseType):
     json_schema: dict[str, Any]
 
-    def __init__(self, custom_encoder: CustomEncoder[Any, Any], json_schema: dict[str, Any]) -> None: ...
+    def __init__(
+        self,
+        custom_encoder: CustomEncoder[Any, Any],
+        json_schema: dict[str, Any],
+        json_schema_extensions: Mapping[str, Any] | None = None,
+    ) -> None: ...

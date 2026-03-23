@@ -1,7 +1,7 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import TypeVar, Union
+from typing import Any, TypeVar, Union
 
 from ._impl import CustomEncoder
 
@@ -80,6 +80,23 @@ def serialize_with(func: Callable[[_I], _O]) -> CustomEncoder[_I, _O]:
 
 def deserialize_with(func: Callable[[_O], _I]) -> CustomEncoder[_I, _O]:
     return CustomEncoder[_I, _O](deserialize=func)
+
+
+class JsonSchemaExtension:
+    def __init__(self, schema: Mapping[str, Any]) -> None:
+        self._pairs = tuple(sorted(schema.items()))
+        self.schema: Mapping[str, Any] = dict(self._pairs)
+
+    def __hash__(self) -> int:
+        return hash(self._pairs)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, JsonSchemaExtension):
+            return self.schema == other.schema
+        return NotImplemented
+
+    def __str__(self) -> str:
+        return f'JsonSchemaExtension(schema={self.schema})'
 
 
 @dataclass(frozen=True)
