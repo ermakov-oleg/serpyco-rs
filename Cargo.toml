@@ -15,7 +15,7 @@ pyo3-ffi = "0.27"
 speedate = "0.17.0"
 
 dyn-clone = "1.0.20"
-atomic_refcell = "0.1.13"
+atomic_refcell = "0.1.14"
 nohash-hasher = "*"
 
 uuid = "1"
