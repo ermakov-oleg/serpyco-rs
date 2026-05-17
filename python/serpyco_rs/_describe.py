@@ -604,7 +604,7 @@ def _apply_format(f: Optional[FieldFormat], value: str) -> str:
     assert_never(f.format)
 
 
-_NAME_CACHE = {}
+_NAME_CACHE: dict[str, int] = {}
 
 
 @cache

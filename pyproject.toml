@@ -30,3 +30,11 @@ classifiers = [
 ]
 
 dependencies = ["attributes-doc", "typing-extensions>=4.15.0"]
+
+[tool.coverage.run]
+branch = true
+source = ["python/serpyco_rs"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

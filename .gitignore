@@ -36,6 +36,8 @@ pip-selfcheck.json
 
 # Unit test / coverage reports
 htmlcov/
+.coverage.*
+coverage/
 .tox/
 .coverage
 .cache
