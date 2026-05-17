@@ -1,4 +1,5 @@
 pytest
+coverage[toml]
 attrs
 maturin>=1,<2
 pytz
