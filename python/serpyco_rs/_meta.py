@@ -5,7 +5,7 @@ from typing import Any, TypeVar, overload
 
 from typing_extensions import Self
 
-from serpyco_rs._impl import BaseType
+from serpyco_rs._type_info import BaseType
 from serpyco_rs.metadata import FieldFormat, NoneAsDefaultForOptional, NoneFormat
 
 

@@ -3,9 +3,10 @@ from collections.abc import Callable
 from typing import Annotated, Any, Generic, Protocol, TypeVar, cast, overload
 
 from ._custom_types import CustomType
-from ._describe import BaseType, describe_type
+from ._describe import describe_type
 from ._impl import Serializer as _Serializer
 from ._json_schema import get_json_schema
+from ._type_info import BaseType
 from .metadata import CamelCase, ForceDefaultForOptional, OmitNone
 
 

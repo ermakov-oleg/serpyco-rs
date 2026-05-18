@@ -18,7 +18,6 @@ from serpyco_rs._describe import (
     DateTimeType,
     DateType,
     DecimalType,
-    DefaultValue,
     DictionaryType,
     DiscriminatedUnionType,
     EntityField,
@@ -280,7 +279,7 @@ def test_describe_dataclass__has_default__default_filled():
     class SomeEntity:
         x: int = 1
 
-    assert describe_type(SomeEntity).fields[0].default == DefaultValue.some(1)
+    assert describe_type(SomeEntity).fields[0].default == 1
 
 
 def test_describe_dataclass__has_default_factory__default_factory_filled():
@@ -291,8 +290,8 @@ def test_describe_dataclass__has_default_factory__default_factory_filled():
     class SomeEntity:
         x: int = field(default_factory=factory)
 
-    assert describe_type(SomeEntity).fields[0].default == DefaultValue.none()
-    assert describe_type(SomeEntity).fields[0].default_factory == DefaultValue.some(factory)
+    assert describe_type(SomeEntity).fields[0].default is NOT_SET
+    assert describe_type(SomeEntity).fields[0].default_factory == factory
 
 
 def test_describe_dataclass__generic_but_without_type_vars__filled_by_any():
@@ -420,7 +419,7 @@ def test_describe__attrs_and_has_default__default_filled():
     class SomeEntity:
         x: int = 1
 
-    assert describe_type(SomeEntity).fields[0].default == DefaultValue.some(1)
+    assert describe_type(SomeEntity).fields[0].default == 1
 
 
 def test_describe__attrs_and_has_default_factory__default_factory_filled():
@@ -433,9 +432,9 @@ def test_describe__attrs_and_has_default_factory__default_factory_filled():
         y: int = attr.ib(factory=factory)
 
     assert describe_type(SomeEntity).fields[0].default == NOT_SET
-    assert describe_type(SomeEntity).fields[0].default_factory == DefaultValue.some(factory)
+    assert describe_type(SomeEntity).fields[0].default_factory == factory
     assert describe_type(SomeEntity).fields[1].default == NOT_SET
-    assert describe_type(SomeEntity).fields[1].default_factory == DefaultValue.some(factory)
+    assert describe_type(SomeEntity).fields[1].default_factory == factory
 
 
 def test_describe__attrs_with_forward_ref_annotation__parsed():
@@ -695,7 +694,7 @@ def test_describe__typed_dict():
                 dict_key='barField',
                 required=False,
                 field_type=StringType(custom_encoder=None),
-                default=DefaultValue.some(None),
+                default=None,
             ),
             EntityField(
                 name='generic_field',
@@ -720,7 +719,7 @@ def test_describe__typed_dict__total_false():
                 dict_key='foo',
                 required=False,
                 field_type=IntegerType(custom_encoder=None),
-                default=DefaultValue.some(None),
+                default=None,
             ),
             EntityField(
                 name='bar',

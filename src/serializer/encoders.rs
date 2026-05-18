@@ -21,7 +21,7 @@ use crate::python::{
     dump_time, parse_date, parse_datetime, parse_time, py_dict_set_item, py_list_get_item,
     py_list_set_item, py_tuple_set_item,
 };
-use crate::validator::types::{DecimalType, FloatType, IntegerType, StringType};
+use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
     invalid_type, invalid_type_dump, missing_required_property, no_encoder_for_discriminator,
@@ -131,7 +131,7 @@ impl Encoder for NeverEncoder {
 
 #[derive(Debug, Clone)]
 pub struct IntEncoder {
-    pub(crate) type_info: IntegerType,
+    pub(crate) type_info: IntegerTypeInfo,
 }
 
 impl Encoder for IntEncoder {
@@ -165,7 +165,7 @@ impl Encoder for IntEncoder {
 
 #[derive(Debug, Clone)]
 pub struct FloatEncoder {
-    pub(crate) type_info: FloatType,
+    pub(crate) type_info: FloatTypeInfo,
 }
 
 impl Encoder for FloatEncoder {
@@ -202,7 +202,7 @@ impl Encoder for FloatEncoder {
 
 #[derive(Debug, Clone)]
 pub struct DecimalEncoder {
-    pub(crate) type_info: DecimalType,
+    pub(crate) type_info: DecimalTypeInfo,
     pub(crate) decimal_cls: Py<PyAny>,
 }
 
@@ -247,7 +247,7 @@ impl Encoder for DecimalEncoder {
 
 #[derive(Debug, Clone)]
 pub struct StringEncoder {
-    pub(crate) type_info: StringType,
+    pub(crate) type_info: StringTypeInfo,
 }
 
 impl Encoder for StringEncoder {
