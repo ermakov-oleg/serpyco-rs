@@ -12,7 +12,6 @@ from typing import (
     ForwardRef,
     Generic,
     TypeVar,
-    Union,
     _AnnotatedAlias,
     _eval_type,
     _GenericAlias,
@@ -45,8 +44,8 @@ _allowed_types = (
 
 def get_type_hints(
     obj: Any,
-    globalns: Union[dict[str, Any], None] = None,
-    localns: Union[dict[str, Any], None] = None,
+    globalns: dict[str, Any] | None = None,
+    localns: dict[str, Any] | None = None,
     include_extras: bool = False,
 ) -> dict[str, Any]:
     """Return type hints for an object.
@@ -584,7 +583,7 @@ def _strip_annotations(t):
     return t
 
 
-# python 3.9 / 3.10 compatibility
+# Python 3.10 compatibility
 
 
 def _typevar_subst(arg):

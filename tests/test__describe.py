@@ -1,4 +1,3 @@
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
@@ -526,7 +525,6 @@ def test_describe__unions():
     )
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason='New style unions available after 3.10')
 def test_describe__new_style_union_type__wrapped():
     assert describe_type(int | None) == OptionalType(inner=IntegerType(custom_encoder=None), custom_encoder=None)
 

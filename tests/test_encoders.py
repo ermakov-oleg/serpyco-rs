@@ -210,7 +210,6 @@ def test_literal():
     assert serializer.dump('foo') == 'foo'
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason='New style unions available after 3.10')
 def test_optional():
     @dataclass
     class T:

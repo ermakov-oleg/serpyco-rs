@@ -1,20 +1,20 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 from ._impl import CustomEncoder
 
 
 @dataclass(frozen=True)
 class Min:
-    value: Union[int, float]
+    value: int | float
     inclusive: bool = True
 
 
 @dataclass(frozen=True)
 class Max:
-    value: Union[int, float]
+    value: int | float
     inclusive: bool = True
 
 

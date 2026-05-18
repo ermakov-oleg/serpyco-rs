@@ -10,10 +10,10 @@ from typing import (
     ForwardRef,
     Generic,
     Literal,
-    Optional,
+    TypeGuard,
     TypeVar,
-    Union,
     cast,
+    get_args,
     get_origin,
     overload,
 )
@@ -21,10 +21,8 @@ from uuid import UUID
 
 from typing_extensions import (
     Never,
-    TypeGuard,
     assert_never,
     evaluate_forward_ref,
-    get_args,
     is_typeddict,
 )
 
@@ -104,12 +102,12 @@ _T = TypeVar('_T')
 class _TypeResolver:
     resolver_context: _Stack[ResolverContext]
     annotations: _MergeStack[Annotations]
-    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]]
+    custom_type_resolver: Callable[[Any], CustomTypeMeta[Any, Any] | None] | None
 
     def __init__(
         self,
         globals: dict[str, Any],
-        custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
+        custom_type_resolver: Callable[[Any], CustomTypeMeta[Any, Any] | None] | None = None,
     ):
         self.resolver_context = _Stack(ResolverContext(globals=globals))
         self.custom_type_resolver = custom_type_resolver
@@ -291,7 +289,7 @@ class _TypeResolver:
 
         raise RuntimeError(f'Unknown type {t!r}')
 
-    def _match_simple_types(self, t: Any) -> Optional[BaseType]:
+    def _match_simple_types(self, t: Any) -> BaseType | None:
         if not isinstance(t, type):
             return None
 
@@ -313,7 +311,7 @@ class _TypeResolver:
         if simple := simple_type_mapping.get(t):
             return simple(custom_encoder=custom_encoder, json_schema_extensions=json_schema_extensions)
 
-        number_type_mapping: Mapping[type, type[Union[IntegerType, FloatType]]] = {
+        number_type_mapping: Mapping[type, type[IntegerType | FloatType]] = {
             int: IntegerType,
             float: FloatType,
         }
@@ -389,7 +387,7 @@ class _TypeResolver:
             )
 
         for struct_field in struct_flatten_fields:
-            struct_type = cast(Union[EntityType, TypedDictType], struct_field.field_type)
+            struct_type = cast(EntityType | TypedDictType, struct_field.field_type)
             for nested_field in struct_type.fields:
                 if nested_field.dict_key in regular_field_keys:
                     raise RuntimeError(
@@ -419,8 +417,8 @@ class _TypeResolver:
         self,
         t: Any,
         name: str,
-        custom_encoder: Optional[CustomEncoder[Any, Any]],
-    ) -> Union[EntityType, TypedDictType]:
+        custom_encoder: CustomEncoder[Any, Any] | None,
+    ) -> EntityType | TypedDictType:
         # PEP-484: Replace all unfilled type parameters with Any
         if get_origin(t) is None and getattr(t, '__parameters__', None):
             t = t[(Any,) * len(t.__parameters__)]
@@ -522,8 +520,8 @@ class _TypeResolver:
 
 def describe_type(
     t: Any,
-    meta: Optional[ResolverContext] = None,
-    custom_type_resolver: Optional[Callable[[Any], Optional[CustomTypeMeta[Any, Any]]]] = None,
+    meta: ResolverContext | None = None,
+    custom_type_resolver: Callable[[Any], CustomTypeMeta[Any, Any] | None] | None = None,
 ) -> BaseType:
     return _TypeResolver(_get_globals(t), custom_type_resolver).resolve(t)
 
@@ -531,9 +529,9 @@ def describe_type(
 @dataclasses.dataclass
 class _Field(Generic[_T]):
     name: str
-    type: Union[type[_T], str, Any]
-    default: Union[DefaultValue[_T], DefaultValue[None]] = NOT_SET
-    default_factory: Union[DefaultValue[Callable[[], _T]], DefaultValue[None]] = NOT_SET
+    type: type[_T] | str | Any
+    default: DefaultValue[_T] | DefaultValue[None] = NOT_SET
+    default_factory: DefaultValue[Callable[[], _T]] | DefaultValue[None] = NOT_SET
 
 
 def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
@@ -589,14 +587,14 @@ def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T) -> 
 
 
 @overload
-def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = None) -> Optional[_T]: ...
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: None = None) -> _T | None: ...
 
 
-def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: Optional[_T] = None) -> Optional[_T]:
+def _find_metadata(annotations: Iterable[Any], type_: type[_T], default: _T | None = None) -> _T | None:
     return next((ann for ann in annotations if isinstance(ann, type_)), default)
 
 
-def _apply_format(f: Optional[FieldFormat], value: str) -> str:
+def _apply_format(f: FieldFormat | None, value: str) -> str:
     if not f or f.format is Format.no_format:
         return value
     if f.format is Format.camel_case:
@@ -684,7 +682,7 @@ def _is_required_in_typeddict(t: Any, key: str) -> bool:
     raise RuntimeError(f'Expected TypedDict, got "{t!r}"')
 
 
-def _get_dataclass_doc(cls: Any) -> Optional[str]:
+def _get_dataclass_doc(cls: Any) -> str | None:
     """Dataclass has automatically generated docstring, which is not very useful."""
     doc: str = cls.__doc__
     if doc is None or doc.startswith(f'{cls.__name__}('):
@@ -702,7 +700,7 @@ def _is_frozen_dataclass(cls: Any, field: EntityField) -> bool:
         return False
 
 
-def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[Union[str, int, Enum]]]:
+def _is_supported_literal_args(args: Sequence[Any]) -> TypeGuard[list[str | int | Enum]]:
     return all(isinstance(arg, (str, int, Enum)) for arg in args)
 
 

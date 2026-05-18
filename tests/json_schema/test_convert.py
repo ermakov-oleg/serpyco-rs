@@ -1,4 +1,3 @@
-import sys
 from dataclasses import dataclass
 from datetime import datetime, time
 from decimal import Decimal
@@ -177,7 +176,6 @@ def test_to_json_schema(ns):
     }
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason='New style unions available after 3.10')
 def test_to_json_schema__new_union_syntax():
     @dataclass
     class Data:
