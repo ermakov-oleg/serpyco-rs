@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cached_property
-from typing import Any, Optional, TypeVar, overload
+from typing import Any, TypeVar, overload
 
 from typing_extensions import Self
 
@@ -14,18 +14,18 @@ class ResolverContext:
     """Context for the type resolution process"""
 
     globals: dict[str, Any]
-    type_cache: dict[str, Optional[BaseType]] = field(default_factory=dict)
+    type_cache: dict[str, BaseType | None] = field(default_factory=dict)
     usage_count: defaultdict[str, int] = field(default_factory=lambda: defaultdict[str, int](int))
-    discriminator_field: Optional[str] = None
+    discriminator_field: str | None = None
 
-    def cache_type(self, key: str, value: Optional[BaseType]) -> None:
+    def cache_type(self, key: str, value: BaseType | None) -> None:
         """Cache a resolved type"""
         self.type_cache[key] = value
 
-    def __getitem__(self, item: str) -> Optional[BaseType]:
+    def __getitem__(self, item: str) -> BaseType | None:
         return self.type_cache.get(item)
 
-    def get_cached_type(self, key: str) -> Optional[BaseType]:
+    def get_cached_type(self, key: str) -> BaseType | None:
         """Get a cached type by key"""
         return self.type_cache.get(key)
 
@@ -55,12 +55,12 @@ class Annotations:
             self._data[type(arg)] = arg
 
     @overload
-    def get(self, key: type[_T], default: None = None) -> Optional[_T]: ...
+    def get(self, key: type[_T], default: None = None) -> _T | None: ...
 
     @overload
     def get(self, key: type[_T], default: _T) -> _T: ...
 
-    def get(self, key: type[_T], default: Optional[_T] = None) -> Optional[_T]:
+    def get(self, key: type[_T], default: _T | None = None) -> _T | None:
         return self._data.get(key, default)
 
     def merge(self, other: Self) -> Self:

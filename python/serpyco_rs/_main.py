@@ -1,6 +1,6 @@
 import abc
 from collections.abc import Callable
-from typing import Annotated, Any, Generic, Optional, Protocol, TypeVar, Union, cast, overload
+from typing import Annotated, Any, Generic, Protocol, TypeVar, cast, overload
 
 from ._custom_types import CustomType
 from ._describe import BaseType, describe_type
@@ -24,9 +24,9 @@ class _MultiMapping(Protocol[_T, _D]):
     def getall(self, key: str) -> list[_T]: ...
     @overload
     @abc.abstractmethod
-    def getall(self, key: str, default: _D) -> Union[list[_T], _D]: ...
+    def getall(self, key: str, default: _D) -> list[_T] | _D: ...
     @abc.abstractmethod
-    def getall(self, key: str, default: _D = ...) -> Union[list[_T], _D]: ...
+    def getall(self, key: str, default: _D = ...) -> list[_T] | _D: ...
 
 
 class Serializer(Generic[_T]):
@@ -40,7 +40,7 @@ class Serializer(Generic[_T]):
         omit_none: bool = False,
         force_default_for_optional: bool = False,
         naive_datetime_to_utc: bool = False,
-        custom_type_resolver: Optional[Callable[[Any], Optional[CustomType[Any, Any]]]] = None,
+        custom_type_resolver: Callable[[Any], CustomType[Any, Any] | None] | None = None,
     ) -> None:
         """
         Create a serializer for the given type.

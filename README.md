@@ -5,7 +5,7 @@ versions](https://img.shields.io/pypi/pyversions/serpyco-rs.svg)](https://pypi.o
 ## What is serpyco-rs ?
 
 
-Serpyco is a serialization library for [Python 3.9+ dataclasses](https://docs.python.org/3/library/dataclasses.html) that works just by defining your dataclasses:
+Serpyco is a serialization library for [Python 3.10+ dataclasses](https://docs.python.org/3/library/dataclasses.html) that works just by defining your dataclasses:
 
 ```python
 import dataclasses

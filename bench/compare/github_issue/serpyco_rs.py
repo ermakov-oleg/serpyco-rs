@@ -6,8 +6,6 @@ from typing import Annotated, Any, Optional, Union
 import serpyco_rs
 from serpyco_rs.metadata import Alias
 
-from ._utils import get_dataclass_args
-
 
 class IssueState(Enum):
     OPEN = 'open'
@@ -36,7 +34,7 @@ class AuthorAssociation(Enum):
     OWNER = 'OWNER'
 
 
-@dataclass(**get_dataclass_args())
+@dataclass(slots=True)
 class User:
     login: str
     id: int
@@ -61,7 +59,7 @@ class User:
     starred_at: Optional[datetime] = None
 
 
-@dataclass(**get_dataclass_args())
+@dataclass(slots=True)
 class IssueLabel:
     id: int
     node_id: str
@@ -72,7 +70,7 @@ class IssueLabel:
     default: bool
 
 
-@dataclass(**get_dataclass_args())
+@dataclass(slots=True)
 class Milestone:
     url: str
     html_url: str
@@ -92,7 +90,7 @@ class Milestone:
     state: MilestoneState = MilestoneState.OPEN
 
 
-@dataclass(**get_dataclass_args())
+@dataclass(slots=True)
 class Reactions:
     url: str
     total_count: int
@@ -106,7 +104,7 @@ class Reactions:
     rocket: int
 
 
-@dataclass(**get_dataclass_args())
+@dataclass(slots=True)
 class Issue:
     id: int
     node_id: str
