@@ -3,7 +3,8 @@ use std::fmt;
 use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{PyAnyMethods, PyModule};
-use pyo3::types::{PyDict, PyInt, PyList, PyListMethods, PySet};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyInt, PyList, PyListMethods, PySet, PyType};
 use pyo3::{intern, Bound, Py, PyAny, PyResult, Python};
 
 use crate::python::fmt_py;
@@ -311,25 +312,30 @@ impl LiteralTypeInfo {
 
 #[derive(Clone, Debug)]
 pub struct RecursionHolderInfo {
-    pub state_key: Py<PyAny>,
-    pub meta: Py<PyAny>,
+    pub inner_type_id: usize,
 }
 
 impl RecursionHolderInfo {
     fn extract(type_info: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let state_key = type_info.getattr("state_key")?;
+        let meta = type_info.getattr("meta")?;
+        let inner = match meta.get_item(&state_key) {
+            Ok(value) if !value.is_none() => value,
+            Ok(_) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Recursive type not resolved: {}",
+                    fmt_py(&state_key)
+                )));
+            }
+            Err(e) => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Recursive type not resolved: {e}"
+                )));
+            }
+        };
         Ok(Self {
-            state_key: type_info.getattr("state_key")?.unbind(),
-            meta: type_info.getattr("meta")?.unbind(),
+            inner_type_id: inner.as_ptr() as *const _ as usize,
         })
-    }
-
-    pub fn get_inner_type<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self.meta.bind(py).get_item(&self.state_key) {
-            Ok(type_) => Ok(type_),
-            Err(e) => Err(PyRuntimeError::new_err(format!(
-                "Recursive type not resolved: {e}"
-            ))),
-        }
     }
 }
 
@@ -362,137 +368,166 @@ pub enum Type {
     Custom(BaseTypeInfo),
 }
 
+#[derive(Copy, Clone, Debug)]
+enum TypeTag {
+    None,
+    Never,
+    Integer,
+    Float,
+    Decimal,
+    String,
+    Boolean,
+    Uuid,
+    Time,
+    DateTime,
+    Date,
+    Bytes,
+    Any,
+    Entity,
+    TypedDict,
+    Array,
+    Enum,
+    Optional,
+    Dictionary,
+    Tuple,
+    Union,
+    DiscriminatedUnion,
+    Literal,
+    RecursionHolder,
+    Custom,
+}
+
 pub fn get_object_type(type_info: &Bound<'_, PyAny>) -> PyResult<Type> {
+    let py = type_info.py();
+    let registry = type_info_registry(py)?;
     let base_type = BaseTypeInfo::extract(type_info)?;
     let python_object_id = type_info.as_ptr() as *const _ as usize;
+    let cls_id = type_info.get_type().as_ptr() as *const _ as usize;
 
-    if is_type_info(type_info, "NoneType")? {
-        return Ok(Type::None(base_type));
-    }
-    if is_type_info(type_info, "NeverType")? {
-        return Ok(Type::Never(base_type));
-    }
-    if is_type_info(type_info, "IntegerType")? {
-        return Ok(Type::Integer(
-            extract_i64_number_type(type_info)?,
-            base_type,
-        ));
-    }
-    if is_type_info(type_info, "FloatType")? {
-        return Ok(Type::Float(extract_f64_number_type(type_info)?, base_type));
-    }
-    if is_type_info(type_info, "DecimalType")? {
-        return Ok(Type::Decimal(
-            extract_f64_number_type(type_info)?,
-            base_type,
-        ));
-    }
-    if is_type_info(type_info, "StringType")? {
-        return Ok(Type::String(StringTypeInfo::extract(type_info)?, base_type));
-    }
-    if is_type_info(type_info, "BooleanType")? {
-        return Ok(Type::Boolean(base_type));
-    }
-    if is_type_info(type_info, "UUIDType")? {
-        return Ok(Type::Uuid(base_type));
-    }
-    if is_type_info(type_info, "TimeType")? {
-        return Ok(Type::Time(base_type));
-    }
-    if is_type_info(type_info, "DateTimeType")? {
-        return Ok(Type::DateTime(base_type));
-    }
-    if is_type_info(type_info, "DateType")? {
-        return Ok(Type::Date(base_type));
-    }
-    if is_type_info(type_info, "EnumType")? {
-        return Ok(Type::Enum(EnumTypeInfo::extract(type_info)?, base_type));
-    }
-    if is_type_info(type_info, "LiteralType")? {
-        return Ok(Type::Literal(
-            LiteralTypeInfo::extract(type_info)?,
-            base_type,
-        ));
-    }
-    if is_type_info(type_info, "BytesType")? {
-        return Ok(Type::Bytes(base_type));
-    }
-    if is_type_info(type_info, "RecursionHolder")? {
-        return Ok(Type::RecursionHolder(
-            RecursionHolderInfo::extract(type_info)?,
-            base_type,
-        ));
-    }
-    if is_type_info(type_info, "CustomType")? {
-        return Ok(Type::Custom(base_type));
-    }
-    if is_type_info(type_info, "AnyType")? {
-        return Ok(Type::Any(base_type));
-    }
-    if is_type_info(type_info, "OptionalType")? {
-        return Ok(Type::Optional(
+    let Some(&tag) = registry.tags.get(&cls_id) else {
+        return Err(PyRuntimeError::new_err(format!(
+            "Unknown type-info object: {}",
+            fmt_py(type_info)
+        )));
+    };
+
+    Ok(match tag {
+        TypeTag::None => Type::None(base_type),
+        TypeTag::Never => Type::Never(base_type),
+        TypeTag::Integer => Type::Integer(extract_i64_number_type(type_info)?, base_type),
+        TypeTag::Float => Type::Float(extract_f64_number_type(type_info)?, base_type),
+        TypeTag::Decimal => Type::Decimal(extract_f64_number_type(type_info)?, base_type),
+        TypeTag::String => Type::String(StringTypeInfo::extract(type_info)?, base_type),
+        TypeTag::Boolean => Type::Boolean(base_type),
+        TypeTag::Uuid => Type::Uuid(base_type),
+        TypeTag::Time => Type::Time(base_type),
+        TypeTag::DateTime => Type::DateTime(base_type),
+        TypeTag::Date => Type::Date(base_type),
+        TypeTag::Bytes => Type::Bytes(base_type),
+        TypeTag::Any => Type::Any(base_type),
+        TypeTag::Custom => Type::Custom(base_type),
+        TypeTag::Enum => Type::Enum(EnumTypeInfo::extract(type_info)?, base_type),
+        TypeTag::Literal => Type::Literal(LiteralTypeInfo::extract(type_info)?, base_type),
+        TypeTag::RecursionHolder => {
+            Type::RecursionHolder(RecursionHolderInfo::extract(type_info)?, base_type)
+        }
+        TypeTag::Optional => Type::Optional(
             OptionalTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "ArrayType")? {
-        return Ok(Type::Array(
+        ),
+        TypeTag::Array => Type::Array(
             ArrayTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "DictionaryType")? {
-        return Ok(Type::Dictionary(
+        ),
+        TypeTag::Dictionary => Type::Dictionary(
             DictionaryTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "TupleType")? {
-        return Ok(Type::Tuple(
+        ),
+        TypeTag::Tuple => Type::Tuple(
             TupleTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "UnionType")? {
-        return Ok(Type::Union(
+        ),
+        TypeTag::Union => Type::Union(
             UnionTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "DiscriminatedUnionType")? {
-        return Ok(Type::DiscriminatedUnion(
+        ),
+        TypeTag::DiscriminatedUnion => Type::DiscriminatedUnion(
             DiscriminatedUnionTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "EntityType")? {
-        return Ok(Type::Entity(
+        ),
+        TypeTag::Entity => Type::Entity(
             EntityTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-    if is_type_info(type_info, "TypedDictType")? {
-        return Ok(Type::TypedDict(
+        ),
+        TypeTag::TypedDict => Type::TypedDict(
             TypedDictTypeInfo::extract(type_info)?,
             base_type,
             python_object_id,
-        ));
-    }
-
-    unreachable!("Unknown type: {:?}", type_info)
+        ),
+    })
 }
 
-fn is_type_info(type_info: &Bound<'_, PyAny>, type_name: &str) -> PyResult<bool> {
-    let type_info_module = PyModule::import(type_info.py(), "serpyco_rs._type_info")?;
-    let cls = type_info_module.getattr(type_name)?;
-    type_info.is_instance(&cls)
+struct TypeInfoRegistry {
+    tags: IntMap<usize, TypeTag>,
+    not_set: Py<PyAny>,
+    // Keep classes alive so that their pointer keys in `tags` stay valid.
+    _classes: Vec<Py<PyType>>,
+}
+
+static TYPE_INFO_REGISTRY: PyOnceLock<TypeInfoRegistry> = PyOnceLock::new();
+
+fn type_info_registry(py: Python<'_>) -> PyResult<&TypeInfoRegistry> {
+    TYPE_INFO_REGISTRY.get_or_try_init(py, || {
+        let module = PyModule::import(py, "serpyco_rs._type_info")?;
+        let mappings: &[(&str, TypeTag)] = &[
+            ("NoneType", TypeTag::None),
+            ("NeverType", TypeTag::Never),
+            ("IntegerType", TypeTag::Integer),
+            ("FloatType", TypeTag::Float),
+            ("DecimalType", TypeTag::Decimal),
+            ("StringType", TypeTag::String),
+            ("BooleanType", TypeTag::Boolean),
+            ("UUIDType", TypeTag::Uuid),
+            ("TimeType", TypeTag::Time),
+            ("DateTimeType", TypeTag::DateTime),
+            ("DateType", TypeTag::Date),
+            ("BytesType", TypeTag::Bytes),
+            ("AnyType", TypeTag::Any),
+            ("EntityType", TypeTag::Entity),
+            ("TypedDictType", TypeTag::TypedDict),
+            ("ArrayType", TypeTag::Array),
+            ("EnumType", TypeTag::Enum),
+            ("OptionalType", TypeTag::Optional),
+            ("DictionaryType", TypeTag::Dictionary),
+            ("TupleType", TypeTag::Tuple),
+            ("UnionType", TypeTag::Union),
+            ("DiscriminatedUnionType", TypeTag::DiscriminatedUnion),
+            ("LiteralType", TypeTag::Literal),
+            ("RecursionHolder", TypeTag::RecursionHolder),
+            ("CustomType", TypeTag::Custom),
+        ];
+
+        let mut tags = IntMap::default();
+        let mut classes = Vec::with_capacity(mappings.len());
+        for (name, tag) in mappings {
+            let cls = module.getattr(*name)?.cast_into::<PyType>()?;
+            tags.insert(cls.as_ptr() as *const _ as usize, *tag);
+            classes.push(cls.unbind());
+        }
+
+        Ok(TypeInfoRegistry {
+            tags,
+            not_set: module.getattr("NOT_SET")?.unbind(),
+            _classes: classes,
+        })
+    })
 }
 
 fn py_none_to_option(obj: Bound<'_, PyAny>) -> Option<Py<PyAny>> {
@@ -504,10 +539,8 @@ fn py_none_to_option(obj: Bound<'_, PyAny>) -> Option<Py<PyAny>> {
 }
 
 fn extract_default_value(default: Bound<'_, PyAny>) -> PyResult<Option<Py<PyAny>>> {
-    let type_info_module = PyModule::import(default.py(), "serpyco_rs._type_info")?;
-    let not_set = type_info_module.getattr("NOT_SET")?;
-
-    if default.is(&not_set) {
+    let registry = type_info_registry(default.py())?;
+    if default.is(registry.not_set.bind(default.py())) {
         Ok(None)
     } else {
         Ok(Some(default.unbind()))

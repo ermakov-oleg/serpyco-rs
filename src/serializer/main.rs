@@ -387,9 +387,7 @@ pub fn get_encoder(
             )?
         }
         Type::RecursionHolder(type_info, base_type) => {
-            let inner_type = type_info.get_inner_type(py)?;
-            let python_object_id = inner_type.as_ptr() as *const _ as usize;
-            let encoder_ref = encoder_state.get_encoder_ref(python_object_id);
+            let encoder_ref = encoder_state.get_encoder_ref(type_info.inner_type_id);
             wrap_with_custom_encoder(py, base_type, Box::new(LazyEncoder { inner: encoder_ref }))?
         }
         Type::Enum(type_info, base_type) => wrap_with_custom_encoder(

@@ -1,7 +1,7 @@
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 from enum import Enum, IntEnum
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar
 
 
 _I = TypeVar('_I')
@@ -204,12 +204,6 @@ class RecursionHolder(BaseType):
     name: str
     state_key: str
     meta: Any
-
-    def get_inner_type(self) -> BaseType:
-        try:
-            return cast(BaseType, self.meta[self.state_key])
-        except KeyError as e:
-            raise RuntimeError(f'Recursive type not resolved: {e}') from e
 
 
 @dataclasses.dataclass(slots=True, kw_only=True)
