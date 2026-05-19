@@ -89,52 +89,53 @@ There is support for generic types from the standard typing module:
 
 <details>
   <summary>Linux</summary>
+  Linux Debian 13 ARM64 / Python 3.14
 
   #### Load
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.16 |                  6318.1 |                 1    |
-  | mashumaro   |                            0.45 |                  2244.4 |                 2.81 |
-  | pydantic    |                            0.57 |                  1753.9 |                 3.56 |
-  | serpyco     |                            0.82 |                  1228.3 |                 5.17 |
-  | marshmallow |                            8.49 |                   117.4 |                53.35 |
+  | serpyco_rs  |                            0.05 |                 18212.1 |                 1    |
+  | mashumaro   |                            0.17 |                  5975.3 |                 3.05 |
+  | pydantic    |                            0.19 |                  5131   |                 3.55 |
+  | serpyco     |                            0.51 |                  1979.7 |                 9.19 |
+  | marshmallow |                            2.95 |                   338.4 |                53.66 |
 
   #### Dump
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.07 |                 13798   |                 1    |
-  | serpyco     |                            0.07 |                 13622   |                 1.02 |
-  | mashumaro   |                            0.1  |                 10219.5 |                 1.36 |
-  | pydantic    |                            0.22 |                  4615.5 |                 2.99 |
-  | marshmallow |                            2    |                   497   |                27.69 |
+  | serpyco_rs  |                            0.04 |                 25695.5 |                 1    |
+  | serpyco     |                            0.04 |                 24676.2 |                 1.04 |
+  | mashumaro   |                            0.04 |                 22632.2 |                 1.13 |
+  | pydantic    |                            0.13 |                  7787.2 |                 3.3  |
+  | marshmallow |                            0.68 |                  1475.2 |                17.45 |
 </details>
 
 
 <details>
   <summary>MacOS</summary>
-  macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+  macOS Sequoia 15.6 / Apple M4 Max / 36GB RAM / Python 3.14
 
   #### Load
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
-  | mashumaro   |                            0.2  |                  4968   |                 2    |
-  | pydantic    |                            0.34 |                  2866.7 |                 3.42 |
-  | serpyco     |                            0.69 |                  1444.1 |                 6.87 |
-  | marshmallow |                            4.14 |                   241.8 |                41.05 |
+  | serpyco_rs  |                            0.05 |                 20921.7 |                 1    |
+  | mashumaro   |                            0.14 |                  7078.3 |                 2.96 |
+  | pydantic    |                            0.19 |                  5359.2 |                 3.91 |
+  | serpyco     |                            0.52 |                  1926.8 |                10.88 |
+  | marshmallow |                            2.53 |                   394.7 |                53.11 |
 
   #### Dump
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
-  | serpyco     |                            0.05 |                 21232.9 |                 1.06 |
-  | mashumaro   |                            0.06 |                 15903.4 |                 1.42 |
-  | pydantic    |                            0.16 |                  6262.6 |                 3.61 |
-  | marshmallow |                            1.04 |                   962   |                23.5  |
+  | serpyco_rs  |                            0.03 |                 30582.2 |                 1    |
+  | serpyco     |                            0.04 |                 27437.9 |                 1.11 |
+  | mashumaro   |                            0.04 |                 22598.9 |                 1.35 |
+  | pydantic    |                            0.11 |                  8771   |                 3.48 |
+  | marshmallow |                            0.59 |                  1700.5 |                17.94 |
 </details>
 
 
