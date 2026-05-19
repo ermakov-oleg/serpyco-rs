@@ -48,6 +48,7 @@ where
     Ok(())
 }
 
+#[inline(always)]
 pub fn _check_bounds<T>(
     val: T,
     min: Option<T>,
@@ -62,6 +63,21 @@ where
     if min.is_none() && max.is_none() {
         return Ok(());
     }
+    _check_bounds_slow(val, min, max, inclusive_min, inclusive_max, instance_path)
+}
+
+#[cold]
+fn _check_bounds_slow<T>(
+    val: T,
+    min: Option<T>,
+    max: Option<T>,
+    inclusive_min: bool,
+    inclusive_max: bool,
+    instance_path: &InstancePath,
+) -> PyResult<()>
+where
+    T: PartialOrd + Display + Copy,
+{
     check_lower_bound(val, min, inclusive_min, instance_path)?;
     check_upper_bound(val, max, inclusive_max, instance_path)?;
     Ok(())
@@ -114,6 +130,7 @@ pub fn check_max_length(
     Ok(())
 }
 
+#[inline(always)]
 pub fn check_length(
     val: &Bound<'_, PyString>,
     min: Option<usize>,
@@ -123,6 +140,16 @@ pub fn check_length(
     if min.is_none() && max.is_none() {
         return Ok(());
     }
+    check_length_slow(val, min, max, instance_path)
+}
+
+#[cold]
+fn check_length_slow(
+    val: &Bound<'_, PyString>,
+    min: Option<usize>,
+    max: Option<usize>,
+    instance_path: &InstancePath,
+) -> PyResult<()> {
     let len = val.len()?;
     check_min_length(val, len, min, instance_path)?;
     check_max_length(val, len, max, instance_path)?;
