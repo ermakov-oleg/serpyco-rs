@@ -19,7 +19,7 @@ use crate::errors::{ToPyErr, ValidationError};
 use crate::python::{
     create_py_dict_known_size, create_py_list, create_py_tuple, dump_date, dump_datetime,
     dump_time, parse_date, parse_datetime, parse_time, py_dict_set_item, py_list_get_item,
-    py_list_set_item, py_tuple_set_item,
+    py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
 use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
 use crate::validator::validators::{
@@ -553,7 +553,7 @@ impl Encoder for EntityEncoder {
             if self.is_frozen {
                 py_frozen_object_set_attr.call1((&obj, &field.name, val))?;
             } else {
-                obj.setattr(&field.name, val)?;
+                set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
             };
         }
 

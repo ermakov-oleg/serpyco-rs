@@ -48,6 +48,29 @@ pub(crate) fn py_dict_set_item(
     error_on_minusone(result)
 }
 
+/// Set attribute by calling the object's type `tp_setattro` slot directly.
+///
+/// `PyObject_SetAttr` (which `Bound::setattr` ultimately calls) interns the
+/// attribute name on every call via `PyUnicode_InternInPlace`. The attribute
+/// names we store come from `Py<PyString>` allocated once at serializer
+/// build-time and are already interned, so that work is pure overhead.
+/// Calling `tp_setattro` directly skips the intern step.
+#[inline]
+pub(crate) fn set_attr_unchecked(
+    obj: &Bound<PyAny>,
+    name: *mut ffi::PyObject,
+    value: Bound<PyAny>,
+) -> PyResult<()> {
+    let result = unsafe {
+        let tp = ffi::Py_TYPE(obj.as_ptr());
+        match (*tp).tp_setattro {
+            Some(setattro) => setattro(obj.as_ptr(), name, value.as_ptr()),
+            None => ffi::PyObject_SetAttr(obj.as_ptr(), name, value.as_ptr()),
+        }
+    };
+    error_on_minusone(result)
+}
+
 #[inline]
 pub(crate) fn create_py_tuple(py: Python, size: usize) -> Bound<PyTuple> {
     let size: Py_ssize_t = size.try_into().expect("size is too large");
