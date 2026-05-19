@@ -272,6 +272,10 @@ jobs:
 
   benchmark-codespeed:
     needs: [build]
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [instrumentation, walltime]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -279,7 +283,7 @@ jobs:
         id: cache-uv
         with:
           path: ~/.cache/uv
-          key: ubuntu-latest-python-3.13-uv
+          key: ubuntu-latest-python-3.13-uv-${{ matrix.mode }}
       - name: set up Python 3.13
         uses: actions/setup-python@v4
         with:
@@ -300,6 +304,7 @@ jobs:
         uses: CodSpeedHQ/action@v3
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
+          mode: ${{ matrix.mode }}
           run: nox -s bench_codespeed --no-venv --no-install
         env:
           CI: true
