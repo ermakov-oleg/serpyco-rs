@@ -139,9 +139,10 @@ def get_type_hints(
                     value = type(None)
                 if isinstance(value, str):
                     value = ForwardRef(value, is_argument=False, is_class=True)
-                # Python 3.14+ requires type_params argument
-                if sys.version_info >= (3, 14):
-                    value = _eval_type(value, base_globals, base_locals, type_params=())
+                # type_params parameter is required in 3.13+ to avoid DeprecationWarning
+                if sys.version_info >= (3, 13):
+                    type_params = getattr(base, '__type_params__', ())
+                    value = _eval_type(value, base_globals, base_locals, type_params=type_params)
                 else:
                     value = _eval_type(value, base_globals, base_locals)
                 hint_tracking[base][name] = value
@@ -189,9 +190,10 @@ def get_type_hints(
                 is_argument=not isinstance(obj, types.ModuleType),
                 is_class=False,
             )
-        # Python 3.14+ requires type_params argument
-        if sys.version_info >= (3, 14):
-            hints[name] = _eval_type(value, globalns, localns, type_params=())
+        # type_params parameter is required in 3.13+ to avoid DeprecationWarning
+        if sys.version_info >= (3, 13):
+            type_params = getattr(obj, '__type_params__', ())
+            hints[name] = _eval_type(value, globalns, localns, type_params=type_params)
         else:
             hints[name] = _eval_type(value, globalns, localns)
     return hints if include_extras else {k: _strip_annotations(t) for k, t in hints.items()}
