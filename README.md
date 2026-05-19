@@ -85,6 +85,55 @@ There is support for generic types from the standard typing module:
 * typing.NewType
 * PEP 695 (Type Parameter Syntax) - Python 3.12+
 
+## Date and time formats
+
+`serpyco-rs` parses and emits `datetime.datetime`, `datetime.date`, and `datetime.time` using the
+[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) profile of ISO 8601 (via the
+[`speedate`](https://crates.io/crates/speedate) crate). Strings shorter or longer than RFC 3339
+(e.g. Python's `isoformat()` with a space separator, or trailing nanoseconds) are accepted with
+the rules below; output is always RFC 3339.
+
+### `datetime.datetime`
+
+**Load** accepts a string in the form `YYYY-MM-DDTHH:MM:SS[.ffffff][Z|±HH:MM]`:
+
+| Input                                | Result                                                            |
+|--------------------------------------|-------------------------------------------------------------------|
+| `2022-10-10T14:23:43`                | naive `datetime(2022, 10, 10, 14, 23, 43)`                        |
+| `2022-10-10T14:23:43.123456`         | naive with microseconds                                           |
+| `2022-10-10T14:23:43Z`               | aware, `tzinfo=UTC`                                               |
+| `2022-10-10T14:23:43+01:00`          | aware, fixed offset `+01:00`                                      |
+| `2024-04-02T12:21:53.725421224`      | sub-microsecond digits are **truncated** to microseconds (`725421`) |
+
+**Dump** produces an RFC 3339 string. Aware datetimes are written with an explicit `Z` or `±HH:MM`
+offset; naive datetimes are written without one. Pass `Serializer(datetime, naive_datetime_to_utc=True)`
+to force naive datetimes to be emitted as UTC (`...Z`).
+
+### `datetime.date`
+
+**Load** accepts `YYYY-MM-DD`. **Dump** produces `YYYY-MM-DD`. Dumping a `datetime` into a `date`
+field drops the time component:
+
+```python
+Serializer(date).load('2022-10-14')                  # date(2022, 10, 14)
+Serializer(date).dump(datetime(2022, 10, 13, 12, 34, 56))  # '2022-10-13'
+```
+
+### `datetime.time`
+
+**Load** accepts `HH:MM`, `HH:MM:SS`, `HH:MM:SS.ffffff`, optionally followed by `Z` or `±HH:MM`:
+
+| Input                       | Result                                                |
+|-----------------------------|-------------------------------------------------------|
+| `12:34`                     | `time(12, 34)`                                        |
+| `12:34:56`                  | `time(12, 34, 56)`                                    |
+| `12:34:56.000078`           | `time(12, 34, 56, 78)`                                |
+| `12:34:57.000095987`        | sub-microsecond digits truncated (`microsecond=95`)   |
+| `12:34:56.000078+03:00`     | aware time with fixed `+03:00` offset                 |
+
+**Dump** produces `HH:MM:SS` (or `HH:MM:SS.ffffff` when microseconds are non-zero), with `Z` /
+`±HH:MM` appended for aware times.
+
 ## Benchmarks
 
 <details>
