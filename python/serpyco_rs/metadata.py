@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, TypeVar
 
-from ._impl import CustomEncoder
+from ._type_info import CustomEncoder
 
 
 @dataclass(frozen=True)

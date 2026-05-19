@@ -11,7 +11,6 @@ from nox.command import CommandFailed
 nox.options.sessions = ['test', 'lint', 'type_check', 'rust_lint']
 
 COVERAGE_DIR = Path('coverage')
-WHEEL_DIR = COVERAGE_DIR / 'wheels'
 PYTHON_COVERAGE_LCOV = COVERAGE_DIR / 'python.lcov'
 RUST_COVERAGE_LCOV = COVERAGE_DIR / 'rust.lcov'
 COMBINED_COVERAGE_LCOV = COVERAGE_DIR / 'lcov.info'
@@ -115,12 +114,7 @@ def coverage(session):
     session.run('cargo', 'llvm-cov', 'clean', '--workspace')
 
     COVERAGE_DIR.mkdir(exist_ok=True)
-    shutil.rmtree(WHEEL_DIR, ignore_errors=True)
-    session.run_always('maturin', 'build', '-r', '--out', str(WHEEL_DIR), env=coverage_env)
-    wheels = sorted(WHEEL_DIR.glob('*.whl'), key=lambda path: path.stat().st_mtime)
-    if not wheels:
-        session.error(f'No wheels found in {WHEEL_DIR}')
-    install(session, '--force-reinstall', str(wheels[-1]))
+    install(session, '-e', '.', env=coverage_env)
 
     session.run('coverage', 'erase')
     session.run('coverage', 'run', '-m', 'pytest', '-vvs', 'tests/', *session.posargs, env=coverage_env)
@@ -162,11 +156,11 @@ def coverage(session):
     session.log(f'HTML coverage report: {COVERAGE_HTML_DIR / "index.html"}')
 
 
-def install(session, *args, use_pip: bool = False):
+def install(session, *args, use_pip: bool = False, env=None):
     if session._runner.global_config.no_install:
         return
     cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', sys.executable]
-    session.run_always(*cmd, *args)
+    session.run_always(*cmd, *args, env=env)
 
 
 def _is_ci() -> bool:

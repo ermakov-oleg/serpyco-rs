@@ -11,7 +11,6 @@ from serpyco_rs._describe import (
     StringType,
     describe_type,
 )
-from serpyco_rs._impl import DefaultValue
 
 
 @dataclass
@@ -45,7 +44,7 @@ def test_describe__recursive_type__parsed():
                         EntityField(
                             name='next',
                             dict_key='next',
-                            default=DefaultValue.some(None),
+                            default=None,
                             required=False,
                             field_type=OptionalType(
                                 inner=RecursionHolder(

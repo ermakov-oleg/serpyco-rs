@@ -27,7 +27,9 @@ from typing_extensions import (
 )
 
 from ._custom_types import CustomType as CustomTypeMeta
-from ._impl import (
+from ._meta import Annotations, ResolverContext
+from ._secial_forms import is_typealiastype, is_union_type, unwrap_special_forms
+from ._type_info import (
     NOT_SET,
     AnyType,
     ArrayType,
@@ -40,7 +42,6 @@ from ._impl import (
     DateTimeType,
     DateType,
     DecimalType,
-    DefaultValue,
     DictionaryType,
     DiscriminatedUnionType,
     EntityField,
@@ -59,9 +60,8 @@ from ._impl import (
     TypedDictType,
     UnionType,
     UUIDType,
+    _NotSet,
 )
-from ._meta import Annotations, ResolverContext
-from ._secial_forms import is_typealiastype, is_union_type, unwrap_special_forms
 from ._type_utils import get_type_hints  # type: ignore[attr-defined]
 from ._utils import _MergeStack, _Stack, get_attributes_doc, to_camelcase
 from .metadata import (
@@ -454,9 +454,7 @@ class _TypeResolver:
                     flatten = field_annotations.get(_Flatten)
 
                     is_discriminator_field = field.name == discriminator_field
-                    required = (
-                        not (field.default != NOT_SET or field.default_factory != NOT_SET) or is_discriminator_field
-                    )
+                    required = (field.default is NOT_SET and field.default_factory is NOT_SET) or is_discriminator_field
 
                     default = field.default
                     if (
@@ -465,7 +463,7 @@ class _TypeResolver:
                         and none_as_default_for_optional
                         and none_as_default_for_optional.use
                     ):
-                        default = DefaultValue.some(None)
+                        default = None
                         required = False
 
                     is_flattened = flatten is not None
@@ -530,8 +528,8 @@ def describe_type(
 class _Field(Generic[_T]):
     name: str
     type: type[_T] | str | Any
-    default: DefaultValue[_T] | DefaultValue[None] = NOT_SET
-    default_factory: DefaultValue[Callable[[], _T]] | DefaultValue[None] = NOT_SET
+    default: _T | None | _NotSet = NOT_SET
+    default_factory: Callable[[], _T] | _NotSet = NOT_SET
 
 
 def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
@@ -540,10 +538,8 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
             _Field(
                 name=f.name,
                 type=f.type,
-                default=(DefaultValue.some(f.default) if f.default is not dataclasses.MISSING else NOT_SET),
-                default_factory=(
-                    DefaultValue.some(f.default_factory) if f.default_factory is not dataclasses.MISSING else NOT_SET
-                ),
+                default=(f.default if f.default is not dataclasses.MISSING else NOT_SET),
+                default_factory=(f.default_factory if f.default_factory is not dataclasses.MISSING else NOT_SET),
             )
             for f in dataclasses.fields(t)
         ]
@@ -552,7 +548,7 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
             _Field(
                 name=field_name,
                 type=field_type,
-                default=NOT_SET if _is_required_in_typeddict(t, field_name) else DefaultValue.some(None),
+                default=NOT_SET if _is_required_in_typeddict(t, field_name) else None,
                 default_factory=NOT_SET,
             )
             for field_name, field_type in t.__annotations__.items()
@@ -564,14 +560,14 @@ def _get_entity_fields(t: Any) -> Sequence[_Field[Any]]:
                 name=f.name,
                 type=f.type,
                 default=(
-                    DefaultValue.some(f.default)
+                    f.default
                     if (
                         f.default is not attr.NOTHING and not isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
                     )
                     else NOT_SET
                 ),
                 default_factory=(
-                    DefaultValue.some(f.default.factory)  # pyright: ignore
+                    f.default.factory  # pyright: ignore
                     if isinstance(f.default, attr.Factory)  # type: ignore[arg-type]
                     else NOT_SET
                 ),
