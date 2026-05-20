@@ -27,7 +27,7 @@ use super::encoders::{
 
 type CustomEncoderFns = (Option<Py<PyAny>>, Option<Py<PyAny>>);
 
-#[pyclass(frozen, module = "serde_json")]
+#[pyclass(frozen, module = "serpyco_rs")]
 #[derive(Debug)]
 pub struct Serializer {
     pub(crate) encoder: Box<TEncoder>,
@@ -405,26 +405,22 @@ pub fn get_encoder(
             }),
         )?,
         Type::Custom(base_type) => {
-            if let Some(custom_encoder_py) = &base_type.custom_encoder {
-                let (serialize, deserialize) = extract_custom_encoder(py, custom_encoder_py)?;
-
-                if serialize.is_none() || deserialize.is_none() {
-                    return Err(PyRuntimeError::new_err(
-                        "CustomType must have both serialize and deserialize methods",
-                    ));
-                }
-                let serialize = serialize.unwrap();
-                let deserialize = deserialize.unwrap();
-
-                Box::new(CustomTypeEncoder {
-                    dump: serialize,
-                    load: deserialize,
-                })
-            } else {
+            let Some(custom_encoder_py) = &base_type.custom_encoder else {
                 return Err(PyRuntimeError::new_err(
                     "CustomType must have both serialize and deserialize methods",
                 ));
-            }
+            };
+            let (Some(serialize), Some(deserialize)) =
+                extract_custom_encoder(py, custom_encoder_py)?
+            else {
+                return Err(PyRuntimeError::new_err(
+                    "CustomType must have both serialize and deserialize methods",
+                ));
+            };
+            Box::new(CustomTypeEncoder {
+                dump: serialize,
+                load: deserialize,
+            })
         }
     };
 

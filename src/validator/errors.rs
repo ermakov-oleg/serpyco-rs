@@ -1,3 +1,8 @@
+//! Formatting helper for `InstancePath`.
+//!
+//! Converts a borrowed path of `PathChunk`s into a JSON-pointer-like
+//! string used in user-facing error messages (e.g. `field/items/0/name`).
+
 use crate::validator::context::PathChunk;
 use crate::validator::InstancePath;
 

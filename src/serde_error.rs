@@ -1,3 +1,16 @@
+//! Internal error type used throughout the serializer/validator.
+//!
+//! `SerdeError` distinguishes two cases that matter at the FFI boundary:
+//!   - `Schema`: a validation/serialization failure. These are recoverable
+//!     inside `Union` (the union tries the next variant) and ultimately
+//!     surface as `SchemaValidationError` on the Python side.
+//!   - `Py`: a raw `PyErr` that must propagate as-is — used for
+//!     `BaseException`-only types like `KeyboardInterrupt`/`SystemExit`
+//!     so they cannot be silently swallowed by a union branch.
+//!
+//! `from_user_callback` is the single place that decides which case a
+//! Python exception raised from user code falls into.
+
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyType;

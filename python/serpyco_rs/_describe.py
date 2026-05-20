@@ -28,7 +28,7 @@ from typing_extensions import (
 
 from ._custom_types import CustomType as CustomTypeMeta
 from ._meta import Annotations, ResolverContext
-from ._secial_forms import is_typealiastype, is_union_type, unwrap_special_forms
+from ._special_forms import is_typealiastype, is_union_type, unwrap_special_forms
 from ._type_info import (
     NOT_SET,
     AnyType,
