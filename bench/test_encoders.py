@@ -277,7 +277,7 @@ def test_load_union_miss_first(bench_or_check_refcount):
     class Foo:
         foo: int
 
-    # Первый вариант (Foo) ВСЕГДА промахнётся для int — измеряем стоимость промаха.
+    # First variant (Foo) always misses for an int — this measures the miss cost.
     serializer = Serializer(Union[Foo, int])
     data = 42
     bench_or_check_refcount.group = 'union'

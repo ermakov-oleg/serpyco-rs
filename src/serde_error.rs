@@ -52,7 +52,7 @@ impl From<SchemaError> for SerdeError {
 }
 
 impl SerdeError {
-    /// Единственная точка конвертации в Python-ошибку — вызывается на FFI-границе.
+    /// Single conversion point to a Python error — invoked at the FFI boundary.
     pub(crate) fn into_py_err(self) -> PyErr {
         match self {
             SerdeError::Py(err) => err,
@@ -70,9 +70,9 @@ impl SerdeError {
         }
     }
 
-    /// Конвертер для PyErr из пользовательских callback'ов.
-    /// Обычные `Exception` оборачиваются в `Schema` с `cause` (отбрасываются в Union).
-    /// `BaseException`-only (`KeyboardInterrupt`, `SystemExit`) уходят в `Py` (всплывают).
+    /// Wraps a PyErr raised from a user callback.
+    /// Regular `Exception` subclasses become `Schema` with `cause` (discarded inside Union).
+    /// `BaseException`-only types (`KeyboardInterrupt`, `SystemExit`) go to `Py` and propagate.
     pub(crate) fn from_user_callback(err: PyErr, path: &InstancePath) -> Self {
         Python::attach(|py| {
             if !err.is_instance_of::<PyException>(py) {
