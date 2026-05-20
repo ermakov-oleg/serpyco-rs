@@ -1,8 +1,10 @@
-use crate::validator::{raise_error, InstancePath};
+use crate::python::fmt_py;
+use crate::serde_error::{SchemaError, SerdeError};
+use crate::validator::InstancePath;
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PyList, PySequence, PyString};
-use pyo3::{Bound, PyAny, PyErr, PyResult};
+use pyo3::{Bound, PyAny};
 use std::cmp::Ordering;
 use std::fmt::Display;
 
@@ -11,17 +13,18 @@ pub fn check_lower_bound<T>(
     min: Option<T>,
     inclusive: bool,
     instance_path: &InstancePath,
-) -> PyResult<()>
+) -> Result<(), SerdeError>
 where
     T: PartialOrd + Display,
 {
     if let Some(min) = min {
         let violates = if inclusive { val < min } else { val <= min };
         if violates {
-            raise_error(
+            return Err(SchemaError::new(
                 format!("{val} is less than the minimum of {min}"),
                 instance_path,
-            )?;
+            )
+            .into());
         }
     }
     Ok(())
@@ -32,17 +35,18 @@ pub fn check_upper_bound<T>(
     max: Option<T>,
     inclusive: bool,
     instance_path: &InstancePath,
-) -> PyResult<()>
+) -> Result<(), SerdeError>
 where
     T: PartialOrd + Display,
 {
     if let Some(max) = max {
         let violates = if inclusive { val > max } else { val >= max };
         if violates {
-            raise_error(
+            return Err(SchemaError::new(
                 format!("{val} is greater than the maximum of {max}"),
                 instance_path,
-            )?;
+            )
+            .into());
         }
     }
     Ok(())
@@ -55,7 +59,7 @@ pub fn _check_bounds<T>(
     inclusive_min: bool,
     inclusive_max: bool,
     instance_path: &InstancePath,
-) -> PyResult<()>
+) -> Result<(), SerdeError>
 where
     T: PartialOrd + Display + Copy,
 {
@@ -85,13 +89,14 @@ pub fn check_min_length(
     len: usize,
     min: Option<usize>,
     instance_path: &InstancePath,
-) -> PyResult<()> {
+) -> Result<(), SerdeError> {
     if let Some(min) = min {
         if len < min {
-            raise_error(
+            return Err(SchemaError::new(
                 format!(r#""{val}" is shorter than {min} characters"#),
                 instance_path,
-            )?;
+            )
+            .into());
         }
     }
     Ok(())
@@ -102,13 +107,14 @@ pub fn check_max_length(
     len: usize,
     max: Option<usize>,
     instance_path: &InstancePath,
-) -> PyResult<()> {
+) -> Result<(), SerdeError> {
     if let Some(max) = max {
         if len > max {
-            raise_error(
+            return Err(SchemaError::new(
                 format!(r#""{val}" is longer than {max} characters"#),
                 instance_path,
-            )?;
+            )
+            .into());
         }
     }
     Ok(())
@@ -119,7 +125,7 @@ pub fn check_length(
     min: Option<usize>,
     max: Option<usize>,
     instance_path: &InstancePath,
-) -> PyResult<()> {
+) -> Result<(), SerdeError> {
     if min.is_none() && max.is_none() {
         return Ok(());
     }
@@ -130,13 +136,13 @@ pub fn check_length(
 }
 
 #[cold]
-pub fn missing_required_property(property: &str, instance_path: &InstancePath) -> PyErr {
+pub fn missing_required_property(property: &str, instance_path: &InstancePath) -> SerdeError {
     let instance_path = instance_path.push(property);
-    raise_error(
+    SchemaError::new(
         format!(r#""{property}" is a required property"#),
         &instance_path,
     )
-    .unwrap_err()
+    .into()
 }
 
 pub fn check_sequence_size(
@@ -144,22 +150,16 @@ pub fn check_sequence_size(
     seq_len: usize,
     size: usize,
     instance_path: Option<&InstancePath>,
-) -> PyResult<()> {
+) -> Result<(), SerdeError> {
     match seq_len.cmp(&size) {
         Ordering::Equal => Ok(()),
         Ordering::Less => {
-            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
-            raise_error(
-                format!(r#"{val} has less than {size} items"#),
-                &instance_path,
-            )
+            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
+            Err(SchemaError::new(format!(r#"{val} has less than {size} items"#), &path).into())
         }
         Ordering::Greater => {
-            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
-            raise_error(
-                format!(r#"{val} has more than {size} items"#),
-                &instance_path,
-            )
+            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
+            Err(SchemaError::new(format!(r#"{val} has more than {size} items"#), &path).into())
         }
     }
 }
@@ -170,26 +170,24 @@ pub fn check_sequence_bounds(
     min: Option<usize>,
     max: Option<usize>,
     instance_path: Option<&InstancePath>,
-) -> PyResult<()> {
+) -> Result<(), SerdeError> {
     if min.is_none() && max.is_none() {
         return Ok(());
     }
     if let Some(min) = min {
         if seq_len < min {
-            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
-            raise_error(
-                format!(r#"{val} has less than {min} items"#),
-                &instance_path,
-            )?;
+            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
+            return Err(
+                SchemaError::new(format!(r#"{val} has less than {min} items"#), &path).into(),
+            );
         }
     }
     if let Some(max) = max {
         if seq_len > max {
-            let instance_path = instance_path.cloned().unwrap_or(InstancePath::new());
-            raise_error(
-                format!(r#"{val} has more than {max} items"#),
-                &instance_path,
-            )?;
+            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
+            return Err(
+                SchemaError::new(format!(r#"{val} has more than {max} items"#), &path).into(),
+            );
         }
     }
     Ok(())
@@ -199,7 +197,7 @@ pub fn no_encoder_for_discriminator<K, D>(
     key: &K,
     discriminators: &[D],
     instance_path: &InstancePath,
-) -> PyErr
+) -> SerdeError
 where
     K: Display,
     D: Display,
@@ -209,54 +207,67 @@ where
         .map(|s| format!(r#""{s}""#))
         .collect::<Vec<_>>()
         .join(", ");
-    raise_error(
+    SchemaError::new(
         format!(r#""{key}" is not one of [{items}] discriminator values"#),
         instance_path,
     )
-    .unwrap_err()
+    .into()
 }
 
-pub fn _invalid_type_new(
+pub fn invalid_type_err(
     type_: &str,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
-) -> PyResult<()> {
-    let error = format!(r#"{} is not of type "{}""#, fmt_py(value), type_);
-    raise_error(error, instance_path)?;
-    Ok(())
+) -> SerdeError {
+    SchemaError::new(
+        format!(r#"{} is not of type "{}""#, fmt_py(value), type_),
+        instance_path,
+    )
+    .into()
 }
 
 macro_rules! invalid_type {
-    ($type_: expr, $value: expr, $path: expr) => {{
-        crate::validator::validators::_invalid_type_new($type_, $value, $path)?;
-        unreachable!(); // todo: Discard the use of unreachable
-    }};
+    ($type_: expr, $value: expr, $path: expr) => {
+        return Err(crate::validator::validators::invalid_type_err(
+            $type_, $value, $path,
+        ))
+    };
+}
+
+pub fn invalid_type_dump_err(type_: &str, value: &Bound<'_, PyAny>) -> SerdeError {
+    SchemaError::new(
+        format!(r#""{}" is not of type "{}""#, value.to_string(), type_),
+        &InstancePath::new(),
+    )
+    .into()
 }
 
 macro_rules! invalid_type_dump {
-    ($type_: expr, $value: expr) => {{
-        let error = format!(r#""{}" is not of type "{}""#, $value.to_string(), $type_);
-        let instance_path = InstancePath::new();
-        crate::validator::raise_error(error, &instance_path)?;
-        unreachable!(); // todo: Discard the use of unreachable
-    }};
+    ($type_: expr, $value: expr) => {
+        return Err(crate::validator::validators::invalid_type_dump_err(
+            $type_, $value,
+        ))
+    };
 }
 
-pub fn _invalid_enum_item(
+pub fn invalid_enum_item_err(
     items: &str,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
-) -> PyResult<()> {
-    let error = format!(r#"{} is not one of {}"#, fmt_py(value), items);
-    raise_error(error, instance_path)?;
-    Ok(())
+) -> SerdeError {
+    SchemaError::new(
+        format!(r#"{} is not one of {}"#, fmt_py(value), items),
+        instance_path,
+    )
+    .into()
 }
 
 macro_rules! invalid_enum_item {
-    ($items: expr, $value: expr, $path: expr) => {{
-        crate::validator::validators::_invalid_enum_item($items, $value, $path)?;
-        unreachable!(); // todo: Discard the use of unreachable
-    }};
+    ($items: expr, $value: expr, $path: expr) => {
+        return Err(crate::validator::validators::invalid_enum_item_err(
+            $items, $value, $path,
+        ))
+    };
 }
 
 pub fn str_as_bool(str: &str) -> Option<bool> {
@@ -267,7 +278,6 @@ pub fn str_as_bool(str: &str) -> Option<bool> {
     }
 }
 
-use crate::python::fmt_py;
 pub(crate) use check_bounds;
 pub(crate) use invalid_enum_item;
 pub(crate) use invalid_type;
