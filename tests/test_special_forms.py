@@ -1,7 +1,7 @@
 from typing import Annotated, ClassVar, Final, NewType, Union
 
 from serpyco_rs._meta import Annotations
-from serpyco_rs._secial_forms import unwrap_special_forms
+from serpyco_rs._special_forms import unwrap_special_forms
 from serpyco_rs.metadata import Alias, Max, Min
 from typing_extensions import NotRequired, ReadOnly, Required
 

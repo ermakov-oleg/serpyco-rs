@@ -8,33 +8,59 @@ from ._type_info import CustomEncoder
 
 @dataclass(frozen=True)
 class Min:
+    """Lower bound for numeric fields. Use with ``Annotated[int, Min(0)]``.
+
+    ``inclusive=False`` switches the comparison to strict (``>``).
+    """
+
     value: int | float
     inclusive: bool = True
 
 
 @dataclass(frozen=True)
 class Max:
+    """Upper bound for numeric fields. Use with ``Annotated[int, Max(100)]``.
+
+    ``inclusive=False`` switches the comparison to strict (``<``).
+    """
+
     value: int | float
     inclusive: bool = True
 
 
 @dataclass(frozen=True)
 class MinLength:
+    """Minimum length for strings/sequences. Use with ``Annotated[str, MinLength(1)]``."""
+
     value: int
 
 
 @dataclass(frozen=True)
 class MaxLength:
+    """Maximum length for strings/sequences. Use with ``Annotated[str, MaxLength(64)]``."""
+
     value: int
 
 
 @dataclass(frozen=True)
 class Discriminator:
+    """Tag field used to dispatch a tagged ``Union`` during deserialization.
+
+    Attach to a ``Union`` type via ``Annotated[Union[A, B], Discriminator('kind')]``;
+    each variant must expose the discriminator field with a unique literal value.
+    """
+
     name: str
 
 
 @dataclass(frozen=True)
 class Alias:
+    """External field name used during dump/load.
+
+    Use with ``Annotated[T, Alias('externalName')]`` when the Python attribute
+    name differs from the wire-format key.
+    """
+
     value: str
 
 
@@ -45,6 +71,10 @@ class Format(Enum):
 
 @dataclass(frozen=True)
 class FieldFormat:
+    """Per-field key formatting. Prefer the ``CamelCase`` / ``NoFormat`` singletons
+    over constructing this directly.
+    """
+
     format: Format
 
 
@@ -83,6 +113,12 @@ def deserialize_with(func: Callable[[_O], _I]) -> CustomEncoder[_I, _O]:
 
 
 class JsonSchemaExtension:
+    """Arbitrary JSON Schema fragment merged into the generated schema for a field.
+
+    Use with ``Annotated[T, JsonSchemaExtension({'description': '...', 'examples': [...]})]``.
+    Does not affect runtime serialization — only the output of ``get_json_schema``.
+    """
+
     def __init__(self, schema: Mapping[str, Any]) -> None:
         self._pairs = tuple(sorted(schema.items()))
         self.schema: Mapping[str, Any] = dict(self._pairs)

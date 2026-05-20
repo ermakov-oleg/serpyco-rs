@@ -1,3 +1,9 @@
+//! Public Python exception types exposed by the extension.
+//!
+//! Defines the `pyclass` wrappers (`ValidationError`, `SchemaValidationError`,
+//! `ErrorItem`) that are imported from Python. Construction of `PyErr` values
+//! at the FFI boundary lives in `serde_error.rs`.
+
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
 use pyo3::types::PyList;
