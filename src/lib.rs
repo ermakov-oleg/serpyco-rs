@@ -1,5 +1,6 @@
 mod errors;
 mod python;
+mod serde_error;
 mod serializer;
 mod validator;
 
