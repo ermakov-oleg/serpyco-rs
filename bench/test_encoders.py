@@ -270,3 +270,15 @@ def test_load_union(bench_or_check_refcount):
     data = {'foo': 1}
     bench_or_check_refcount.group = 'union'
     bench_or_check_refcount(repeat(lambda: serializer.load(data)))
+
+
+def test_load_union_miss_first(bench_or_check_refcount):
+    @dataclass
+    class Foo:
+        foo: int
+
+    # Первый вариант (Foo) ВСЕГДА промахнётся для int — измеряем стоимость промаха.
+    serializer = Serializer(Union[Foo, int])
+    data = 42
+    bench_or_check_refcount.group = 'union'
+    bench_or_check_refcount(repeat(lambda: serializer.load(data)))
