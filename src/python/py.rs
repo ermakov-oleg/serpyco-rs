@@ -8,19 +8,38 @@ use pyo3_ffi::Py_ssize_t;
 
 use super::macros::ffi;
 
-#[inline]
-fn size_to_py_ssize_t(size: usize) -> PyResult<Py_ssize_t> {
-    size.try_into()
-        .map_err(|_| PyOverflowError::new_err("collection size exceeds Py_ssize_t::MAX"))
+#[cold]
+#[inline(never)]
+fn err_size_overflow() -> PyErr {
+    PyOverflowError::new_err("collection size exceeds Py_ssize_t::MAX")
 }
 
-#[inline]
+#[cold]
+#[inline(never)]
+fn err_alloc_failed(py: Python) -> PyErr {
+    PyErr::fetch(py)
+}
+
+#[inline(always)]
+fn cast_size(size: usize) -> Result<Py_ssize_t, ()> {
+    if size <= Py_ssize_t::MAX as usize {
+        Ok(size as Py_ssize_t)
+    } else {
+        Err(())
+    }
+}
+
+#[inline(always)]
 pub(crate) fn create_py_list(py: Python, size: usize) -> PyResult<Bound<PyList>> {
-    let size = size_to_py_ssize_t(size)?;
-    Ok(unsafe { Bound::from_owned_ptr_or_err(py, ffi::PyList_New(size))?.cast_into_unchecked() })
+    let size = cast_size(size).map_err(|_| err_size_overflow())?;
+    let ptr = unsafe { ffi::PyList_New(size) };
+    if ptr.is_null() {
+        return Err(err_alloc_failed(py));
+    }
+    Ok(unsafe { Bound::from_owned_ptr(py, ptr).cast_into_unchecked() })
 }
 
-#[inline]
+#[inline(always)]
 pub(crate) fn py_list_get_item<'a>(
     list: &'a Bound<'a, PyList>,
     index: usize,
@@ -46,12 +65,14 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
     ffi!(PyList_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
 
-#[inline]
+#[inline(always)]
 pub(crate) fn create_py_dict_known_size(py: Python, size: usize) -> PyResult<Bound<PyDict>> {
-    let size = size_to_py_ssize_t(size)?;
-    Ok(unsafe {
-        Bound::from_owned_ptr_or_err(py, ffi::_PyDict_NewPresized(size))?.cast_into_unchecked()
-    })
+    let size = cast_size(size).map_err(|_| err_size_overflow())?;
+    let ptr = unsafe { ffi::_PyDict_NewPresized(size) };
+    if ptr.is_null() {
+        return Err(err_alloc_failed(py));
+    }
+    Ok(unsafe { Bound::from_owned_ptr(py, ptr).cast_into_unchecked() })
 }
 
 #[inline]
@@ -88,10 +109,14 @@ pub(crate) fn set_attr_unchecked(
     error_on_minusone(result)
 }
 
-#[inline]
+#[inline(always)]
 pub(crate) fn create_py_tuple(py: Python, size: usize) -> PyResult<Bound<PyTuple>> {
-    let size = size_to_py_ssize_t(size)?;
-    Ok(unsafe { Bound::from_owned_ptr_or_err(py, ffi::PyTuple_New(size))?.cast_into_unchecked() })
+    let size = cast_size(size).map_err(|_| err_size_overflow())?;
+    let ptr = unsafe { ffi::PyTuple_New(size) };
+    if ptr.is_null() {
+        return Err(err_alloc_failed(py));
+    }
+    Ok(unsafe { Bound::from_owned_ptr(py, ptr).cast_into_unchecked() })
 }
 
 #[inline]
