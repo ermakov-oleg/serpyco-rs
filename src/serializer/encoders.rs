@@ -996,7 +996,9 @@ pub struct TimeEncoder {}
 impl Encoder for TimeEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
-        let py_time = value.cast::<PyTime>().map_err(PyErr::from)?;
+        let py_time = value
+            .cast::<PyTime>()
+            .map_err(|_| invalid_type_dump_err("time", value))?;
         let result = dump_time(py_time)?;
         Ok(result.into_bound_py_any(value.py())?)
     }
@@ -1025,7 +1027,9 @@ pub struct DateTimeEncoder {
 impl Encoder for DateTimeEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
-        let py_datetime = value.cast::<PyDateTime>().map_err(PyErr::from)?;
+        let py_datetime = value
+            .cast::<PyDateTime>()
+            .map_err(|_| invalid_type_dump_err("datetime", value))?;
         let result = dump_datetime(py_datetime, self.naive_datetime_to_utc)?;
         Ok(result.into_bound_py_any(value.py())?)
     }
@@ -1052,7 +1056,9 @@ pub struct DateEncoder {}
 impl Encoder for DateEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
-        let py_date = value.cast::<PyDate>().map_err(PyErr::from)?;
+        let py_date = value
+            .cast::<PyDate>()
+            .map_err(|_| invalid_type_dump_err("date", value))?;
         let result = dump_date(py_date);
         Ok(result.into_bound_py_any(value.py())?)
     }
