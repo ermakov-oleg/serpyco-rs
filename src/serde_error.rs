@@ -3,17 +3,15 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 
 use crate::errors::{ErrorItem, SchemaValidationError};
-use crate::validator::InstancePath;
 use crate::validator::errors::into_path;
+use crate::validator::InstancePath;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) enum SerdeError {
     Schema(SchemaError),
     Py(PyErr),
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct SchemaError {
     pub(crate) message: String,
@@ -21,7 +19,6 @@ pub(crate) struct SchemaError {
     pub(crate) cause: Option<PyErr>,
 }
 
-#[allow(dead_code)]
 impl SchemaError {
     pub(crate) fn new(message: String, path: &InstancePath) -> Self {
         Self {
@@ -54,7 +51,6 @@ impl From<SchemaError> for SerdeError {
     }
 }
 
-#[allow(dead_code)]
 impl SerdeError {
     /// Единственная точка конвертации в Python-ошибку — вызывается на FFI-границе.
     pub(crate) fn into_py_err(self) -> PyErr {
@@ -87,5 +83,4 @@ impl SerdeError {
     }
 }
 
-#[allow(dead_code)]
 pub(crate) type SerdeResult<T> = Result<T, SerdeError>;

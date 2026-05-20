@@ -236,7 +236,7 @@ macro_rules! invalid_type {
 
 pub fn invalid_type_dump_err(type_: &str, value: &Bound<'_, PyAny>) -> SerdeError {
     SchemaError::new(
-        format!(r#""{}" is not of type "{}""#, value.to_string(), type_),
+        format!(r#""{value}" is not of type "{type_}""#),
         &InstancePath::new(),
     )
     .into()

@@ -8,6 +8,7 @@ use pyo3::types::{PyDict, PyList, PyMapping, PyString};
 use pyo3::{intern, PyAny, PyResult};
 
 use crate::python::{get_object_type, BaseTypeInfo, EntityFieldInfo, Type};
+use crate::serde_error::SerdeError;
 use crate::serializer::encoders::{
     BooleanEncoder, BytesEncoder, CustomTypeEncoder, DiscriminatorKey, FloatEncoder, IntEncoder,
     LiteralEncoder, NeverEncoder, NoneEncoder, QueryFields, StringEncoder, TypedDictEncoder,
@@ -29,7 +30,7 @@ type CustomEncoderFns = (Option<Py<PyAny>>, Option<Py<PyAny>>);
 #[pyclass(frozen, module = "serde_json")]
 #[derive(Debug)]
 pub struct Serializer {
-    pub encoder: Box<TEncoder>,
+    pub(crate) encoder: Box<TEncoder>,
 }
 
 #[pymethods]
@@ -52,14 +53,16 @@ impl Serializer {
 
     #[inline]
     pub fn dump<'py>(&'py self, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.encoder.dump(value)
+        self.encoder.dump(value).map_err(SerdeError::into_py_err)
     }
 
     #[inline]
     pub fn load<'py>(&'py self, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let instance_path = InstancePath::new();
         let ctx = Context::new(false);
-        self.encoder.load(value, &instance_path, &ctx)
+        self.encoder
+            .load(value, &instance_path, &ctx)
+            .map_err(SerdeError::into_py_err)
     }
 
     #[inline]
@@ -116,7 +119,9 @@ impl Serializer {
             }
         };
 
-        encoder.load(&new_data, &instance_path, &ctx)
+        encoder
+            .load(&new_data, &instance_path, &ctx)
+            .map_err(SerdeError::into_py_err)
     }
 }
 
