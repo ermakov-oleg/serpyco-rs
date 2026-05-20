@@ -238,7 +238,7 @@ impl Encoder for DecimalEncoder {
             false
         };
         if valid {
-            let str_value = value.str().expect("Failed to convert value to string.");
+            let str_value = value.str()?;
             Ok(self.decimal_cls.bind(value.py()).call1((str_value,))?)
         } else {
             invalid_type!("decimal", value, instance_path)
@@ -344,7 +344,7 @@ impl Encoder for DictionaryEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(dict) = value.cast::<PyDict>() {
-            let result_dict = create_py_dict_known_size(dict.py(), dict.len());
+            let result_dict = create_py_dict_known_size(dict.py(), dict.len())?;
             for (k, v) in dict.iter() {
                 let key = self.key_encoder.dump(&k)?;
                 let value = self.value_encoder.dump(&v)?;
@@ -366,7 +366,7 @@ impl Encoder for DictionaryEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.cast::<PyDict>() {
-            let result_dict = create_py_dict_known_size(val.py(), val.len());
+            let result_dict = create_py_dict_known_size(val.py(), val.len())?;
             for (k, v) in val.iter() {
                 let instance_path = instance_path.push(&k);
                 let key = self.key_encoder.load(&k, &instance_path, ctx)?;
@@ -402,10 +402,10 @@ impl Encoder for ArrayEncoder {
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(list) = value.cast::<PyList>() {
             let size = list.len();
-            let result = create_py_list(value.py(), size);
+            let result = create_py_list(value.py(), size)?;
 
             for index in 0..size {
-                let item = py_list_get_item(list, index);
+                let item = py_list_get_item(list, index)?;
                 let val = self.encoder.dump(&item)?;
                 py_list_set_item(&result, index, val);
             }
@@ -432,10 +432,10 @@ impl Encoder for ArrayEncoder {
                 self.max_length,
                 Some(instance_path),
             )?;
-            let result = create_py_list(value.py(), size);
+            let result = create_py_list(value.py(), size)?;
 
             for index in 0..size {
-                let item = py_list_get_item(val, index);
+                let item = py_list_get_item(val, index)?;
                 let instance_path = instance_path.push(index);
                 let val = self.encoder.load(&item, &instance_path, ctx)?;
                 py_list_set_item(&result, index, val);
@@ -518,7 +518,7 @@ impl Field {
 impl Encoder for EntityEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
-        let dict = create_py_dict_known_size(value.py(), self.fields.len());
+        let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
             let field_val = value.getattr(&field.name)?;
             let dump_result = field.encoder.dump(&field_val)?;
@@ -575,7 +575,7 @@ fn create_remaining_dict<'a>(
 ) -> PyResult<Bound<'a, PyDict>> {
     let used_keys_set = used_keys.bind(val.py());
     let len = val.len().saturating_sub(used_keys_set.len());
-    let remaining_dict = create_py_dict_known_size(val.py(), len);
+    let remaining_dict = create_py_dict_known_size(val.py(), len)?;
     for (k, v) in val.iter() {
         if !used_keys_set.contains(&k)? {
             remaining_dict.set_item(k, v)?;
@@ -616,7 +616,7 @@ impl Encoder for TypedDictEncoder {
             Ok(val) => val,
             _ => invalid_type_dump!("dict", value),
         };
-        let dict = create_py_dict_known_size(value.py(), self.fields.len());
+        let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
             let field_val = match value.get_item(&field.name) {
                 Ok(Some(val)) => val,
@@ -655,7 +655,7 @@ impl Encoder for TypedDictEncoder {
         let Ok(value) = value.cast::<PyDict>() else {
             invalid_type_dump!("dict", value);
         };
-        let dict = create_py_dict_known_size(value.py(), self.fields.len());
+        let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
             let val = field.load_value(value, instance_path, ctx, &self.used_keys)?;
             py_dict_set_item(&dict, field.name.as_ptr(), val)?;
@@ -820,7 +820,7 @@ impl Encoder for TupleEncoder {
         if let Ok(seq) = value.cast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
-            let result = create_py_list(value.py(), seq_len);
+            let result = create_py_list(value.py(), seq_len)?;
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
                 let val = self.encoders[index].dump(&item)?;
@@ -847,7 +847,7 @@ impl Encoder for TupleEncoder {
             }
             let seq_len = seq.len()?;
             check_sequence_size(seq, seq_len, self.encoders.len(), Some(instance_path))?;
-            let result = create_py_tuple(value.py(), seq_len);
+            let result = create_py_tuple(value.py(), seq_len)?;
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
                 let instance_path = instance_path.push(index);

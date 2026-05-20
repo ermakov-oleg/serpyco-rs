@@ -62,8 +62,9 @@ fn time_as_tzinfo<'py>(py: Python<'py>, time: &Time) -> PyResult<Option<Bound<'p
         Some(offset) => {
             let delta = PyDelta::new(py, 0, offset, 0, true)?;
 
-            let tzinfo =
-                unsafe { Bound::from_owned_ptr(py, PyTimeZone_FromOffset(delta.as_ptr())) };
+            let tzinfo = unsafe {
+                Bound::from_owned_ptr_or_err(py, PyTimeZone_FromOffset(delta.as_ptr()))?
+            };
 
             Ok(Some(tzinfo.cast_into()?))
         }
