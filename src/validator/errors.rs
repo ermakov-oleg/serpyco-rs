@@ -23,7 +23,7 @@ fn into_err_item<T: Into<String>>(error: T, instance_path: &InstancePath) -> Err
     ErrorItem::new(error.into(), instance_path)
 }
 
-fn into_path(pointer: &InstancePath) -> String {
+pub(crate) fn into_path(pointer: &InstancePath) -> String {
     let mut path = vec![];
     for chunk in pointer.to_vec() {
         match chunk {
