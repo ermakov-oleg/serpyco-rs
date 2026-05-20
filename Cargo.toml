@@ -7,7 +7,7 @@ repository = "https://github.com/ermakov-oleg/serpyco-rs"
 
 [lib]
 name = "serpyco_rs"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "0.27", features = ["extension-module", "py-clone"] }
