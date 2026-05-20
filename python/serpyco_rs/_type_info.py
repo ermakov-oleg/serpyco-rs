@@ -8,7 +8,7 @@ _I = TypeVar('_I')
 _O = TypeVar('_O')
 
 
-@dataclasses.dataclass(slots=True, kw_only=True)
+@dataclasses.dataclass(slots=True, kw_only=True, unsafe_hash=True)
 class CustomEncoder(Generic[_I, _O]):
     serialize: Callable[[_I], _O] | None = None
     deserialize: Callable[[_O], _I] | None = None
