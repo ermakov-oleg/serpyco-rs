@@ -21,8 +21,8 @@ use super::encoders::{
     NoopEncoder, OptionalEncoder, TupleEncoder, UUIDEncoder,
 };
 use super::encoders::{
-    CustomEncoder, DateEncoder, DateTimeEncoder, DiscriminatedUnionEncoder, Encoders, LazyEncoder,
-    TEncoder, TimeEncoder,
+    CustomEncoder, DateEncoder, DateTimeEncoder, DiscriminatedUnionEncoder, LazyEncoder, TEncoder,
+    TimeEncoder,
 };
 
 type CustomEncoderFns = (Option<Py<PyAny>>, Option<Py<PyAny>>);
@@ -206,13 +206,7 @@ pub fn get_encoder(
                 encoder: get_encoder(py, inner, encoder_state, naive_datetime_to_utc)?,
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::Optional,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::Dictionary(type_info, base_type, python_object_id) => {
             let key_type = get_object_type(type_info.key_type.bind(py))?;
@@ -227,13 +221,7 @@ pub fn get_encoder(
                 omit_none: type_info.omit_none,
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::Dict,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::Array(type_info, base_type, python_object_id) => {
             let item_type = get_object_type(type_info.item_type.bind(py))?;
@@ -245,13 +233,7 @@ pub fn get_encoder(
                 max_length: type_info.max_length,
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::Array,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::Tuple(type_info, base_type, python_object_id) => {
             let mut encoders = vec![];
@@ -268,13 +250,7 @@ pub fn get_encoder(
 
             let encoder = TupleEncoder { encoders };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::Tuple,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::Union(type_info, base_type, python_object_id) => {
             let item_types = type_info.item_types.bind(py).cast::<PyList>()?;
@@ -296,13 +272,7 @@ pub fn get_encoder(
                 repr: type_info.repr.clone(),
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::Union,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::DiscriminatedUnion(type_info, base_type, python_object_id) => {
             let dump_discriminator = type_info.dump_discriminator.bind(py).cast::<PyString>()?;
@@ -336,13 +306,7 @@ pub fn get_encoder(
                 keys,
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::DiscriminatedUnion,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::Entity(type_info, base_type, python_object_id) => {
             let fields =
@@ -363,13 +327,7 @@ pub fn get_encoder(
                 used_keys: type_info.used_keys.clone_ref(py),
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::Entity,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::TypedDict(type_info, base_type, python_object_id) => {
             let fields =
@@ -381,13 +339,7 @@ pub fn get_encoder(
                 used_keys: type_info.used_keys.clone_ref(py),
             };
 
-            encoder_state.create_and_register(
-                py,
-                encoder,
-                base_type,
-                python_object_id,
-                Encoders::TypedDict,
-            )?
+            encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::RecursionHolder(type_info, base_type) => {
             let encoder_ref = encoder_state.get_encoder_ref(type_info.inner_type_id);
@@ -500,7 +452,7 @@ fn iterate_on_fields(
     Ok(fields)
 }
 
-type EncoderStateValue = Arc<AtomicRefCell<Option<Encoders>>>;
+type EncoderStateValue = Arc<AtomicRefCell<Option<Arc<TEncoder>>>>;
 
 #[derive(Default)]
 pub struct EncoderState {
@@ -514,11 +466,6 @@ impl EncoderState {
         }
     }
 
-    fn register_encoder(&mut self, python_object_id: usize, encoder_variant: Encoders) {
-        let val = self.state.entry(python_object_id).or_default();
-        AtomicRefCell::<Option<Encoders>>::borrow_mut(val).replace(encoder_variant);
-    }
-
     pub fn get_encoder_ref(&mut self, python_object_id: usize) -> EncoderStateValue {
         self.state.entry(python_object_id).or_default().clone()
     }
@@ -529,12 +476,16 @@ impl EncoderState {
         encoder: T,
         base_type: BaseTypeInfo,
         python_object_id: usize,
-        encoder_variant_fn: impl FnOnce(T) -> Encoders,
     ) -> PyResult<Box<TEncoder>>
     where
         T: Clone + crate::serializer::encoders::Encoder + Send + Sync + 'static,
     {
-        self.register_encoder(python_object_id, encoder_variant_fn(encoder.clone()));
+        let shared: Arc<TEncoder> = Arc::new(encoder.clone());
+        self.state
+            .entry(python_object_id)
+            .or_default()
+            .borrow_mut()
+            .replace(shared);
         wrap_with_custom_encoder(py, base_type, Box::new(encoder))
     }
 }
