@@ -106,9 +106,7 @@ impl Serializer {
             QueryFields::Dict(true) => {
                 let new_data = PyDict::new(py);
                 for key in data.keys()?.iter() {
-                    let field_value = data
-                        .call_method1(intern!(py, "getall"), (&key,))
-                        .expect("Mapping changing during iteration");
+                    let field_value = data.call_method1(intern!(py, "getall"), (&key,))?;
                     new_data.set_item(&key, field_value)?;
                 }
                 new_data.into_any()
