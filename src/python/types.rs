@@ -9,6 +9,59 @@ use pyo3::{intern, Bound, Py, PyAny, PyResult, Python};
 
 use crate::python::fmt_py;
 
+/// Declarative registry of all supported type-info variants.
+///
+/// One row generates one variant of `enum TypeTag`, one entry of
+/// `TYPE_MAPPINGS` (Python class name → tag), and one arm of the
+/// `tag → Type` builder. `enum Type` itself is kept declared by hand directly
+/// below, because `macro_rules!` cannot generate enum variants that vary in
+/// shape from a flat list. Variant shapes used in the builder arms:
+/// - `Unit`                       — `Type::$name(base_type)`
+/// - `Info(I, extract_fn)`        — `Type::$name(extract(type_info)?, base_type)`
+/// - `CachedInfo(I, extract_fn)`  — `Type::$name(extract(type_info)?, base_type, python_object_id)`
+///
+/// Adding a new type now requires:
+///   1) a row in this macro,
+///   2) the matching variant on `enum Type` below,
+///   3) the corresponding Python `*Type` dataclass in `_type_info.py`.
+macro_rules! type_registry {
+    ( $( $name:ident : $cls:literal => $kind:ident $( ( $info:ty , $extract:path ) )? ),* $(,)? ) => {
+        #[derive(Copy, Clone, Debug)]
+        enum TypeTag {
+            $( $name, )*
+        }
+
+        const TYPE_MAPPINGS: &[(&str, TypeTag)] = &[
+            $( ($cls, TypeTag::$name), )*
+        ];
+
+        fn build_type(
+            tag: TypeTag,
+            type_info: &Bound<'_, PyAny>,
+            base_type: BaseTypeInfo,
+            python_object_id: usize,
+        ) -> PyResult<Type> {
+            Ok(match tag {
+                $(
+                    TypeTag::$name => type_registry!(
+                        @build $name $kind base_type type_info python_object_id $($extract)?
+                    ),
+                )*
+            })
+        }
+    };
+
+    (@build $name:ident Unit $base:ident $ti:ident $pid:ident) => {
+        Type::$name($base)
+    };
+    (@build $name:ident Info $base:ident $ti:ident $pid:ident $extract:path) => {
+        Type::$name($extract($ti)?, $base)
+    };
+    (@build $name:ident CachedInfo $base:ident $ti:ident $pid:ident $extract:path) => {
+        Type::$name($extract($ti)?, $base, $pid)
+    };
+}
+
 #[derive(Clone)]
 pub struct BaseTypeInfo {
     pub custom_encoder: Option<Py<PyAny>>,
@@ -368,33 +421,35 @@ pub enum Type {
     Custom(BaseTypeInfo),
 }
 
-#[derive(Copy, Clone, Debug)]
-enum TypeTag {
-    None,
-    Never,
-    Integer,
-    Float,
-    Decimal,
-    String,
-    Boolean,
-    Uuid,
-    Time,
-    DateTime,
-    Date,
-    Bytes,
-    Any,
-    Entity,
-    TypedDict,
-    Array,
-    Enum,
-    Optional,
-    Dictionary,
-    Tuple,
-    Union,
-    DiscriminatedUnion,
-    Literal,
-    RecursionHolder,
-    Custom,
+// Single source of truth for `enum TypeTag`, the class-name → tag mapping, and
+// the tag → `Type` builder. Variants of `enum Type` above stay declared by
+// hand because `macro_rules!` cannot generate enum variants from a flat list.
+type_registry! {
+    None                : "NoneType"               => Unit,
+    Never               : "NeverType"              => Unit,
+    Integer             : "IntegerType"            => Info(IntegerTypeInfo, extract_i64_number_type),
+    Float               : "FloatType"              => Info(FloatTypeInfo, extract_f64_number_type),
+    Decimal             : "DecimalType"            => Info(DecimalTypeInfo, extract_f64_number_type),
+    String              : "StringType"             => Info(StringTypeInfo, StringTypeInfo::extract),
+    Boolean             : "BooleanType"            => Unit,
+    Uuid                : "UUIDType"               => Unit,
+    Time                : "TimeType"               => Unit,
+    DateTime            : "DateTimeType"           => Unit,
+    Date                : "DateType"               => Unit,
+    Bytes               : "BytesType"              => Unit,
+    Any                 : "AnyType"                => Unit,
+    Custom              : "CustomType"             => Unit,
+    Enum                : "EnumType"               => Info(EnumTypeInfo, EnumTypeInfo::extract),
+    Literal             : "LiteralType"            => Info(LiteralTypeInfo, LiteralTypeInfo::extract),
+    RecursionHolder     : "RecursionHolder"        => Info(RecursionHolderInfo, RecursionHolderInfo::extract),
+    Optional            : "OptionalType"           => CachedInfo(OptionalTypeInfo, OptionalTypeInfo::extract),
+    Array               : "ArrayType"              => CachedInfo(ArrayTypeInfo, ArrayTypeInfo::extract),
+    Dictionary          : "DictionaryType"         => CachedInfo(DictionaryTypeInfo, DictionaryTypeInfo::extract),
+    Tuple               : "TupleType"              => CachedInfo(TupleTypeInfo, TupleTypeInfo::extract),
+    Union               : "UnionType"              => CachedInfo(UnionTypeInfo, UnionTypeInfo::extract),
+    DiscriminatedUnion  : "DiscriminatedUnionType" => CachedInfo(DiscriminatedUnionTypeInfo, DiscriminatedUnionTypeInfo::extract),
+    Entity              : "EntityType"             => CachedInfo(EntityTypeInfo, EntityTypeInfo::extract),
+    TypedDict           : "TypedDictType"          => CachedInfo(TypedDictTypeInfo, TypedDictTypeInfo::extract),
 }
 
 pub fn get_object_type(type_info: &Bound<'_, PyAny>) -> PyResult<Type> {
@@ -411,67 +466,7 @@ pub fn get_object_type(type_info: &Bound<'_, PyAny>) -> PyResult<Type> {
         )));
     };
 
-    Ok(match tag {
-        TypeTag::None => Type::None(base_type),
-        TypeTag::Never => Type::Never(base_type),
-        TypeTag::Integer => Type::Integer(extract_i64_number_type(type_info)?, base_type),
-        TypeTag::Float => Type::Float(extract_f64_number_type(type_info)?, base_type),
-        TypeTag::Decimal => Type::Decimal(extract_f64_number_type(type_info)?, base_type),
-        TypeTag::String => Type::String(StringTypeInfo::extract(type_info)?, base_type),
-        TypeTag::Boolean => Type::Boolean(base_type),
-        TypeTag::Uuid => Type::Uuid(base_type),
-        TypeTag::Time => Type::Time(base_type),
-        TypeTag::DateTime => Type::DateTime(base_type),
-        TypeTag::Date => Type::Date(base_type),
-        TypeTag::Bytes => Type::Bytes(base_type),
-        TypeTag::Any => Type::Any(base_type),
-        TypeTag::Custom => Type::Custom(base_type),
-        TypeTag::Enum => Type::Enum(EnumTypeInfo::extract(type_info)?, base_type),
-        TypeTag::Literal => Type::Literal(LiteralTypeInfo::extract(type_info)?, base_type),
-        TypeTag::RecursionHolder => {
-            Type::RecursionHolder(RecursionHolderInfo::extract(type_info)?, base_type)
-        }
-        TypeTag::Optional => Type::Optional(
-            OptionalTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::Array => Type::Array(
-            ArrayTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::Dictionary => Type::Dictionary(
-            DictionaryTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::Tuple => Type::Tuple(
-            TupleTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::Union => Type::Union(
-            UnionTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::DiscriminatedUnion => Type::DiscriminatedUnion(
-            DiscriminatedUnionTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::Entity => Type::Entity(
-            EntityTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-        TypeTag::TypedDict => Type::TypedDict(
-            TypedDictTypeInfo::extract(type_info)?,
-            base_type,
-            python_object_id,
-        ),
-    })
+    build_type(tag, type_info, base_type, python_object_id)
 }
 
 struct TypeInfoRegistry {
@@ -486,37 +481,9 @@ static TYPE_INFO_REGISTRY: PyOnceLock<TypeInfoRegistry> = PyOnceLock::new();
 fn type_info_registry(py: Python<'_>) -> PyResult<&TypeInfoRegistry> {
     TYPE_INFO_REGISTRY.get_or_try_init(py, || {
         let module = PyModule::import(py, "serpyco_rs._type_info")?;
-        let mappings: &[(&str, TypeTag)] = &[
-            ("NoneType", TypeTag::None),
-            ("NeverType", TypeTag::Never),
-            ("IntegerType", TypeTag::Integer),
-            ("FloatType", TypeTag::Float),
-            ("DecimalType", TypeTag::Decimal),
-            ("StringType", TypeTag::String),
-            ("BooleanType", TypeTag::Boolean),
-            ("UUIDType", TypeTag::Uuid),
-            ("TimeType", TypeTag::Time),
-            ("DateTimeType", TypeTag::DateTime),
-            ("DateType", TypeTag::Date),
-            ("BytesType", TypeTag::Bytes),
-            ("AnyType", TypeTag::Any),
-            ("EntityType", TypeTag::Entity),
-            ("TypedDictType", TypeTag::TypedDict),
-            ("ArrayType", TypeTag::Array),
-            ("EnumType", TypeTag::Enum),
-            ("OptionalType", TypeTag::Optional),
-            ("DictionaryType", TypeTag::Dictionary),
-            ("TupleType", TypeTag::Tuple),
-            ("UnionType", TypeTag::Union),
-            ("DiscriminatedUnionType", TypeTag::DiscriminatedUnion),
-            ("LiteralType", TypeTag::Literal),
-            ("RecursionHolder", TypeTag::RecursionHolder),
-            ("CustomType", TypeTag::Custom),
-        ];
-
         let mut tags = IntMap::default();
-        let mut classes = Vec::with_capacity(mappings.len());
-        for (name, tag) in mappings {
+        let mut classes = Vec::with_capacity(TYPE_MAPPINGS.len());
+        for (name, tag) in TYPE_MAPPINGS {
             let cls = module.getattr(*name)?.cast_into::<PyType>()?;
             tags.insert(cls.as_ptr() as *const _ as usize, *tag);
             classes.push(cls.unbind());
