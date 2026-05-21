@@ -1079,37 +1079,22 @@ impl Encoder for DateEncoder {
     }
 }
 
-#[derive(Debug)]
-pub enum Encoders {
-    Entity(EntityEncoder),
-    TypedDict(TypedDictEncoder),
-    Dict(DictionaryEncoder),
-    Union(UnionEncoder),
-    DiscriminatedUnion(DiscriminatedUnionEncoder),
-    Tuple(TupleEncoder),
-    Array(ArrayEncoder),
-    Optional(OptionalEncoder),
-}
-
+/// Placeholder for a recursive encoder.
+///
+/// During `get_encoder` we eagerly build encoders for nested types; when a
+/// type references itself we hand out a `LazyEncoder` and back-fill the inner
+/// `Arc<dyn Encoder>` after the surrounding encoder is built. Dump/load is a
+/// single dynamic dispatch through the trait object, no per-variant match.
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
-    pub(crate) inner: Arc<AtomicRefCell<Option<Encoders>>>,
+    pub(crate) inner: Arc<AtomicRefCell<Option<Arc<TEncoder>>>>,
 }
 
 impl Encoder for LazyEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
         match self.inner.borrow().as_ref() {
-            Some(encoder) => match encoder {
-                Encoders::Entity(encoder) => encoder.dump(value),
-                Encoders::TypedDict(encoder) => encoder.dump(value),
-                Encoders::Union(encoder) => encoder.dump(value),
-                Encoders::DiscriminatedUnion(encoder) => encoder.dump(value),
-                Encoders::Tuple(encoder) => encoder.dump(value),
-                Encoders::Array(encoder) => encoder.dump(value),
-                Encoders::Optional(encoder) => encoder.dump(value),
-                Encoders::Dict(encoder) => encoder.dump(value),
-            },
+            Some(encoder) => encoder.dump(value),
             None => Err(SerdeError::Py(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
             ))),
@@ -1124,16 +1109,7 @@ impl Encoder for LazyEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
         match self.inner.borrow().as_ref() {
-            Some(encoder) => match encoder {
-                Encoders::Entity(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::TypedDict(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::Tuple(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::Array(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::Optional(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::Union(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::DiscriminatedUnion(encoder) => encoder.load(value, instance_path, ctx),
-                Encoders::Dict(encoder) => encoder.load(value, instance_path, ctx),
-            },
+            Some(encoder) => encoder.load(value, instance_path, ctx),
             None => Err(SerdeError::Py(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
             ))),
