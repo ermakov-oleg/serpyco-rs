@@ -81,6 +81,11 @@ jobs:
       # would break this step.
       - name: Generate pgo data
         shell: bash
+        # `PY_PATH` is set via env so Windows back-slashes survive Git Bash —
+        # passing `${{ steps.python.outputs.python-path }}` directly into the
+        # script body would have bash eat the back-slashes.
+        env:
+          PY_PATH: ${{ steps.python.outputs.python-path }}
         run: |
           pip install -U uv
           PGO_DEPS=(pytest pytest-benchmark mashumaro)
@@ -92,10 +97,10 @@ jobs:
             PGO_DEPS+=(orjson)
             PGO_TESTS+=(bench/compare/test_github_issue.py)
           fi
-          uv pip install "${PGO_DEPS[@]}" --python ${{ steps.python.outputs.python-path }}
-          uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --force-reinstall --python ${{ steps.python.outputs.python-path }}
+          uv pip install "${PGO_DEPS[@]}" --python "$PY_PATH"
+          uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --force-reinstall --python "$PY_PATH"
           # Install serpyco-rs runtime deps (attributes-doc, typing-extensions, ...)
-          uv pip install serpyco_rs --find-links pgo-wheel --python ${{ steps.python.outputs.python-path }}
+          uv pip install serpyco_rs --find-links pgo-wheel --python "$PY_PATH"
           pytest "${PGO_TESTS[@]}" -k "not mashumaro"
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
