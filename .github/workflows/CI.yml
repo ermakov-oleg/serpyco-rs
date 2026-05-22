@@ -73,12 +73,6 @@ jobs:
         run: echo RUST_HOST=$(rustc -Vv | grep host | cut -d ' ' -f 2) >> "$GITHUB_ENV"
         shell: bash
 
-      # Profile only serpyco-rs code paths: install just the deps required by
-      # the workload (`pytest`, `pytest-benchmark`, plus `mashumaro` / `orjson`
-      # for the github-issue real-world workload) and skip the broader
-      # `requirements/bench.txt` — its competitor libs (pydantic, marshmallow)
-      # are not needed for PGO data and a missing cp3Yt wheel for any of them
-      # would break this step.
       - name: Generate pgo data
         shell: bash
         env:
