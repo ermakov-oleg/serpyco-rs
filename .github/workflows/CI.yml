@@ -80,13 +80,23 @@ jobs:
       # are not needed for PGO data and a missing cp3Yt wheel for any of them
       # would break this step.
       - name: Generate pgo data
+        shell: bash
         run: |
           pip install -U uv
-          uv pip install pytest pytest-benchmark mashumaro orjson --python ${{ steps.python.outputs.python-path }}
+          PGO_DEPS=(pytest pytest-benchmark mashumaro)
+          PGO_TESTS=(bench/test_encoders.py bench/test_flatten.py bench/test_full.py)
+          # The github-issue real-world workload pulls in orjson, which has no
+          # cp3Yt wheel yet; uv would fall back to a sdist build that fails
+          # inside the maturin-action's sccache-wrapped env.
+          if [[ "${{ matrix.python-version }}" != *t ]]; then
+            PGO_DEPS+=(orjson)
+            PGO_TESTS+=(bench/compare/test_github_issue.py)
+          fi
+          uv pip install "${PGO_DEPS[@]}" --python ${{ steps.python.outputs.python-path }}
           uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --force-reinstall --python ${{ steps.python.outputs.python-path }}
           # Install serpyco-rs runtime deps (attributes-doc, typing-extensions, ...)
           uv pip install serpyco_rs --find-links pgo-wheel --python ${{ steps.python.outputs.python-path }}
-          pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
+          pytest "${PGO_TESTS[@]}" -k "not mashumaro"
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
       #      - name: Setup upterm session
