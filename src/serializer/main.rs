@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use atomic_refcell::AtomicRefCell;
 use pyo3::exceptions::{PyKeyError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyMapping, PyString};
@@ -452,7 +451,7 @@ fn iterate_on_fields(
     Ok(fields)
 }
 
-type EncoderStateValue = Arc<AtomicRefCell<Option<Arc<TEncoder>>>>;
+type EncoderStateValue = Arc<OnceLock<Arc<TEncoder>>>;
 
 #[derive(Default)]
 pub struct EncoderState {
@@ -481,11 +480,9 @@ impl EncoderState {
         T: Clone + crate::serializer::encoders::Encoder + Send + Sync + 'static,
     {
         let shared: Arc<TEncoder> = Arc::new(encoder.clone());
-        self.state
-            .entry(python_object_id)
-            .or_default()
-            .borrow_mut()
-            .replace(shared);
+        // Encoder graph is built linearly during `Serializer::new`; this slot
+        // is filled exactly once. Ignore the duplicate-init error from `set`.
+        let _ = self.state.entry(python_object_id).or_default().set(shared);
         wrap_with_custom_encoder(py, base_type, Box::new(encoder))
     }
 }

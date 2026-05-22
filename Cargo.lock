@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "atomic_refcell"
-version = "0.1.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21e4227379beff4205943696e6c3e0cd809bacdf3f0edd6e3dd153e2269571a4"
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -204,7 +198,6 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 name = "serpyco-rs"
 version = "1.20.0"
 dependencies = [
- "atomic_refcell",
  "dyn-clone",
  "nohash-hasher",
  "pyo3",
