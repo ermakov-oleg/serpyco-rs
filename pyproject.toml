@@ -40,7 +40,6 @@ dev = [
     "python-dateutil",
     "multidict",
     "tzdata; sys_platform == 'win32'",
-    "nox",
 ]
 lint = [
     { include-group = "dev" },

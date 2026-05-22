@@ -154,8 +154,6 @@ jobs:
 
     name: Test on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    env:
-      CI: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: set up Python ${{ matrix.python-version }}
@@ -164,27 +162,26 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
-      - name: Export NOX_TARGET_PYTHON
+      - name: Export UV_PYTHON
         shell: bash
-        run: echo "NOX_TARGET_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
+        run: echo "UV_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
-      - name: install nox
-        run: uv tool install nox
       - name: tests
-        run: nox -s test
+        run: just ci-test
       - name: lint
-        run: nox -s lint
+        run: just ci-lint
       - name: check types
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: nox -s type_check
+        run: just ci-type-check
 
   coverage:
     name: Coverage
@@ -202,8 +199,8 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.13"
-      - name: Export NOX_TARGET_PYTHON
-        run: echo "NOX_TARGET_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
+      - name: Export UV_PYTHON
+        run: echo "UV_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
       - name: Install rust stable
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
@@ -218,10 +215,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: install nox
-        run: uv tool install nox
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: coverage
-        run: nox -s coverage
+        run: just coverage
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -242,8 +238,6 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     name: Benchmark on ${{ matrix.os}}
     runs-on: ${{ matrix.os }}
-    env:
-      CI: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: set up Python 3.13
@@ -251,30 +245,27 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: 3.13
-      - name: Export NOX_TARGET_PYTHON
+      - name: Export UV_PYTHON
         shell: bash
-        run: echo "NOX_TARGET_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
+        run: echo "UV_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
-      - name: install dependencies
-        run: |
-          uv tool install nox
-          nox -s bench --no-venv --install-only
       - name: bench
-        run: nox -s bench --no-venv --no-install
+        run: just ci-bench
 
   test_rc_leaks:
     name: Test reference count leaks
     runs-on: ubuntu-latest
     env:
-      NOX_TARGET_PYTHON: python3.13
+      UV_PYTHON: python3.13
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: deadsnakes/action@e640ac8743173a67cca4d7d77cd837e514bf98e8 # v3.2.0
@@ -290,13 +281,9 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: install dependencies
-        run: |
-          python3.13 -m pip install --upgrade pip
-          uv tool install nox
-          nox -s test_rc_leaks --no-venv --install-only
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: tests
-        run: nox -s test_rc_leaks --no-venv --no-install
+        run: just ci-test-rc-leaks
 
   benchmark-codespeed:
     needs: [build]
@@ -308,8 +295,6 @@ jobs:
         # WallTime mode is too noisy on shared GitHub runners; instrumentation only.
         mode: [instrumentation]
     runs-on: ubuntu-latest
-    env:
-      CI: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: set up Python 3.13
@@ -317,27 +302,26 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: 3.13
-      - name: Export NOX_TARGET_PYTHON
-        run: echo "NOX_TARGET_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
+      - name: Export UV_PYTHON
+        run: echo "UV_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
       - name: install dependencies
-        run: |
-          uv tool install nox
-          nox -s bench_codespeed --no-venv --install-only
+        run: just ci-bench-codspeed-setup
       - name: Run benchmarks
         uses: CodSpeedHQ/action@76578c2a7ddd928664caa737f0e962e3085d4e7c # v3
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           mode: ${{ matrix.mode }}
-          run: nox -s bench_codespeed --no-venv --no-install
+          run: just bench-codspeed-run
 
   fmt:
     name: rustfmt
