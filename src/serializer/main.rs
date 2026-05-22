@@ -30,12 +30,17 @@ type CustomEncoderFns = (Option<Py<PyAny>>, Option<Py<PyAny>>);
 #[derive(Debug)]
 pub struct Serializer {
     pub(crate) encoder: Box<TEncoder>,
+    pub(crate) max_recursion_depth: usize,
 }
 
 #[pymethods]
 impl Serializer {
     #[new]
-    fn new(type_info: &Bound<'_, PyAny>, naive_datetime_to_utc: bool) -> PyResult<Self> {
+    fn new(
+        type_info: &Bound<'_, PyAny>,
+        naive_datetime_to_utc: bool,
+        max_recursion_depth: usize,
+    ) -> PyResult<Self> {
         let obj_type = get_object_type(type_info)?;
         let mut encoder_state = EncoderState::new();
 
@@ -46,19 +51,23 @@ impl Serializer {
                 &mut encoder_state,
                 naive_datetime_to_utc,
             )?,
+            max_recursion_depth,
         };
         Ok(serializer)
     }
 
     #[inline]
     pub fn dump<'py>(&'py self, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        self.encoder.dump(value).map_err(SerdeError::into_py_err)
+        let ctx = Context::new(false, self.max_recursion_depth);
+        self.encoder
+            .dump(value, &ctx)
+            .map_err(SerdeError::into_py_err)
     }
 
     #[inline]
     pub fn load<'py>(&'py self, value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let instance_path = InstancePath::new();
-        let ctx = Context::new(false);
+        let ctx = Context::new(false, self.max_recursion_depth);
         self.encoder
             .load(value, &instance_path, &ctx)
             .map_err(SerdeError::into_py_err)
@@ -70,7 +79,7 @@ impl Serializer {
         data: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let instance_path = InstancePath::new();
-        let ctx = Context::new(true);
+        let ctx = Context::new(true, self.max_recursion_depth);
         let py = data.py();
 
         let encoder = if let Some(encoder) = self.encoder.as_container_encoder() {

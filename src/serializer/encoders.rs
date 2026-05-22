@@ -32,7 +32,7 @@ use crate::validator::{Context, InstancePath};
 pub type TEncoder = dyn Encoder + Send + Sync;
 
 pub(crate) trait Encoder: DynClone + Debug {
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>>;
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>>;
     fn load<'a>(
         &self,
         value: &Bound<'a, PyAny>,
@@ -69,7 +69,7 @@ pub struct NoopEncoder;
 
 impl Encoder for NoopEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -89,7 +89,7 @@ pub struct NoneEncoder;
 
 impl Encoder for NoneEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -112,7 +112,7 @@ pub struct NeverEncoder;
 
 impl Encoder for NeverEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         // Never type should not have any values to dump
         invalid_type_dump!("Never", value)
     }
@@ -136,7 +136,7 @@ pub struct IntEncoder {
 
 impl Encoder for IntEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -170,7 +170,7 @@ pub struct FloatEncoder {
 
 impl Encoder for FloatEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
     #[inline]
@@ -208,7 +208,7 @@ pub struct DecimalEncoder {
 
 impl Encoder for DecimalEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.str()?.into_any())
     }
 
@@ -252,7 +252,7 @@ pub struct StringEncoder {
 
 impl Encoder for StringEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -282,7 +282,7 @@ pub struct BooleanEncoder {}
 
 impl Encoder for BooleanEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -313,7 +313,7 @@ pub struct BytesEncoder {}
 
 impl Encoder for BytesEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.clone())
     }
 
@@ -341,12 +341,13 @@ pub struct DictionaryEncoder {
 
 impl Encoder for DictionaryEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         if let Ok(dict) = value.cast::<PyDict>() {
             let result_dict = create_py_dict_known_size(dict.py(), dict.len())?;
             for (k, v) in dict.iter() {
-                let key = self.key_encoder.dump(&k)?;
-                let value = self.value_encoder.dump(&v)?;
+                let key = self.key_encoder.dump(&k, ctx)?;
+                let value = self.value_encoder.dump(&v, ctx)?;
                 if !self.omit_none || !value.is_none() {
                     py_dict_set_item(&result_dict, key.as_ptr(), value)?;
                 }
@@ -364,6 +365,7 @@ impl Encoder for DictionaryEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         if let Ok(val) = value.cast::<PyDict>() {
             let result_dict = create_py_dict_known_size(val.py(), val.len())?;
             for (k, v) in val.iter() {
@@ -398,14 +400,15 @@ pub struct ArrayEncoder {
 
 impl Encoder for ArrayEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         if let Ok(list) = value.cast::<PyList>() {
             let size = list.len();
             let result = create_py_list(value.py(), size)?;
 
             for index in 0..size {
                 let item = py_list_get_item(list, index)?;
-                let val = self.encoder.dump(&item)?;
+                let val = self.encoder.dump(&item, ctx)?;
                 py_list_set_item(&result, index, val);
             }
 
@@ -422,6 +425,7 @@ impl Encoder for ArrayEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         if let Ok(val) = value.cast::<PyList>() {
             let size = val.len();
             check_sequence_bounds(
@@ -516,11 +520,12 @@ impl Field {
 
 impl Encoder for EntityEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
             let field_val = value.getattr(&field.name)?;
-            let dump_result = field.encoder.dump(&field_val)?;
+            let dump_result = field.encoder.dump(&field_val, ctx)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
                     let mapping = dump_result
@@ -542,6 +547,7 @@ impl Encoder for EntityEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         let Ok(val) = value.cast::<PyDict>() else {
             invalid_type!("object", value, instance_path)
         };
@@ -610,7 +616,8 @@ pub struct TypedDictEncoder {
 
 impl Encoder for TypedDictEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         let value = match value.cast::<PyDict>() {
             Ok(val) => val,
             _ => invalid_type_dump!("dict", value),
@@ -629,7 +636,7 @@ impl Encoder for TypedDictEncoder {
                     continue;
                 }
             };
-            let dump_result = field.encoder.dump(&field_val)?;
+            let dump_result = field.encoder.dump(&field_val, ctx)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
                     let mapping = dump_result
@@ -651,6 +658,7 @@ impl Encoder for TypedDictEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         let Ok(value) = value.cast::<PyDict>() else {
             invalid_type_dump!("dict", value);
         };
@@ -679,7 +687,7 @@ pub struct UUIDEncoder {
 
 impl Encoder for UUIDEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         Ok(value.str()?.into_any())
     }
 
@@ -710,7 +718,7 @@ pub struct EnumEncoder {
 
 impl Encoder for EnumEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         let id = value.as_ptr() as *const _ as usize;
         if let Some(py_item) = self.dump_map.get(&id) {
             return Ok(py_item.bind(value.py()).clone());
@@ -747,7 +755,7 @@ pub struct LiteralEncoder {
 
 impl Encoder for LiteralEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(Some(py_item)) = self.dump_map.bind(value.py()).get_item(value) {
             return Ok(py_item);
         }
@@ -781,11 +789,11 @@ pub struct OptionalEncoder {
 
 impl Encoder for OptionalEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         if value.is_none() {
             Ok(value.clone())
         } else {
-            self.encoder.dump(value)
+            self.encoder.dump(value, ctx)
         }
     }
 
@@ -815,14 +823,14 @@ pub struct TupleEncoder {
 
 impl Encoder for TupleEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(seq) = value.cast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
             let result = create_py_list(value.py(), seq_len)?;
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
-                let val = self.encoders[index].dump(&item)?;
+                let val = self.encoders[index].dump(&item, ctx)?;
                 py_list_set_item(&result, index, val);
             }
 
@@ -872,9 +880,9 @@ pub struct UnionEncoder {
 
 impl Encoder for UnionEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         for encoder in &self.encoders {
-            match encoder.dump(value) {
+            match encoder.dump(value, ctx) {
                 Ok(v) => return Ok(v),
                 Err(SerdeError::Schema(_)) => continue,
                 Err(e @ SerdeError::Py(_)) => return Err(e),
@@ -935,7 +943,7 @@ pub struct DiscriminatedUnionEncoder {
 
 impl Encoder for DiscriminatedUnionEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         let key = match value.getattr(&self.dump_discriminator) {
             Ok(val) => val,
             Err(_) => {
@@ -953,7 +961,7 @@ impl Encoder for DiscriminatedUnionEncoder {
             let instance_path = InstancePath::new();
             no_encoder_for_discriminator(&key, &self.keys, &instance_path)
         })?;
-        encoder.dump(value)
+        encoder.dump(value, ctx)
     }
 
     #[inline]
@@ -994,7 +1002,7 @@ pub struct TimeEncoder {}
 
 impl Encoder for TimeEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         let py_time = value
             .cast::<PyTime>()
             .map_err(|_| invalid_type_dump_err("time", value))?;
@@ -1025,7 +1033,7 @@ pub struct DateTimeEncoder {
 
 impl Encoder for DateTimeEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         let py_datetime = value
             .cast::<PyDateTime>()
             .map_err(|_| invalid_type_dump_err("datetime", value))?;
@@ -1054,7 +1062,7 @@ pub struct DateEncoder {}
 
 impl Encoder for DateEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         let py_date = value
             .cast::<PyDate>()
             .map_err(|_| invalid_type_dump_err("date", value))?;
@@ -1094,9 +1102,10 @@ pub struct LazyEncoder {
 
 impl Encoder for LazyEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         match self.inner.get() {
-            Some(encoder) => encoder.dump(value),
+            Some(encoder) => encoder.dump(value, ctx),
             None => Err(SerdeError::Py(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
             ))),
@@ -1110,6 +1119,7 @@ impl Encoder for LazyEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
+        let _guard = ctx.enter_depth()?;
         match self.inner.get() {
             Some(encoder) => encoder.load(value, instance_path, ctx),
             None => Err(SerdeError::Py(PyRuntimeError::new_err(
@@ -1128,13 +1138,13 @@ pub struct CustomEncoder {
 
 impl Encoder for CustomEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         match self.dump {
             Some(ref dump) => dump
                 .bind(value.py())
                 .call1((value,))
                 .map_err(|err| SerdeError::from_user_callback(err, &InstancePath::new())),
-            None => self.inner.dump(value),
+            None => self.inner.dump(value, ctx),
         }
     }
 
@@ -1167,7 +1177,7 @@ pub struct CustomTypeEncoder {
 
 impl Encoder for CustomTypeEncoder {
     #[inline]
-    fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
+    fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
         self.dump
             .bind(value.py())
             .call1((value,))

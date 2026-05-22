@@ -21,4 +21,4 @@ def test_rust_serializer_fails_when_recursive_type_is_not_resolved():
     type_info = _type_info.RecursionHolder(name='Node', state_key='node', meta={})
 
     with pytest.raises(RuntimeError, match="Recursive type not resolved: KeyError: 'node'"):
-        RustSerializer(type_info, False)
+        RustSerializer(type_info, False, 1000)

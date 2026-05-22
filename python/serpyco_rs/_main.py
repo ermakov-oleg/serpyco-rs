@@ -42,6 +42,7 @@ class Serializer(Generic[_T]):
         force_default_for_optional: bool = False,
         naive_datetime_to_utc: bool = False,
         custom_type_resolver: Callable[[Any], CustomType[Any, Any] | None] | None = None,
+        max_recursion_depth: int = 1000,
     ) -> None:
         """
         Create a serializer for the given type.
@@ -54,6 +55,10 @@ class Serializer(Generic[_T]):
         :param custom_type_resolver: An optional callable that allows users to add support for their own types.
             This parameter should be a function that takes a type as input and returns an instance of CustomType
             if the user-defined type is supported, or None otherwise.
+        :param max_recursion_depth: Maximum number of nested encoder calls before `dump`/`load` raise
+            `RecursionError`. Guards against stack overflow on cyclic graphs and pathologically deep input.
+            Lower this on platforms with a small thread stack (e.g. Windows defaults to ~1 MiB); raise it
+            for genuinely deeply-nested schemas on a fatter stack.
         """
         if camelcase_fields:
             t = cast(type[_T], Annotated[t, CamelCase])
@@ -63,7 +68,7 @@ class Serializer(Generic[_T]):
             t = cast(type[_T], Annotated[t, ForceDefaultForOptional])
         self._type_info = describe_type(t, custom_type_resolver=custom_type_resolver)
         self._schema = get_json_schema(self._type_info)
-        self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc)
+        self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc, max_recursion_depth)
 
     def dump(self, value: _T) -> Any:
         """Serialize the given value to a JSON-serializable object.
