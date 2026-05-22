@@ -1,7 +1,7 @@
+import json
 from pathlib import Path
 from typing import Any
 
-import orjson
 import pytest
 
 from .github_issue import mashumaro, serpyco_rs
@@ -16,7 +16,7 @@ serializers = {
 @pytest.fixture(scope='module')
 def data() -> dict[str, Any]:
     path = Path(__file__).parent / 'github_issue/data.json'
-    return orjson.loads(path.read_text())
+    return json.loads(path.read_text())
 
 
 @pytest.mark.parametrize('lib', serializers.keys())

@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Debug;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
-use atomic_refcell::AtomicRefCell;
 use dyn_clone::{clone_trait_object, DynClone};
 use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
@@ -1085,15 +1084,18 @@ impl Encoder for DateEncoder {
 /// type references itself we hand out a `LazyEncoder` and back-fill the inner
 /// `Arc<dyn Encoder>` after the surrounding encoder is built. Dump/load is a
 /// single dynamic dispatch through the trait object, no per-variant match.
+/// `OnceLock` makes the back-fill thread-safe under free-threaded Python:
+/// the inner slot is written exactly once during `Serializer::new` and read
+/// concurrently from any number of threads afterwards.
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
-    pub(crate) inner: Arc<AtomicRefCell<Option<Arc<TEncoder>>>>,
+    pub(crate) inner: Arc<OnceLock<Arc<TEncoder>>>,
 }
 
 impl Encoder for LazyEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>) -> SerdeResult<Bound<'a, PyAny>> {
-        match self.inner.borrow().as_ref() {
+        match self.inner.get() {
             Some(encoder) => encoder.dump(value),
             None => Err(SerdeError::Py(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),
@@ -1108,7 +1110,7 @@ impl Encoder for LazyEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
-        match self.inner.borrow().as_ref() {
+        match self.inner.get() {
             Some(encoder) => encoder.load(value, instance_path, ctx),
             None => Err(SerdeError::Py(PyRuntimeError::new_err(
                 "[RUST] Invalid recursive encoder".to_string(),

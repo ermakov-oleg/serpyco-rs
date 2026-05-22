@@ -28,6 +28,7 @@ jobs:
           - "3.12"
           - "3.13"
           - "3.14"
+          - "3.14t"
         include:
           - os: macos-latest
             target: universal2-apple-darwin
@@ -73,13 +74,15 @@ jobs:
         shell: bash
 
       - name: Generate pgo data
+        shell: bash
+        env:
+          PY_PATH: ${{ steps.python.outputs.python-path }}
         run: |
           pip install -U uv
-          uv pip install -r requirements/bench.txt --python ${{ steps.python.outputs.python-path }}
-          uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --force-reinstall --python ${{ steps.python.outputs.python-path }}
-          # Install package deps
-          uv pip install serpyco_rs --find-links pgo-wheel --python ${{ steps.python.outputs.python-path }}
-          pytest bench -k "not mashumaro and not marshmallow and not pydantic"
+          uv pip install pytest pytest-benchmark mashumaro --python "$PY_PATH"
+          uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --reinstall --python "$PY_PATH"
+          uv pip install serpyco_rs --find-links pgo-wheel --python "$PY_PATH"
+          pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
       #      - name: Setup upterm session
@@ -136,7 +139,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --sdist -o dist --interpreter 3.10 3.11 3.12 3.13 3.14
+          args: --release --sdist -o dist --interpreter 3.10 3.11 3.12 3.13 3.14 3.14t
           sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -150,7 +153,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
 
     name: Test on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
