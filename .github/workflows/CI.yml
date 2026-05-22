@@ -27,7 +27,6 @@ jobs:
           - "3.11"
           - "3.12"
           - "3.13"
-          - "3.13t"
           - "3.14"
           - "3.14t"
         include:
@@ -56,7 +55,28 @@ jobs:
         with:
           components: llvm-tools
 
-      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+      # Free-threaded interpreters: skip PGO and ship a plain release wheel.
+      # `pydantic-core` has no cp3Yt wheel yet (May 2026); uv falls back to a
+      # sdist build inside its isolated env which inherits RUSTC_WRAPPER=sccache
+      # from the outer maturin-action but does not have `sccache` on PATH,
+      # so the bench-deps install fails before any PGO data can be collected.
+      - name: Build release wheel (free-threaded, no PGO)
+        if: endsWith(matrix.python-version, 't')
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+        with:
+          manylinux: auto
+          target: ${{ matrix.target }}
+          rust-toolchain: stable
+          sccache: "true"
+          args: >
+            --release
+            --sdist
+            --interpreter ${{ matrix.python-version }}
+            --out dist
+
+      - name: Build instrumented wheel (PGO stage 1)
+        if: ${{ !endsWith(matrix.python-version, 't') }}
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           manylinux: auto
           target: ${{ matrix.target }}
@@ -71,10 +91,12 @@ jobs:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/target/profdata"
 
       - name: Get rust host
+        if: ${{ !endsWith(matrix.python-version, 't') }}
         run: echo RUST_HOST=$(rustc -Vv | grep host | cut -d ' ' -f 2) >> "$GITHUB_ENV"
         shell: bash
 
       - name: Generate pgo data
+        if: ${{ !endsWith(matrix.python-version, 't') }}
         run: |
           pip install -U uv
           uv pip install -r requirements/bench.txt --python ${{ steps.python.outputs.python-path }}
@@ -88,9 +110,11 @@ jobs:
       #        uses: lhotari/action-upterm@v1
 
       - name: Merge pgo data
+        if: ${{ !endsWith(matrix.python-version, 't') }}
         run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/target/profdata
 
       - name: Build pgo-optimized wheel
+        if: ${{ !endsWith(matrix.python-version, 't') }}
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           manylinux: auto
@@ -138,7 +162,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: auto
           docker-options: ${{ matrix.platform.maturin_docker_options }}
-          args: --release --sdist -o dist --interpreter 3.10 3.11 3.12 3.13 3.13t 3.14 3.14t
+          args: --release --sdist -o dist --interpreter 3.10 3.11 3.12 3.13 3.14 3.14t
           sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -152,7 +176,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.13t", "3.14", "3.14t"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.14t"]
 
     name: Test on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
