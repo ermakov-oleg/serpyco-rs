@@ -30,6 +30,49 @@ classifiers = [
 
 dependencies = ["attributes-doc", "typing-extensions>=4.15.0"]
 
+[dependency-groups]
+dev = [
+    "pytest",
+    "coverage[toml]",
+    "attrs",
+    "maturin>=1,<2",
+    "pytz",
+    "python-dateutil",
+    "multidict",
+    "tzdata; sys_platform == 'win32'",
+    "nox",
+]
+lint = [
+    { include-group = "dev" },
+    "ruff",
+]
+type_check = [
+    { include-group = "dev" },
+    "mypy",
+    "pyright",
+    "types-python-dateutil",
+]
+bench = [
+    { include-group = "dev" },
+    "pytest-benchmark[histogram]",
+    "tabulate",
+]
+bench-compare = [
+    { include-group = "bench" },
+    "serpyco",
+    "pydantic",
+    "marshmallow",
+    "marshmallow-dataclass",
+    "mashumaro[orjson]",
+    "orjson",
+]
+all = [
+    { include-group = "dev" },
+    { include-group = "lint" },
+    { include-group = "type_check" },
+    { include-group = "bench-compare" },
+]
+
 [tool.coverage.run]
 branch = true
 source = ["python/serpyco_rs"]

@@ -30,14 +30,14 @@ def build(session, use_pip: bool = False, env=None):
 @nox.session(python=False)
 def test(session):
     build(session)
-    install(session, '-r', 'requirements/dev.txt')
+    install_group(session, 'dev')
     session.run('pytest', '-vvs', 'tests/', *session.posargs)
 
 
 @nox.session(python=False)
 def lint(session):
     build(session)
-    install(session, '-r', 'requirements/lint.txt')
+    install_group(session, 'lint')
 
     session.cd('python/serpyco_rs')
     paths = ['.', '../../tests', '../../bench']
@@ -54,7 +54,7 @@ def rust_lint(session):
 @nox.session(python=False)
 def type_check(session):
     build(session)
-    install(session, '-r', 'requirements/type_check.txt')
+    install_group(session, 'type_check')
 
     session.cd('python/serpyco_rs')
     session.run('pyright', '.', success_codes=[0, 1] if _is_ci() else [0])
@@ -65,7 +65,7 @@ def type_check(session):
 @nox.session(python=False)
 def bench(session):
     build(session)
-    install(session, '-r', 'requirements/bench.txt')
+    install_group(session, 'bench-compare')
 
     session.run(
         'pytest',
@@ -84,7 +84,7 @@ def bench(session):
 def test_rc_leaks(session):
     # uv don't resolve wheels when used python debug build
     build(session, use_pip=True)
-    install(session, '-r', 'requirements/bench.txt', use_pip=True)
+    install_group(session, 'bench-compare', use_pip=True)
     session.run(
         'pytest',
         *(session.posargs if session.posargs else ['bench']),
@@ -97,7 +97,7 @@ def test_rc_leaks(session):
 @nox.session(python=False)
 def bench_codespeed(session):
     build(session)
-    install(session, '-r', 'requirements/bench.txt')
+    install_group(session, 'bench-compare')
     install(session, 'pytest-codspeed')
     session.run('pytest', 'bench', '--ignore=bench/compare/test_benchmarks.py', '--codspeed')
 
@@ -107,7 +107,7 @@ def coverage(session):
     if sys.platform == 'win32':
         session.error('The coverage session is only supported on Unix-like systems.')
 
-    install(session, '-r', 'requirements/dev.txt')
+    install_group(session, 'dev')
 
     _ensure_lcov(session)
     coverage_env = _cargo_llvm_cov_env(session)
@@ -161,6 +161,10 @@ def install(session, *args, use_pip: bool = False, env=None):
         return
     cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', sys.executable]
     session.run_always(*cmd, *args, env=env)
+
+
+def install_group(session, group: str, use_pip: bool = False, env=None):
+    install(session, '--group', group, use_pip=use_pip, env=env)
 
 
 def _is_ci() -> bool:

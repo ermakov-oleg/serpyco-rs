@@ -41,13 +41,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version-full || matrix.python-version }}
           allow-prereleases: true
-          cache: "pip"
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: cache-uv
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-uv
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install rust stable
         id: rust-toolchain
@@ -78,10 +76,9 @@ jobs:
         env:
           PY_PATH: ${{ steps.python.outputs.python-path }}
         run: |
-          pip install -U uv
-          uv pip install pytest pytest-benchmark mashumaro --python "$PY_PATH"
-          uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --reinstall --python "$PY_PATH"
-          uv pip install serpyco_rs --find-links pgo-wheel --python "$PY_PATH"
+          uv pip install --python "$PY_PATH" --group bench mashumaro
+          uv pip install --python "$PY_PATH" --no-index --no-deps --find-links pgo-wheel --reinstall serpyco_rs
+          uv pip install --python "$PY_PATH" --find-links pgo-wheel serpyco_rs
           pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
@@ -164,14 +161,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
+      - name: install nox
+        run: pip install nox
       - name: tests
         run: nox -s test
         env:
@@ -211,9 +211,12 @@ jobs:
           tool: cargo-llvm-cov
       - name: Install lcov
         run: sudo apt-get update && sudo apt-get install -y lcov
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: install nox
+        run: pip install nox
       - name: coverage
         run: nox -s coverage
       - name: Upload coverage artifact
@@ -242,6 +245,10 @@ jobs:
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: 3.13
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
@@ -249,7 +256,7 @@ jobs:
           path: wheels
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          pip install nox
           nox -s bench --no-venv --install-only
       - name: bench
         run: nox -s bench --no-venv --no-install
@@ -270,9 +277,14 @@ jobs:
         with:
           command: build
           args: --release --sdist -o wheels
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          python3.13 -m pip install --upgrade pip
+          python3.13 -m pip install nox
           nox -s test_rc_leaks --no-venv --install-only
       - name: tests
         run: nox -s test_rc_leaks --no-venv --no-install
@@ -289,18 +301,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: cache-uv
-        with:
-          path: ~/.cache/uv
-          key: ubuntu-latest-python-3.13-uv-${{ matrix.mode }}
       - name: set up Python 3.13
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: 3.13
-          cache: "pip"
-          cache-dependency-path: |
-            requirements/*.txt
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
@@ -308,7 +316,7 @@ jobs:
           path: wheels
       - name: install dependencies
         run: |
-          python -m pip install --upgrade pip nox uv
+          pip install nox
           nox -s bench_codespeed --no-venv --install-only
       - name: Run benchmarks
         uses: CodSpeedHQ/action@76578c2a7ddd928664caa737f0e962e3085d4e7c # v3
