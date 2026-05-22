@@ -1,15 +1,56 @@
+use std::cell::Cell;
+
+use pyo3::exceptions::PyRecursionError;
 use pyo3::{Bound, PyAny};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+use crate::serde_error::{SerdeError, SerdeResult};
+
+#[derive(Debug)]
 pub struct Context {
     pub try_cast_from_string: bool,
+    /// Depth of the currently active encoder recursion. Updated via
+    /// `enter_depth` / `DepthGuard::drop`. Prevents stack overflow on cyclic
+    /// or pathologically deep inputs by surfacing `PyRecursionError` once the
+    /// counter crosses `max_depth`.
+    depth: Cell<usize>,
+    max_depth: usize,
 }
 
 impl Context {
-    pub fn new(try_cast_from_string: bool) -> Self {
+    pub fn new(try_cast_from_string: bool, max_depth: usize) -> Self {
         Context {
             try_cast_from_string,
+            depth: Cell::new(0),
+            max_depth,
         }
+    }
+
+    /// Increment the recursion counter and return a RAII guard that decrements
+    /// it on drop. Returns an error when `max_depth` is exceeded. The guard
+    /// must be bound to a local (e.g. `let _guard = ctx.enter_depth()?;`) so
+    /// that its lifetime spans the recursive call.
+    #[inline]
+    pub fn enter_depth(&self) -> SerdeResult<DepthGuard<'_>> {
+        let next = self.depth.get() + 1;
+        if next > self.max_depth {
+            return Err(SerdeError::Py(PyRecursionError::new_err(format!(
+                "maximum recursion depth exceeded ({}); likely a cyclic graph or excessively deep structure",
+                self.max_depth
+            ))));
+        }
+        self.depth.set(next);
+        Ok(DepthGuard { ctx: self })
+    }
+}
+
+pub struct DepthGuard<'a> {
+    ctx: &'a Context,
+}
+
+impl Drop for DepthGuard<'_> {
+    #[inline]
+    fn drop(&mut self) {
+        self.ctx.depth.set(self.ctx.depth.get() - 1);
     }
 }
 
