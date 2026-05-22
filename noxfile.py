@@ -159,7 +159,8 @@ def coverage(session):
 def install(session, *args, use_pip: bool = False, env=None):
     if session._runner.global_config.no_install:
         return
-    cmd = ['pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', sys.executable]
+    python = os.environ.get('NOX_TARGET_PYTHON') or sys.executable
+    cmd = [python, '-m', 'pip', 'install'] if use_pip else ['uv', 'pip', 'install', '--python', python]
     session.run_always(*cmd, *args, env=env)
 
 
