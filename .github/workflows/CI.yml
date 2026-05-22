@@ -84,6 +84,8 @@ jobs:
           pip install -U uv
           uv pip install pytest pytest-benchmark mashumaro orjson --python ${{ steps.python.outputs.python-path }}
           uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --force-reinstall --python ${{ steps.python.outputs.python-path }}
+          # Install serpyco-rs runtime deps (attributes-doc, typing-extensions, ...)
+          uv pip install serpyco_rs --find-links pgo-wheel --python ${{ steps.python.outputs.python-path }}
           pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
