@@ -70,7 +70,7 @@ jobs:
           args: >
             --release
             --sdist
-            --interpreter ${{ steps.python.outputs.python-path }}
+            --interpreter ${{ matrix.python-version }}
             --out dist
 
       - name: Build instrumented wheel (PGO stage 1)
@@ -84,7 +84,7 @@ jobs:
           args: >
             --release
             --sdist
-            --interpreter ${{ steps.python.outputs.python-path }}
+            --interpreter ${{ matrix.python-version }}
             --out pgo-wheel
         env:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/target/profdata"
@@ -124,7 +124,7 @@ jobs:
           args: >
             --release
             --sdist
-            --interpreter ${{ steps.python.outputs.python-path }}
+            --interpreter ${{ matrix.python-version }}
             --out dist
         env:
           RUSTFLAGS: "-Cprofile-use=${{ github.workspace }}/merged.profdata"
