@@ -42,6 +42,66 @@ def test_decimal_invalid_value__raise_validation_error():
         serializer.load('asd')
 
 
+def test_float_dump_nan_inf__pass_through():
+    import math
+
+    serializer = Serializer(float)
+    assert math.isnan(serializer.dump(float('nan')))
+    assert serializer.dump(float('inf')) == float('inf')
+    assert serializer.dump(float('-inf')) == float('-inf')
+
+
+def test_float_load_nan_inf__accept_float_objects():
+    import math
+
+    serializer = Serializer(float)
+    assert math.isnan(serializer.load(float('nan')))
+    assert serializer.load(float('inf')) == float('inf')
+    assert serializer.load(float('-inf')) == float('-inf')
+
+
+@pytest.mark.parametrize('value', ['NaN', 'Infinity', '-Infinity'])
+def test_float_load_nan_inf_strings__reject(value):
+    serializer = Serializer(float)
+    with pytest.raises(SchemaValidationError):
+        serializer.load(value)
+
+
+def test_decimal_dump_special_values():
+    serializer = Serializer(Decimal)
+    assert serializer.dump(Decimal('NaN')) == 'NaN'
+    assert serializer.dump(Decimal('Infinity')) == 'Infinity'
+    assert serializer.dump(Decimal('-Infinity')) == '-Infinity'
+
+
+def test_decimal_load_special_values():
+    serializer = Serializer(Decimal)
+    assert serializer.load('NaN').is_nan()
+    assert serializer.load('Infinity') == Decimal('Infinity')
+    assert serializer.load('-Infinity') == Decimal('-Infinity')
+
+
+def test_int_dump_large__pass_through():
+    """`dump` accepts Python ints of arbitrary precision."""
+    serializer = Serializer(int)
+    big = 2**100
+    assert serializer.dump(big) == big
+    assert serializer.dump(-big) == -big
+
+
+def test_int_load_large__raises_overflow():
+    """`load` is limited to i64 range; values outside raise OverflowError.
+
+    This documents the current limitation. The error type is intentionally
+    distinct from SchemaValidationError because the validation passes
+    (it *is* an integer) — the failure happens later when converting to
+    Rust's `i64`.
+    """
+    serializer = Serializer(int)
+    with pytest.raises(OverflowError):
+        serializer.load(2**100)
+
+
 def test_dict_encoder():
     serializer = Serializer(dict[str, Decimal])
     val = {'a': Decimal('123.3')}
