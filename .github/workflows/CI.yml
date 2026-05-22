@@ -56,26 +56,7 @@ jobs:
         with:
           components: llvm-tools
 
-      # Free-threaded interpreters: skip PGO (bench deps like pydantic /
-      # mashumaro do not all ship cp3Yt wheels yet) and build a plain release
-      # wheel straight into dist/.
-      - name: Build release wheel (free-threaded, no PGO)
-        if: endsWith(matrix.python-version, 't')
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        with:
-          manylinux: auto
-          target: ${{ matrix.target }}
-          rust-toolchain: stable
-          sccache: "true"
-          args: >
-            --release
-            --sdist
-            --interpreter ${{ matrix.python-version }}
-            --out dist
-
-      - name: Build instrumented wheel (PGO stage 1)
-        if: ${{ !endsWith(matrix.python-version, 't') }}
-        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
+      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           manylinux: auto
           target: ${{ matrix.target }}
@@ -90,12 +71,10 @@ jobs:
           RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/target/profdata"
 
       - name: Get rust host
-        if: ${{ !endsWith(matrix.python-version, 't') }}
         run: echo RUST_HOST=$(rustc -Vv | grep host | cut -d ' ' -f 2) >> "$GITHUB_ENV"
         shell: bash
 
       - name: Generate pgo data
-        if: ${{ !endsWith(matrix.python-version, 't') }}
         run: |
           pip install -U uv
           uv pip install -r requirements/bench.txt --python ${{ steps.python.outputs.python-path }}
@@ -109,11 +88,9 @@ jobs:
       #        uses: lhotari/action-upterm@v1
 
       - name: Merge pgo data
-        if: ${{ !endsWith(matrix.python-version, 't') }}
         run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/target/profdata
 
       - name: Build pgo-optimized wheel
-        if: ${{ !endsWith(matrix.python-version, 't') }}
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           manylinux: auto
