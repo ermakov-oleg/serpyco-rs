@@ -108,6 +108,13 @@ _run-test-rc-leaks:
 test-rc-leaks: build _run-test-rc-leaks
 ci-test-rc-leaks: install-wheel _run-test-rc-leaks
 
+# CI PGO: install PGO-instrumented wheel + bench deps, run targeted benches to gather profile data
+ci-pgo-collect wheel_dir="pgo-wheel":
+    {{uv}} sync --group pgo --no-install-project --inexact
+    {{uv}} pip install --no-index --no-deps --find-links {{wheel_dir}} --reinstall serpyco_rs
+    {{uv}} pip install --find-links {{wheel_dir}} serpyco_rs
+    {{uv}} run pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
+
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
 _bench-codspeed-setup:
     {{uv}} sync --group bench-compare --no-install-project --inexact

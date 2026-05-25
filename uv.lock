@@ -1172,6 +1172,19 @@ lint = [
     { name = "ruff" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
+pgo = [
+    { name = "attrs" },
+    { name = "coverage", extra = ["toml"] },
+    { name = "mashumaro", extra = ["orjson"] },
+    { name = "maturin" },
+    { name = "multidict" },
+    { name = "pytest" },
+    { name = "pytest-benchmark", extra = ["histogram"] },
+    { name = "python-dateutil" },
+    { name = "pytz" },
+    { name = "tabulate" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
 type-check = [
     { name = "attrs" },
     { name = "coverage", extra = ["toml"] },
@@ -1264,6 +1277,19 @@ lint = [
     { name = "python-dateutil" },
     { name = "pytz" },
     { name = "ruff" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
+]
+pgo = [
+    { name = "attrs" },
+    { name = "coverage", extras = ["toml"] },
+    { name = "mashumaro", extras = ["orjson"] },
+    { name = "maturin", specifier = ">=1,<2" },
+    { name = "multidict" },
+    { name = "pytest" },
+    { name = "pytest-benchmark", extras = ["histogram"] },
+    { name = "python-dateutil" },
+    { name = "pytz" },
+    { name = "tabulate" },
     { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 type-check = [

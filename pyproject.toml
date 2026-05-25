@@ -56,6 +56,10 @@ bench = [
     "pytest-benchmark[histogram]",
     "tabulate",
 ]
+pgo = [
+    { include-group = "bench" },
+    "mashumaro[orjson]",
+]
 bench-compare = [
     { include-group = "bench" },
     "serpyco",
