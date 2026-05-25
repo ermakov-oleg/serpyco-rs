@@ -13,7 +13,9 @@ build:
     {{uv}} sync --group dev --no-install-project --inexact
     {{uv}} run maturin develop --release
 
-# CI: install dev deps + pre-built wheel from ./wheels
+# CI: install dev deps + pre-built wheel from ./wheels.
+# `uv pip install` is used because `uv sync` would rebuild the project from source
+# via its build-backend, ignoring local wheels.
 install-wheel:
     {{uv}} sync --group dev --no-install-project --inexact
     {{uv}} pip install --no-index --no-deps --find-links wheels --reinstall serpyco-rs
@@ -117,8 +119,7 @@ ci-pgo-collect wheel_dir="pgo-wheel":
 
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
 _bench-codspeed-setup:
-    {{uv}} sync --group bench-compare --no-install-project --inexact
-    {{uv}} pip install pytest-codspeed
+    {{uv}} sync --group codspeed --no-install-project --inexact
 
 # Run pytest under pytest-codspeed instrumentation
 bench-codspeed-run:

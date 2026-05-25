@@ -60,6 +60,10 @@ pgo = [
     { include-group = "bench" },
     "mashumaro[orjson]",
 ]
+codspeed = [
+    { include-group = "bench-compare" },
+    "pytest-codspeed",
+]
 bench-compare = [
     { include-group = "bench" },
     "serpyco",
