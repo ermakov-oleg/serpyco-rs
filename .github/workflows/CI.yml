@@ -36,18 +36,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        id: python
-        with:
-          python-version: ${{ matrix.python-version-full || matrix.python-version }}
-          allow-prereleases: true
-          cache: "pip"
 
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: cache-uv
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-python-${{ matrix.python-version }}-uv
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: ${{ matrix.python-version }}
+
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
 
       - name: Install rust stable
         id: rust-toolchain
@@ -75,14 +71,8 @@ jobs:
 
       - name: Generate pgo data
         shell: bash
-        env:
-          PY_PATH: ${{ steps.python.outputs.python-path }}
         run: |
-          pip install -U uv
-          uv pip install pytest pytest-benchmark mashumaro --python "$PY_PATH"
-          uv pip install serpyco_rs --no-index --no-deps --find-links pgo-wheel --reinstall --python "$PY_PATH"
-          uv pip install serpyco_rs --find-links pgo-wheel --python "$PY_PATH"
-          pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
+          just ci-pgo-collect
           rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
 
       #      - name: Setup upterm session
@@ -159,32 +149,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
           python-version: ${{ matrix.python-version }}
-          allow-prereleases: true
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
       - name: tests
-        run: nox -s test
-        env:
-          CI: true
+        run: just ci-test
       - name: lint
-        run: nox -s lint
-        env:
-          CI: true
+        run: just ci-lint
       - name: check types
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        run: nox -s type_check
-        env:
-          CI: true
+        run: just ci-type-check
 
   coverage:
     name: Coverage
@@ -197,10 +179,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: set up Python 3.13
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
           python-version: "3.13"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: Install rust stable
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
@@ -211,11 +195,8 @@ jobs:
           tool: cargo-llvm-cov
       - name: Install lcov
         run: sudo apt-get update && sudo apt-get install -y lcov
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
       - name: coverage
-        run: nox -s coverage
+        run: just coverage
       - name: Upload coverage artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -238,23 +219,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: set up Python 3.13
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          python-version: 3.13
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: "3.13"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
-          nox -s bench --no-venv --install-only
       - name: bench
-        run: nox -s bench --no-venv --no-install
-        env:
-          CI: true
+        run: just ci-bench
 
   test_rc_leaks:
     name: Test reference count leaks
@@ -266,16 +243,21 @@ jobs:
           python-version: 3.13
           debug: true
       - run: python3.13 --version --version && which python3.13 && python3.13 -c "import sys; print(sys.gettotalrefcount())"
+      - name: Export UV_PYTHON
+        # Pin to the exact deadsnakes debug binary; a bare "python3.13" would let uv
+        # pick a non-debug interpreter from its managed-Python registry.
+        run: echo "UV_PYTHON=$(which python3.13)" >> "$GITHUB_ENV"
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: build
           args: --release --sdist -o wheels
-      - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
-          nox -s test_rc_leaks --no-venv --install-only
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - name: tests
-        run: nox -s test_rc_leaks --no-venv --no-install
+        run: just ci-test-rc-leaks
 
   benchmark-codespeed:
     needs: [build]
@@ -289,35 +271,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: cache-uv
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
         with:
-          path: ~/.cache/uv
-          key: ubuntu-latest-python-3.13-uv-${{ matrix.mode }}
-      - name: set up Python 3.13
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: 3.13
-          cache: "pip"
-          cache-dependency-path: |
-            requirements/*.txt
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+          python-version: "3.13"
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheels_*
           merge-multiple: true
           path: wheels
       - name: install dependencies
-        run: |
-          python -m pip install --upgrade pip nox uv
-          nox -s bench_codespeed --no-venv --install-only
+        run: just ci-bench-codspeed-setup
       - name: Run benchmarks
         uses: CodSpeedHQ/action@76578c2a7ddd928664caa737f0e962e3085d4e7c # v3
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           mode: ${{ matrix.mode }}
-          run: nox -s bench_codespeed --no-venv --no-install
-        env:
-          CI: true
+          run: just bench-codspeed-run
 
   fmt:
     name: rustfmt
@@ -327,7 +299,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: rustfmt
-      - run: cargo fmt --all -- --check
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: just ci-rust-fmt
 
   clippy:
     name: clippy
@@ -337,7 +310,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+      - run: just ci-rust-clippy
 
   audit:
     name: cargo audit
