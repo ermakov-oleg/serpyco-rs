@@ -42,16 +42,26 @@ $ pip install serpyco-rs
 
 ## Development
 
+Tasks are driven by [`just`](https://github.com/casey/just) and [`uv`](https://github.com/astral-sh/uv):
+
+```bash
+$ just            # list available recipes
+$ just test       # build (maturin develop) + pytest
+$ just lint       # ruff format + check
+$ just type-check # pyright + mypy
+$ just bench      # benchmarks vs competitors
+```
+
 Run tests with Python and Rust coverage:
 
 ```bash
 $ cargo install cargo-llvm-cov
 $ brew install lcov  # or apt-get install lcov
-$ nox -s coverage
+$ just coverage
 ```
 
-The session writes `coverage/python.lcov`, `coverage/rust.lcov`, and the combined `coverage/lcov.info` report.
-It also writes a single HTML report to `coverage/html/index.html`.
+It writes `coverage/python.lcov`, `coverage/rust.lcov`, and the combined `coverage/lcov.info` report,
+plus a single HTML report to `coverage/html/index.html`.
 
 
 ## Features
