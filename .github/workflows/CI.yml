@@ -311,7 +311,7 @@ jobs:
           python -m pip install --upgrade pip nox uv
           nox -s bench_codespeed --no-venv --install-only
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@76578c2a7ddd928664caa737f0e962e3085d4e7c # v3
+        uses: CodSpeedHQ/action@9d332c4d90b43981c3e55ae8e38e68709996240f # v4.17.0
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           mode: ${{ matrix.mode }}
