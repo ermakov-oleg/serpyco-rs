@@ -47,6 +47,7 @@ Tasks are driven by [`just`](https://github.com/casey/just) and [`uv`](https://g
 ```bash
 $ just            # list available recipes
 $ just test       # build (maturin develop) + pytest
+$ just test 'tests/test_simple.py -k roundtrip'
 $ just lint       # ruff format + check
 $ just type-check # pyright + mypy
 $ just bench      # benchmarks vs competitors

@@ -58,7 +58,7 @@ bench = [
 ]
 pgo = [
     { include-group = "bench" },
-    "mashumaro[orjson]",
+    "mashumaro",
 ]
 codspeed = [
     { include-group = "bench-compare" },
@@ -71,7 +71,6 @@ bench-compare = [
     "marshmallow",
     "marshmallow-dataclass",
     "mashumaro[orjson]",
-    "orjson",
 ]
 all = [
     { include-group = "dev" },

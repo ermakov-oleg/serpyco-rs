@@ -1,49 +1,57 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 uv := env_var_or_default("UV", "uv")
+venv := env_var_or_default("UV_PROJECT_ENVIRONMENT", ".venv")
 
 # Show available recipes
 default:
     @just --list
 
-# === Setup (one runs before checks) ===
+# === Environment primitives ===
+
+# Sync one dependency group without installing the project itself.
+_sync group:
+    {{uv}} sync --group {{group}} --no-install-project --inexact
+
+# CI syncs must match uv.lock exactly.
+_sync-ci group:
+    {{uv}} sync --locked --group {{group}} --no-install-project
+
+# Install a pre-built wheel into the project virtualenv created by uv sync.
+_install-wheel wheel_dir="wheels":
+    {{uv}} pip install --python {{venv}} --no-index --no-deps --find-links {{wheel_dir}} --reinstall serpyco-rs
+
+# === Setup ===
 
 # Local: install dev deps + rebuild extension via maturin
-build:
-    {{uv}} sync --group dev --no-install-project --inexact
+build: (_sync "dev")
     {{uv}} run --no-sync maturin develop --release
 
-# Note: `uv sync --no-install-project` installs runtime dependencies but skips the project itself;
-# `uv pip install` is required because `uv sync` would rebuild the project from source
-# via its build-backend, ignoring local wheels.
+# Note: `uv sync --no-install-project` installs runtime dependencies but skips
+# the project itself; `uv pip install` is required because `uv sync` would
+# rebuild the project from source via its build-backend, ignoring local wheels.
 # CI: install dev deps + pre-built wheel from ./wheels
-install-wheel:
-    {{uv}} sync --group dev --no-install-project --inexact
-    {{uv}} pip install --no-index --no-deps --find-links wheels --reinstall serpyco-rs
+install-wheel: (_sync "dev") (_install-wheel "wheels")
 
 # === Reusable checks ===
 #
 # `uv run --no-sync` is mandatory here: a plain `uv run` would re-install the
 # project from source as editable, overwriting the wheel set up by `install-wheel`.
 
-_run-tests:
-    {{uv}} sync --group dev --no-install-project --inexact
-    {{uv}} run --no-sync pytest -vvs tests/
+_run-tests args="tests/":
+    {{uv}} run --no-sync pytest -vvs {{args}}
 
 _run-lint mode="fix":
-    {{uv}} sync --group lint --no-install-project --inexact
     cd python/serpyco_rs && {{uv}} run --no-sync ruff format {{ if mode == "check" { "--check --diff" } else { "" } }} . ../../tests ../../bench
     cd python/serpyco_rs && {{uv}} run --no-sync ruff check {{ if mode == "fix" { "--fix" } else { "" } }} .
 
 _run-type-check:
-    {{uv}} sync --group type_check --no-install-project --inexact
-    cd python/serpyco_rs && {{uv}} run --no-sync pyright .
-    cd python/serpyco_rs && {{uv}} run --no-sync pyright . --verifytypes serpyco_rs
-    cd python/serpyco_rs && {{uv}} run --no-sync mypy . --strict --implicit-reexport --pretty
+    PYTHONPATH=python {{uv}} run --no-sync pyright python/serpyco_rs
+    PYTHONPATH=python {{uv}} run --no-sync pyright --verifytypes serpyco_rs
+    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs --strict --implicit-reexport --pretty
 
-_run-bench:
-    {{uv}} sync --group bench-compare --no-install-project --inexact
-    {{uv}} run --no-sync pytest bench --verbose \
+_run-bench target="bench":
+    {{uv}} run --no-sync pytest {{target}} --verbose \
         --benchmark-min-time=0.5 --benchmark-max-time=1 \
         --benchmark-disable-gc --benchmark-autosave \
         --benchmark-save-data --benchmark-compare
@@ -57,26 +65,30 @@ _rust-clippy:
 # === Local entry points (rebuild then check) ===
 
 # Run pytest
-test: build _run-tests
+test args="tests/": build (_run-tests args)
 
 # Format + lint Python code
-lint: (_run-lint "fix")
+lint: (_sync "lint") (_run-lint "fix")
 
-# pyright + mypy
-type-check: build _run-type-check
+# pyright + mypy over the source tree; no native rebuild required.
+type-check: (_sync "type_check") _run-type-check
 
 # Run benchmarks (with competitors)
-bench: build _run-bench
+bench target="bench": build (_sync "bench-compare") (_run-bench target)
 
 # cargo fmt + clippy
 rust-lint: (_rust-fmt "fix") _rust-clippy
 
 # === CI entry points (use pre-built wheel, no auto-fix) ===
 
-ci-test: install-wheel _run-tests
-ci-lint: (_run-lint "check")
-ci-type-check: install-wheel _run-type-check
-ci-bench: install-wheel _run-bench
+ci-test args="tests/": (_sync-ci "dev") (_install-wheel "wheels") (_run-tests args)
+
+ci-lint: (_sync-ci "lint") (_run-lint "check")
+
+ci-type-check: (_sync-ci "type_check") _run-type-check
+
+ci-bench target="bench": (_sync-ci "bench-compare") (_install-wheel "wheels") (_run-bench target)
+
 ci-rust-fmt: (_rust-fmt "check")
 ci-rust-clippy: _rust-clippy
 
@@ -112,31 +124,28 @@ coverage:
     echo "HTML: coverage/html/index.html"
 
 # Reference-count leak detection (requires debug Python build)
-_run-test-rc-leaks:
-    {{uv}} sync --group bench-compare --no-install-project --inexact
-    {{uv}} run --no-sync pytest bench --verbose --debug-refs --debug-refs-gc
+_run-test-rc-leaks target="bench":
+    {{uv}} run --no-sync pytest {{target}} --verbose --debug-refs --debug-refs-gc
 
-test-rc-leaks: build _run-test-rc-leaks
-ci-test-rc-leaks: install-wheel _run-test-rc-leaks
+test-rc-leaks target="bench": build (_sync "bench-compare") (_run-test-rc-leaks target)
+
+ci-test-rc-leaks target="bench": (_sync-ci "bench-compare") (_install-wheel "wheels") (_run-test-rc-leaks target)
 
 # CI PGO: install PGO-instrumented wheel + bench deps, run targeted benches to gather profile data
-ci-pgo-collect wheel_dir="pgo-wheel":
-    {{uv}} sync --group pgo --no-install-project --inexact
-    {{uv}} pip install --no-index --no-deps --find-links {{wheel_dir}} --reinstall serpyco_rs
+ci-pgo-collect wheel_dir="pgo-wheel": (_sync-ci "pgo") (_install-wheel wheel_dir)
     {{uv}} run --no-sync pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
 
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
-_bench-codspeed-setup:
-    {{uv}} sync --group codspeed --no-install-project --inexact
+_bench-codespeed-setup: (_sync "codspeed")
 
-# Assumes deps are already synced by a preceding `_bench-codspeed-setup` /
-# `ci-bench-codspeed-setup` step (CodSpeed action wraps just the runner).
+# Assumes deps are already synced by a preceding `_bench-codespeed-setup` /
+# `ci-bench-codespeed-setup` step (CodSpeed action wraps just the runner).
 # Run pytest under pytest-codspeed instrumentation
-bench-codspeed-run:
+bench-codespeed-run:
     {{uv}} run --no-sync pytest bench --ignore=bench/compare/test_benchmarks.py --codspeed
 
-bench-codspeed: build _bench-codspeed-setup bench-codspeed-run
-ci-bench-codspeed-setup: install-wheel _bench-codspeed-setup
+bench-codespeed: build _bench-codespeed-setup bench-codespeed-run
+ci-bench-codespeed-setup: (_sync-ci "codspeed") (_install-wheel "wheels")
 
 # Remove build artifacts
 clean:
