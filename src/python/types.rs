@@ -160,7 +160,7 @@ impl EntityFieldInfo {
 
 #[derive(Clone, Debug)]
 pub struct EntityTypeInfo {
-    pub cls: Py<PyAny>,
+    pub cls: Py<PyType>,
     pub fields: Vec<EntityFieldInfo>,
     pub omit_none: bool,
     pub is_frozen: bool,
@@ -170,7 +170,7 @@ pub struct EntityTypeInfo {
 impl EntityTypeInfo {
     fn extract(type_info: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
-            cls: type_info.getattr("cls")?.unbind(),
+            cls: type_info.getattr("cls")?.cast_into::<PyType>()?.unbind(),
             fields: extract_fields(type_info.getattr("fields")?)?,
             omit_none: type_info.getattr("omit_none")?.extract()?,
             is_frozen: type_info.getattr("is_frozen")?.extract()?,

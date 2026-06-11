@@ -19,8 +19,12 @@ COVERAGE_HTML_DIR = COVERAGE_DIR / 'html'
 
 def build(session, use_pip: bool = False, env=None):
     if _is_ci():
-        # Install form wheels
-        install(session, '--no-index', '--no-deps', '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip)
+        # Install from wheels. Force reinstall: the version number does not change
+        # between commits, so a restored uv/pip cache would otherwise keep a stale build.
+        reinstall = ['--force-reinstall'] if use_pip else ['--reinstall-package', 'serpyco-rs']
+        install(
+            session, *reinstall, '--no-index', '--no-deps', '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip
+        )
         install(session, '--find-links', 'wheels/', 'serpyco-rs', use_pip=use_pip)
         return
 
