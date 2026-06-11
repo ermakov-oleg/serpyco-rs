@@ -17,8 +17,8 @@ use uuid::Uuid;
 use crate::errors::{ToPyErr, ValidationError};
 use crate::python::{
     create_py_dict_known_size, create_py_list, create_py_tuple, dump_date, dump_datetime,
-    dump_time, parse_date, parse_datetime, parse_time, py_dict_set_item, py_list_get_item,
-    py_list_set_item, py_tuple_set_item, set_attr_unchecked,
+    dump_time, generic_set_attr, parse_date, parse_datetime, parse_time, py_dict_set_item,
+    py_list_get_item, py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
 use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
 use crate::serde_error::{SerdeError, SerdeResult};
@@ -460,8 +460,6 @@ pub struct EntityEncoder {
     pub(crate) omit_none: bool,
     pub(crate) is_frozen: bool,
     pub(crate) fields: Vec<Field>,
-    pub(crate) create_object: Py<PyAny>,
-    pub(crate) object_set_attr: Py<PyAny>,
     pub(crate) used_keys: Py<PySet>,
 }
 
@@ -551,16 +549,20 @@ impl Encoder for EntityEncoder {
         let Ok(val) = value.cast::<PyDict>() else {
             invalid_type!("object", value, instance_path)
         };
-        let py_frozen_object_set_attr = self.object_set_attr.bind(value.py());
-        let obj = self
-            .create_object
-            .bind(value.py())
-            .call1((self.cls.bind(value.py()),))?;
+        let obj = unsafe {
+            let tp = self.cls.as_ptr() as *mut pyo3::ffi::PyTypeObject;
+            let alloc = (*tp).tp_alloc.unwrap_or(pyo3::ffi::PyType_GenericAlloc);
+            let ptr = alloc(tp, 0);
+            if ptr.is_null() {
+                return Err(PyErr::fetch(value.py()).into());
+            }
+            Bound::from_owned_ptr(value.py(), ptr)
+        };
 
         for field in &self.fields {
             let val = field.load_value(val, instance_path, ctx, &self.used_keys)?;
             if self.is_frozen {
-                py_frozen_object_set_attr.call1((&obj, &field.name, val))?;
+                generic_set_attr(&obj, field.name.as_ptr(), val)?;
             } else {
                 set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
             };

@@ -109,6 +109,22 @@ pub(crate) fn set_attr_unchecked(
     error_on_minusone(result)
 }
 
+/// Set attribute via `PyObject_GenericSetAttr`, bypassing the type's `tp_setattro`.
+///
+/// Used for frozen dataclasses: their `__setattr__` raises `FrozenInstanceError`,
+/// so fields must be written the way `object.__setattr__` would. Calling the C
+/// function directly skips the bound-method call machinery (argument tuple,
+/// wrapper descriptor) that `object.__setattr__(obj, name, value)` pays per field.
+#[inline]
+pub(crate) fn generic_set_attr(
+    obj: &Bound<PyAny>,
+    name: *mut ffi::PyObject,
+    value: Bound<PyAny>,
+) -> PyResult<()> {
+    let result = unsafe { ffi::PyObject_GenericSetAttr(obj.as_ptr(), name, value.as_ptr()) };
+    error_on_minusone(result)
+}
+
 #[inline(always)]
 pub(crate) fn create_py_tuple(py: Python, size: usize) -> PyResult<Bound<PyTuple>> {
     let size = cast_size(size).map_err(|_| err_size_overflow())?;
