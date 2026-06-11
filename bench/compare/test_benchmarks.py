@@ -1,6 +1,6 @@
 import pytest
 
-from .libs import marshmallow, mashumaro, pydantic, serpyco, serpyco_rs
+from .libs import marshmallow, mashumaro, msgspec_dataclass, msgspec_struct, pydantic, serpyco, serpyco_rs
 
 
 serializers = {
@@ -9,6 +9,8 @@ serializers = {
     'pydantic': pydantic,
     'marshmallow': marshmallow,
     'mashumaro': mashumaro,
+    'msgspec_struct': msgspec_struct,
+    'msgspec_dataclass': msgspec_dataclass,
 }
 
 
