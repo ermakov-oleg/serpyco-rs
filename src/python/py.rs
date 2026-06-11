@@ -2,7 +2,7 @@ use std::os::raw::c_int;
 
 use pyo3::exceptions::PyOverflowError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::{PyDict, PyList, PyTuple, PyType};
 use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
@@ -107,6 +107,32 @@ pub(crate) fn set_attr_unchecked(
         }
     };
     error_on_minusone(result)
+}
+
+/// Allocate an instance of `cls` via its `tp_alloc` slot, without calling
+/// `__new__`/`__init__`.
+///
+/// Equivalent to the `object.__new__(cls)` call it replaces: for classes defined
+/// in Python `object.__new__` reduces to `type->tp_alloc(type, 0)` plus call
+/// machinery (argument tuple, `PyObject_Call`, excess-args checks that never fire
+/// here), and `__init__`/`__post_init__` were never invoked on this path either.
+/// A custom `tp_alloc` from a C-level metaclass is honored, matching what
+/// `object.__new__` would do. `PyType_GenericAlloc` returns zero-initialized
+/// memory and handles GC tracking itself.
+///
+/// Caller invariant: every dataclass field must be assigned via setattr before
+/// the instance is handed to user code.
+#[inline]
+pub(crate) fn create_instance<'py>(cls: &Bound<'py, PyType>) -> PyResult<Bound<'py, PyAny>> {
+    let tp = cls.as_type_ptr();
+    let ptr = unsafe {
+        let alloc = (*tp).tp_alloc.unwrap_or(ffi::PyType_GenericAlloc);
+        alloc(tp, 0)
+    };
+    if ptr.is_null() {
+        return Err(err_alloc_failed(cls.py()));
+    }
+    Ok(unsafe { Bound::from_owned_ptr(cls.py(), ptr) })
 }
 
 /// Set attribute via `PyObject_GenericSetAttr`, bypassing the type's `tp_setattro`.
