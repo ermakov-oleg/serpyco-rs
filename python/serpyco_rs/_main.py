@@ -2,6 +2,8 @@ import abc
 from collections.abc import Callable
 from typing import Annotated, Any, Generic, Optional, Protocol, TypeVar, Union, cast, overload
 
+from typing_extensions import TypeForm
+
 from ._custom_types import CustomType
 from ._describe import BaseType, describe_type
 from ._impl import Serializer as _Serializer
@@ -34,7 +36,7 @@ class Serializer(Generic[_T]):
 
     def __init__(
         self,
-        t: type[_T],
+        t: TypeForm[_T],
         *,
         camelcase_fields: bool = False,
         omit_none: bool = False,
@@ -55,11 +57,11 @@ class Serializer(Generic[_T]):
             if the user-defined type is supported, or None otherwise.
         """
         if camelcase_fields:
-            t = cast(type[_T], Annotated[t, CamelCase])
+            t = cast(TypeForm[_T], Annotated[t, CamelCase])
         if omit_none:
-            t = cast(type[_T], Annotated[t, OmitNone])
+            t = cast(TypeForm[_T], Annotated[t, OmitNone])
         if force_default_for_optional:
-            t = cast(type[_T], Annotated[t, ForceDefaultForOptional])
+            t = cast(TypeForm[_T], Annotated[t, ForceDefaultForOptional])
         self._type_info = describe_type(t, custom_type_resolver=custom_type_resolver)
         self._schema = get_json_schema(self._type_info)
         self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc)
