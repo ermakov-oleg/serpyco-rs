@@ -67,6 +67,8 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
 
 // Private CPython API: the binding was removed from pyo3-ffi 0.28+, but the
 // symbol is still exported by all supported CPython versions (incl. 3.14t).
+// On Windows this needs the import library, which pyo3 0.29+ no longer links
+// (raw-dylib) — build.rs restores it.
 extern "C" {
     fn _PyDict_NewPresized(minused: Py_ssize_t) -> *mut ffi::PyObject;
 }
