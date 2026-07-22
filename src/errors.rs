@@ -41,11 +41,9 @@ pub(crate) struct SchemaValidationError {
 #[pymethods]
 impl SchemaValidationError {
     #[new]
-    pub(crate) fn new(message: String, errors: Py<PyList>) -> (Self, ValidationError) {
-        (
-            SchemaValidationError { errors },
-            ValidationError::new(message),
-        )
+    pub(crate) fn new(message: String, errors: Py<PyList>) -> PyClassInitializer<Self> {
+        PyClassInitializer::from(ValidationError::new(message))
+            .add_subclass(SchemaValidationError { errors })
     }
 
     fn __str__(self_: PyRef<'_, Self>) -> String {

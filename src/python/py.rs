@@ -65,10 +65,18 @@ pub(crate) fn py_list_set_item(list: &Bound<PyList>, index: usize, value: Bound<
     ffi!(PyList_SetItem(list.as_ptr(), index, value.into_ptr()));
 }
 
+// Private CPython API: the binding was removed from pyo3-ffi 0.28+, but the
+// symbol is still exported by all supported CPython versions (incl. 3.14t).
+// On Windows this needs the import library, which pyo3 0.29+ no longer links
+// (raw-dylib) — build.rs restores it.
+extern "C" {
+    fn _PyDict_NewPresized(minused: Py_ssize_t) -> *mut ffi::PyObject;
+}
+
 #[inline(always)]
 pub(crate) fn create_py_dict_known_size(py: Python, size: usize) -> PyResult<Bound<PyDict>> {
     let size = cast_size(size).map_err(|_| err_size_overflow())?;
-    let ptr = unsafe { ffi::_PyDict_NewPresized(size) };
+    let ptr = unsafe { _PyDict_NewPresized(size) };
     if ptr.is_null() {
         return Err(err_alloc_failed(py));
     }
