@@ -497,7 +497,9 @@ class _TypeResolver:
                     name=name,
                     fields=fields,
                     omit_none=cls_annotations.get(NoneFormat) is OmitNone,
-                    doc=t.__doc__,
+                    # use origin: on parameterized generics `t.__doc__` returns the
+                    # `typing._GenericAlias` docstring (recent CPython patch releases, e.g. 3.13.14)
+                    doc=origin.__doc__,
                     custom_encoder=custom_encoder,
                     used_keys=used_keys,
                     json_schema_extensions=json_schema_extensions,
@@ -509,7 +511,7 @@ class _TypeResolver:
                 fields=fields,
                 omit_none=cls_annotations.get(NoneFormat) is OmitNone,
                 is_frozen=_is_frozen_dataclass(origin, fields[0]) if fields else False,
-                doc=_get_dataclass_doc(t),
+                doc=_get_dataclass_doc(origin),
                 custom_encoder=custom_encoder,
                 used_keys=used_keys,
                 json_schema_extensions=json_schema_extensions,
