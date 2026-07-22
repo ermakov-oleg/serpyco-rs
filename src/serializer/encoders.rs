@@ -624,7 +624,7 @@ impl Encoder for TypedDictEncoder {
                     if field.required {
                         return Err(SerdeError::Py(ValidationError::new_err(format!(
                             "data dictionary is missing required parameter {}",
-                            &field.name
+                            field.name
                         ))));
                     }
                     continue;
