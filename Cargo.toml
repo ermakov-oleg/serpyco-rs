@@ -10,7 +10,7 @@ name = "serpyco_rs"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.29", features = ["extension-module", "py-clone"] }
+pyo3 = { version = "0.29", features = ["extension-module", "py-clone", "num-bigint"] }
 pyo3-ffi = "0.29"
 speedate = "0.17.0"
 
@@ -18,6 +18,11 @@ dyn-clone = "1.0.20"
 nohash-hasher = "0.2"
 
 uuid = "1"
+
+jiter = { version = "0.16", features = ["num-bigint"] }
+num-bigint = "0.4"
+itoa = "1"
+ryu = "1"
 
 [build-dependencies]
 pyo3-build-config = { version = "0.29", features = ["resolve-config"] }

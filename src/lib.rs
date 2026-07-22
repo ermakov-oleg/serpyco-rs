@@ -1,4 +1,6 @@
 mod errors;
+#[allow(dead_code)]
+mod format;
 mod python;
 mod serde_error;
 mod serializer;
