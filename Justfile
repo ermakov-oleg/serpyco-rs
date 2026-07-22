@@ -48,7 +48,7 @@ _run-lint mode="fix":
 _run-type-check:
     PYTHONPATH=python {{uv}} run --no-sync pyright python/serpyco_rs
     PYTHONPATH=python {{uv}} run --no-sync pyright --verifytypes serpyco_rs
-    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs --strict --implicit-reexport --pretty
+    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs --strict --implicit-reexport --enable-incomplete-feature=TypeForm --pretty
 
 _run-bench target="bench":
     {{uv}} run --no-sync pytest {{target}} --verbose \
