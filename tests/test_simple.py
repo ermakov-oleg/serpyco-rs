@@ -1,4 +1,3 @@
-import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
@@ -211,28 +210,26 @@ def test_defaults():
     assert entity_serializer.load({}) == Entity(foo='123', bar=[1, 2, 3])
 
 
-if sys.version_info >= (3, 10):
+def test_union_optional__dump_load__ok():
+    # arrange
+    @dataclass
+    class UnionClass:
+        name: str | None
+        count: None | int
 
-    def test_union_optional__dump_load__ok():
-        # arrange
-        @dataclass
-        class UnionClass:
-            name: str | None
-            count: None | int
+    # act
+    serializer = Serializer(UnionClass)
 
-        # act
-        serializer = Serializer(UnionClass)
+    # assert
+    foo = UnionClass(name=None, count=None)
+    dict_foo = {'name': None, 'count': None}
+    assert serializer.dump(foo) == dict_foo
+    assert foo == serializer.load(dict_foo)
 
-        # assert
-        foo = UnionClass(name=None, count=None)
-        dict_foo = {'name': None, 'count': None}
-        assert serializer.dump(foo) == dict_foo
-        assert foo == serializer.load(dict_foo)
-
-        bar = UnionClass(name='try', count=5)
-        dict_bar = {'name': 'try', 'count': 5}
-        assert serializer.dump(bar) == dict_bar
-        assert bar == serializer.load(dict_bar)
+    bar = UnionClass(name='try', count=5)
+    dict_bar = {'name': 'try', 'count': 5}
+    assert serializer.dump(bar) == dict_bar
+    assert bar == serializer.load(dict_bar)
 
 
 def test_serializer_with_camelcase():

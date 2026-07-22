@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,6 +26,7 @@ class Schema:
     anyOf: list[Schema] | None = None
     oneOf: list[Schema] | None = None
     additionalArgs: dict[str, Any] | None = None
+    json_schema_extensions: Mapping[str, Any] | None = None
 
     def dump(self, definitions: dict[str, Any]) -> dict[str, Any]:
         data = {
@@ -38,7 +40,10 @@ class Schema:
             'oneOf': [item.dump(definitions) for item in self.oneOf] if self.oneOf else None,
             **(self.additionalArgs or {}),
         }
-        return {k: v for k, v in data.items() if v is not None}
+        data = {k: v for k, v in data.items() if v is not None}
+        if self.json_schema_extensions:
+            data.update(self.json_schema_extensions)
+        return data
 
 
 @dataclass
@@ -118,6 +123,8 @@ class ObjectType(Schema):
             **data,
         }
         data = {k: v for k, v in data.items() if v is not None}
+        if self.json_schema_extensions:
+            data.update(self.json_schema_extensions)
         if not self.name:
             return data
         definitions[self.name] = data

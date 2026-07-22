@@ -2,7 +2,7 @@ import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
-from typing import Generic, Optional, Protocol, TypeVar
+from typing import Generic, Protocol, TypeVar
 
 from attributes_doc import get_attributes_doc as _get_attributes_doc
 from typing_extensions import Self
@@ -22,7 +22,7 @@ _T = TypeVar('_T')
 
 
 class _Stack(Generic[_T]):
-    def __init__(self, init: Optional[_T] = None) -> None:
+    def __init__(self, init: _T | None = None) -> None:
         self._stack = [init] if init is not None else []
 
     @contextmanager

@@ -5,7 +5,7 @@ versions](https://img.shields.io/pypi/pyversions/serpyco-rs.svg)](https://pypi.o
 ## What is serpyco-rs ?
 
 
-Serpyco is a serialization library for [Python 3.9+ dataclasses](https://docs.python.org/3/library/dataclasses.html) that works just by defining your dataclasses:
+Serpyco is a serialization library for [Python 3.10+ dataclasses](https://docs.python.org/3/library/dataclasses.html) that works just by defining your dataclasses:
 
 ```python
 import dataclasses
@@ -39,6 +39,30 @@ Use pip to install:
 ```bash
 $ pip install serpyco-rs
 ```
+
+## Development
+
+Tasks are driven by [`just`](https://github.com/casey/just) and [`uv`](https://github.com/astral-sh/uv):
+
+```bash
+$ just            # list available recipes
+$ just test       # build (maturin develop) + pytest
+$ just test 'tests/test_simple.py -k roundtrip'
+$ just lint       # ruff format + check
+$ just type-check # pyright + mypy
+$ just bench      # benchmarks vs competitors
+```
+
+Run tests with Python and Rust coverage:
+
+```bash
+$ cargo install cargo-llvm-cov
+$ brew install lcov  # or apt-get install lcov
+$ just coverage
+```
+
+It writes `coverage/python.lcov`, `coverage/rust.lcov`, and the combined `coverage/lcov.info` report,
+plus a single HTML report to `coverage/html/index.html`.
 
 
 ## Features
@@ -76,52 +100,53 @@ There is support for generic types from the standard typing module:
 
 <details>
   <summary>Linux</summary>
+  Linux Debian 13 ARM64 / Python 3.14
 
   #### Load
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.16 |                  6318.1 |                 1    |
-  | mashumaro   |                            0.45 |                  2244.4 |                 2.81 |
-  | pydantic    |                            0.57 |                  1753.9 |                 3.56 |
-  | serpyco     |                            0.82 |                  1228.3 |                 5.17 |
-  | marshmallow |                            8.49 |                   117.4 |                53.35 |
+  | serpyco_rs  |                            0.05 |                 18212.1 |                 1    |
+  | mashumaro   |                            0.17 |                  5975.3 |                 3.05 |
+  | pydantic    |                            0.19 |                  5131   |                 3.55 |
+  | serpyco     |                            0.51 |                  1979.7 |                 9.19 |
+  | marshmallow |                            2.95 |                   338.4 |                53.66 |
 
   #### Dump
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.07 |                 13798   |                 1    |
-  | serpyco     |                            0.07 |                 13622   |                 1.02 |
-  | mashumaro   |                            0.1  |                 10219.5 |                 1.36 |
-  | pydantic    |                            0.22 |                  4615.5 |                 2.99 |
-  | marshmallow |                            2    |                   497   |                27.69 |
+  | serpyco_rs  |                            0.04 |                 25695.5 |                 1    |
+  | serpyco     |                            0.04 |                 24676.2 |                 1.04 |
+  | mashumaro   |                            0.04 |                 22632.2 |                 1.13 |
+  | pydantic    |                            0.13 |                  7787.2 |                 3.3  |
+  | marshmallow |                            0.68 |                  1475.2 |                17.45 |
 </details>
 
 
 <details>
   <summary>MacOS</summary>
-  macOS Monterey / Apple M1 Pro / 16GB RAM / Python 3.11.0
+  macOS Sequoia 15.6 / Apple M4 Max / 36GB RAM / Python 3.14
 
   #### Load
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.1  |                  9865.1 |                 1    |
-  | mashumaro   |                            0.2  |                  4968   |                 2    |
-  | pydantic    |                            0.34 |                  2866.7 |                 3.42 |
-  | serpyco     |                            0.69 |                  1444.1 |                 6.87 |
-  | marshmallow |                            4.14 |                   241.8 |                41.05 |
+  | serpyco_rs  |                            0.05 |                 20921.7 |                 1    |
+  | mashumaro   |                            0.14 |                  7078.3 |                 2.96 |
+  | pydantic    |                            0.19 |                  5359.2 |                 3.91 |
+  | serpyco     |                            0.52 |                  1926.8 |                10.88 |
+  | marshmallow |                            2.53 |                   394.7 |                53.11 |
 
   #### Dump
 
   | Library     |   Median latency (milliseconds) |   Operations per second |   Relative (latency) |
   |-------------|---------------------------------|-------------------------|----------------------|
-  | serpyco_rs  |                            0.04 |                 22602.6 |                 1    |
-  | serpyco     |                            0.05 |                 21232.9 |                 1.06 |
-  | mashumaro   |                            0.06 |                 15903.4 |                 1.42 |
-  | pydantic    |                            0.16 |                  6262.6 |                 3.61 |
-  | marshmallow |                            1.04 |                   962   |                23.5  |
+  | serpyco_rs  |                            0.03 |                 30582.2 |                 1    |
+  | serpyco     |                            0.04 |                 27437.9 |                 1.11 |
+  | mashumaro   |                            0.04 |                 22598.9 |                 1.35 |
+  | pydantic    |                            0.11 |                  8771   |                 3.48 |
+  | marshmallow |                            0.59 |                  1700.5 |                17.94 |
 </details>
 
 
@@ -139,6 +164,7 @@ Currently available:
 * CustomEncoder
 * NoneAsDefaultForOptional (ForceDefaultForOptional)
 * Flatten
+* JsonSchemaExtension
 
 
 ### Alias
@@ -402,6 +428,28 @@ ser.get_json_schema()
 >> {..., 'additionalProperties': False, ...}
 ```
 
+
+### JsonSchemaExtension
+
+`JsonSchemaExtension` allows attaching arbitrary extension fields to the generated JSON Schema via `Annotated`. Multiple extensions on the same type are merged automatically.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from serpyco_rs import Serializer
+from serpyco_rs.metadata import JsonSchemaExtension
+
+@dataclass
+class User:
+    email: Annotated[str, JsonSchemaExtension({"x-custom-tag": "pii"})]
+    name: str
+
+ser = Serializer(User)
+schema = ser.get_json_schema()
+# schema["components"]["schemas"]["User"]["properties"]["email"]["x-custom-tag"] == "pii"
+```
+
+Extensions only affect JSON Schema output — serialization and deserialization behavior is unchanged.
 
 ### Custom encoders for fields
 
@@ -679,3 +727,52 @@ data = Data(ip=IPv4Address('1.1.1.1'))
 serialized_data = serializer.dump(data)  # {'ip': '1.1.1.1'}
 deserialized_data = serializer.load(serialized_data)  # Data(ip=IPv4Address('1.1.1.1'))
 ```
+
+## Date and time formats
+
+`serpyco-rs` parses and emits `datetime.datetime`, `datetime.date`, and `datetime.time` using the
+[RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) profile of ISO 8601 (via the
+[`speedate`](https://crates.io/crates/speedate) crate). Strings shorter or longer than RFC 3339
+(e.g. Python's `isoformat()` with a space separator, or trailing nanoseconds) are accepted with
+the rules below; output is always RFC 3339.
+
+### `datetime.datetime`
+
+**Load** accepts a string in the form `YYYY-MM-DDTHH:MM:SS[.ffffff][Z|±HH:MM]`:
+
+| Input                                | Result                                                            |
+|--------------------------------------|-------------------------------------------------------------------|
+| `2022-10-10T14:23:43`                | naive `datetime(2022, 10, 10, 14, 23, 43)`                        |
+| `2022-10-10T14:23:43.123456`         | naive with microseconds                                           |
+| `2022-10-10T14:23:43Z`               | aware, `tzinfo=UTC`                                               |
+| `2022-10-10T14:23:43+01:00`          | aware, fixed offset `+01:00`                                      |
+| `2024-04-02T12:21:53.725421224`      | sub-microsecond digits are **truncated** to microseconds (`725421`) |
+
+**Dump** produces an RFC 3339 string. Aware datetimes are written with an explicit `Z` or `±HH:MM`
+offset; naive datetimes are written without one. Pass `Serializer(datetime, naive_datetime_to_utc=True)`
+to force naive datetimes to be emitted as UTC (`...Z`).
+
+### `datetime.date`
+
+**Load** accepts `YYYY-MM-DD`. **Dump** produces `YYYY-MM-DD`. Dumping a `datetime` into a `date`
+field drops the time component:
+
+```python
+Serializer(date).load('2022-10-14')                  # date(2022, 10, 14)
+Serializer(date).dump(datetime(2022, 10, 13, 12, 34, 56))  # '2022-10-13'
+```
+
+### `datetime.time`
+
+**Load** accepts `HH:MM`, `HH:MM:SS`, `HH:MM:SS.ffffff`, optionally followed by `Z` or `±HH:MM`:
+
+| Input                       | Result                                                |
+|-----------------------------|-------------------------------------------------------|
+| `12:34`                     | `time(12, 34)`                                        |
+| `12:34:56`                  | `time(12, 34, 56)`                                    |
+| `12:34:56.000078`           | `time(12, 34, 56, 78)`                                |
+| `12:34:57.000095987`        | sub-microsecond digits truncated (`microsecond=95`)   |
+| `12:34:56.000078+03:00`     | aware time with fixed `+03:00` offset                 |
+
+**Dump** produces `HH:MM:SS` (or `HH:MM:SS.ffffff` when microseconds are non-zero), with `Z` /
+`±HH:MM` appended for aware times.

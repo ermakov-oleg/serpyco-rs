@@ -1,4 +1,3 @@
-import sys
 import textwrap
 import uuid
 from dataclasses import dataclass
@@ -99,18 +98,16 @@ def test_validate(cls, value):
     Serializer(cls).load(value)
 
 
-if sys.version_info >= (3, 10):
-
-    @pytest.mark.parametrize(
-        ['cls', 'value'],
-        (
-            (Optional[int], None),
-            (int | None, None),
-            (int | None, 2),
-        ),
-    )
-    def test_validate_new_union(cls, value):
-        Serializer(cls).load(value)
+@pytest.mark.parametrize(
+    ['cls', 'value'],
+    (
+        (Optional[int], None),
+        (int | None, None),
+        (int | None, 2),
+    ),
+)
+def test_validate_new_union(cls, value):
+    Serializer(cls).load(value)
 
 
 def _mk_e(m=mock.ANY, ip=mock.ANY) -> Callable[[ErrorItem], None]:

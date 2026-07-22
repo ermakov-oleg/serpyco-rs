@@ -8,5 +8,8 @@ pub(crate) use dateutil::{
     dump_date, dump_datetime, dump_time, parse_date, parse_datetime, parse_time,
 };
 pub(crate) use py::*;
-pub(crate) use types::{get_object_type, Type};
+pub(crate) use types::{
+    get_object_type, BaseTypeInfo, DecimalTypeInfo, EntityFieldInfo, FloatTypeInfo,
+    IntegerTypeInfo, StringTypeInfo, Type,
+};
 pub(crate) use utils::fmt_py;

@@ -10,7 +10,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-.venv/
+.venv
 env/
 bin/
 build/
@@ -36,6 +36,9 @@ pip-selfcheck.json
 
 # Unit test / coverage reports
 htmlcov/
+.coverage.*
+coverage/
+.benchmarks/
 .tox/
 .coverage
 .cache
@@ -70,3 +73,11 @@ docs/_build/
 
 # Pyenv
 .python-version
+
+# PGO artifacts
+*.profdata
+*.profraw
+
+# CI wheel artifacts (just install-wheel / ci-*)
+wheels/
+pgo-wheel/

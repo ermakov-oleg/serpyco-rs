@@ -10,7 +10,7 @@ module-name = "serpyco_rs._serpyco_rs"
 name = "serpyco-rs"
 dynamic = ["version"]
 repository = "https://github.com/ermakov-oleg/serpyco-rs"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 classifiers = [
     "License :: OSI Approved :: MIT License",
@@ -18,7 +18,6 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,3 +29,61 @@ classifiers = [
 ]
 
 dependencies = ["attributes-doc", "typing-extensions>=4.15.0"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "coverage[toml]",
+    "attrs",
+    "maturin>=1,<2",
+    "pytz",
+    "python-dateutil",
+    "multidict",
+    "tzdata; sys_platform == 'win32'",
+]
+lint = [
+    { include-group = "dev" },
+    "ruff",
+]
+type_check = [
+    { include-group = "dev" },
+    "mypy",
+    "pyright",
+    "types-python-dateutil",
+]
+bench = [
+    { include-group = "dev" },
+    "pytest-benchmark[histogram]",
+    "tabulate",
+]
+pgo = [
+    { include-group = "bench" },
+    "mashumaro",
+]
+codspeed = [
+    { include-group = "bench-compare" },
+    "pytest-codspeed",
+]
+bench-compare = [
+    { include-group = "bench" },
+    "serpyco",
+    "pydantic",
+    "marshmallow",
+    "marshmallow-dataclass",
+    "mashumaro[orjson]",
+    "msgspec",
+]
+all = [
+    { include-group = "dev" },
+    { include-group = "lint" },
+    { include-group = "type_check" },
+    { include-group = "bench-compare" },
+]
+
+[tool.coverage.run]
+branch = true
+source = ["python/serpyco_rs"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

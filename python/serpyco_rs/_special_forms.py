@@ -2,11 +2,12 @@ import sys
 import types
 import typing
 from contextlib import suppress
-from typing import Annotated, Any, ClassVar, Final, ForwardRef, Union, get_origin
+from typing import Annotated, Any, ClassVar, Final, ForwardRef, Union, get_args, get_origin
 
-from typing_extensions import NotRequired, ReadOnly, Required, get_args
+from typing_extensions import NotRequired, ReadOnly, Required
 
 from ._meta import Annotations
+from .metadata import JsonSchemaExtension
 
 
 if sys.version_info >= (3, 12):
@@ -73,6 +74,14 @@ def unwrap_special_forms(annotation: Any) -> tuple[Any, Annotations]:
         else:
             break
 
+    json_schema_extensions: dict[str, Any] = {}
+    for item in metadata:
+        if isinstance(item, JsonSchemaExtension):
+            json_schema_extensions.update(item.schema)
+    if json_schema_extensions:
+        metadata = [m for m in metadata if not isinstance(m, JsonSchemaExtension)]
+        metadata.append(JsonSchemaExtension(json_schema_extensions))
+
     return annotation, Annotations(*metadata)
 
 
@@ -111,10 +120,7 @@ def is_readonly(origin: Any) -> bool:
 def is_union_type(origin: Any) -> bool:
     if origin is Union:
         return True
-    # Python 3.10+ union syntax (X | Y)
-    if sys.version_info >= (3, 10) and origin is types.UnionType:
-        return True
-    return False
+    return origin is types.UnionType
 
 
 def is_literal_type(annotation: Any) -> bool:
