@@ -7,6 +7,10 @@ _T = TypeVar('_T')
 class ValidationError(Exception):
     message: str
 
+class DecodeError(ValueError):
+    message: str
+    position: int
+
 class ErrorItem:
     message: str
     instance_path: str
