@@ -38,6 +38,7 @@ pip-selfcheck.json
 htmlcov/
 .coverage.*
 coverage/
+.benchmarks/
 .tox/
 .coverage
 .cache
@@ -76,3 +77,7 @@ docs/_build/
 # PGO artifacts
 *.profdata
 *.profraw
+
+# CI wheel artifacts (just install-wheel / ci-*)
+wheels/
+pgo-wheel/
