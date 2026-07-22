@@ -1,4 +1,4 @@
-// pub(crate) mod bridge; // появится в Task 3 — оставить закомментированным
+// pub(crate) mod bridge; // will be added in Task 3 — keep commented
 pub(crate) mod json;
 
 use pyo3::exceptions::PyValueError;
@@ -6,7 +6,7 @@ use pyo3::PyErr;
 
 use json::writer::JsonWriter;
 
-/// Вид следующего значения во входном потоке (формат-агностично).
+/// Kind of the next value in the input stream (format-agnostic).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Kind {
     Null,
@@ -32,8 +32,8 @@ impl Kind {
 
 pub(crate) const FORMAT_JSON: u8 = 0;
 
-/// Enum-диспетчеризация вместо dyn: закрытый набор форматов,
-/// новый формат = новый вариант + реализации методов.
+/// Enum dispatch instead of dyn: closed set of formats;
+/// a new format is a new variant plus method implementations.
 #[derive(Debug)]
 pub(crate) enum Writer {
     Json(JsonWriter),
@@ -77,7 +77,7 @@ impl Writer {
         }
     }
 
-    /// Целое за пределами i64 — десятичная строка (str(int) на Python-стороне).
+    /// Integer beyond i64 — decimal string (str(int) on the Python side).
     #[inline]
     pub(crate) fn write_big_int(&mut self, v: &str) {
         match self {
@@ -85,7 +85,7 @@ impl Writer {
         }
     }
 
-    /// Err — если формат не представляет значение (JSON: NaN/Infinity).
+    /// Err — when the format cannot represent the value (JSON: NaN/Infinity).
     #[inline]
     pub(crate) fn write_f64(&mut self, v: f64) -> Result<(), &'static str> {
         match self {
@@ -128,7 +128,7 @@ impl Writer {
         }
     }
 
-    /// Вызывать перед КАЖДЫМ элементом массива (JSON: запятые).
+    /// Call before EACH array element (JSON: commas).
     #[inline]
     pub(crate) fn array_item(&mut self) {
         match self {

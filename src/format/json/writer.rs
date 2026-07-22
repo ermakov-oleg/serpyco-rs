@@ -1,10 +1,9 @@
-/// Потоковый JSON-writer: пишет в Vec<u8>, сам расставляет запятые.
-/// Контракт вызовов: map_key перед каждым значением в map,
-/// array_item перед каждым элементом массива.
+/// Streaming JSON writer: writes into Vec<u8> and manages commas itself.
+/// Call contract: map_key before each map value, array_item before each array element.
 #[derive(Debug)]
 pub(crate) struct JsonWriter {
     buf: Vec<u8>,
-    /// true = в текущем контейнере уже есть элемент (нужна запятая).
+    /// true = the current container already has an element (comma needed).
     has_item: Vec<bool>,
 }
 
@@ -16,6 +15,7 @@ impl JsonWriter {
         }
     }
 
+    #[inline]
     pub(crate) fn as_bytes(&self) -> &[u8] {
         &self.buf
     }
@@ -69,7 +69,7 @@ impl JsonWriter {
         self.buf.push(b'"');
     }
 
-    /// Экранирование: ", \, control (<0x20). Не-ASCII пишем как есть (UTF-8).
+    /// Escaping: ", \, control (<0x20). Non-ASCII is written as-is (UTF-8).
     fn escape_into(&mut self, v: &str) {
         let bytes = v.as_bytes();
         let mut start = 0;
@@ -82,7 +82,7 @@ impl JsonWriter {
                 b'\t' => Some(b"\\t"),
                 0x08 => Some(b"\\b"),
                 0x0C => Some(b"\\f"),
-                0x00..=0x1F => None, // \u00XX, ниже
+                0x00..=0x1F => None, // \u00XX below
                 _ => continue,
             };
             self.buf.extend_from_slice(&bytes[start..i]);
