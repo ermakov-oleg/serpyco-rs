@@ -2014,34 +2014,21 @@ impl Encoder for UnionEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        match parser.peek()? {
-            // Primitives: materialization is cheap; reuse the object-path variant
-            // loop for identical errors. parse_any fully consumes the value, so the
-            // main cursor stays correct.
-            Kind::Null | Kind::Bool | Kind::Num | Kind::Str => {
-                let value = parse_any(py, parser, ctx)?;
-                self.load(&value, instance_path, ctx)
-            }
-            // Containers: capture the raw span, try each variant on a fresh
-            // sub-parser. take_raw_value advances the main parser past the whole
-            // value, so a variant that partially consumes then fails can't corrupt
-            // the main cursor (each attempt re-parses the isolated span).
-            Kind::Array | Kind::Map => {
-                let span = parser.take_raw_value()?;
-                for encoder in &self.encoders {
-                    let mut sub = parser.sub_parser(span);
-                    match encoder.load_format(py, &mut sub, instance_path, ctx) {
-                        Ok(v) => return Ok(v),
-                        Err(SerdeError::Schema(_)) => continue,
-                        Err(e @ SerdeError::Py(_)) => return Err(e),
-                    }
-                }
-                // All variants rejected: same Schema error as the object path.
-                let mut sub = parser.sub_parser(span);
-                let value = parse_any(py, &mut sub, ctx)?;
-                Err(invalid_type_err(&self.repr, &value, instance_path))
+        // One mechanism for every kind: capture the raw span, try each member on a
+        // fresh sub-parser. A member that partially consumes then fails cannot
+        // corrupt the main cursor (take_raw_value already advanced it past the value).
+        let span = parser.take_raw_value()?;
+        for encoder in &self.encoders {
+            let mut sub = parser.sub_parser(span);
+            match encoder.load_format(py, &mut sub, instance_path, ctx) {
+                Ok(v) => return Ok(v),
+                Err(SerdeError::Schema(_)) => continue,
+                Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }
+        // No member matched: native Schema error, no materialization.
+        let raw = String::from_utf8_lossy(span);
+        Err(wrong_type_err(&self.repr, &raw, instance_path))
     }
 }
 
