@@ -732,6 +732,10 @@ pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,
     pub(crate) value_encoder: Box<TEncoder>,
     pub(crate) omit_none: bool,
+    /// True when the key type is a plain `str` (no min/max length, no custom
+    /// encoder): `key_encoder.load` would just re-validate and clone the same
+    /// string, so the streaming load path uses the parsed key directly.
+    pub(crate) key_is_plain_str: bool,
 }
 
 impl Encoder for DictionaryEncoder {
@@ -826,18 +830,32 @@ impl Encoder for DictionaryEncoder {
             return self.load(&value, instance_path, ctx);
         }
         let result_dict = PyDict::new(py);
-        // Keys borrow from the parser buffer, so copy each one out before the
-        // next `load_format` call can move the cursor and invalidate it.
-        let mut key = parser.enter_map_known()?.map(str::to_owned);
-        while let Some(k) = key {
-            let item_path = instance_path.push(k.as_str());
-            let py_key_raw = PyString::new(py, &k).into_any();
-            let py_key = self.key_encoder.load(&py_key_raw, &item_path, ctx)?;
+        // The key `&str` borrows the parser buffer. Materialize it into a
+        // `Bound<PyString>` immediately (PyString::new copies the bytes), which
+        // ends the borrow so the parser is free for the value's `load_format`.
+        // The owned PyString then serves both the instance_path (as a
+        // `PropertyValue` chunk — no `String` alloc) and the dict insert.
+        let mut key_opt = parser.enter_map_known()?;
+        while let Some(k) = key_opt {
+            let py_key = PyString::new(py, k);
+            let key_any = py_key.as_any();
+            let item_path = instance_path.push(key_any);
+            // Plain-str keys skip `key_encoder.load`: it would only re-check the
+            // (absent) length bounds and clone the same string we already hold.
+            // `validated_key` keeps the key object alive past the dict insert in
+            // the non-plain case (the fast case uses `py_key`, alive anyway).
+            let validated_key;
+            let key_ptr = if self.key_is_plain_str {
+                key_any.as_ptr()
+            } else {
+                validated_key = self.key_encoder.load(key_any, &item_path, ctx)?;
+                validated_key.as_ptr()
+            };
             let py_value = self
                 .value_encoder
                 .load_format(py, parser, &item_path, ctx)?;
-            py_dict_set_item(&result_dict, py_key.as_ptr(), py_value)?;
-            key = parser.next_key()?.map(str::to_owned);
+            py_dict_set_item(&result_dict, key_ptr, py_value)?;
+            key_opt = parser.next_key()?;
         }
         Ok(result_dict.into_any())
     }

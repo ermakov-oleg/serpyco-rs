@@ -304,6 +304,17 @@ pub fn get_encoder(
             let key_type = get_object_type(type_info.key_type.bind(py))?;
             let value_type = get_object_type(type_info.value_type.bind(py))?;
 
+            // A plain `str` key (no length bounds, no custom encoder) lets the
+            // streaming load path use the parsed key directly, skipping a
+            // redundant re-validate + clone per key.
+            let key_is_plain_str = matches!(
+                &key_type,
+                Type::String(string_info, base)
+                    if string_info.min_length.is_none()
+                        && string_info.max_length.is_none()
+                        && base.custom_encoder.is_none()
+            );
+
             let key_encoder = get_encoder(py, key_type, encoder_state, naive_datetime_to_utc)?;
             let value_encoder = get_encoder(py, value_type, encoder_state, naive_datetime_to_utc)?;
 
@@ -311,6 +322,7 @@ pub fn get_encoder(
                 key_encoder,
                 value_encoder,
                 omit_none: type_info.omit_none,
+                key_is_plain_str,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
