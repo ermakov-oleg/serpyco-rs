@@ -36,6 +36,7 @@ dev = [
     "coverage[toml]",
     "attrs",
     "maturin>=1,<2",
+    "orjson",
     "pytz",
     "python-dateutil",
     "multidict",

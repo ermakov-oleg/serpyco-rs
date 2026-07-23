@@ -7,6 +7,8 @@ use crate::format::Kind;
 use crate::serde_error::SerdeError;
 
 /// Integer from the stream: JSON allows arbitrary-length numbers.
+/// Consumed by direct-path scalar encoders in later tasks.
+#[allow(dead_code)]
 pub(crate) enum ParsedInt {
     I64(i64),
     Big(BigInt),
@@ -23,6 +25,8 @@ pub(crate) enum ParsedInt {
 #[derive(Debug)]
 pub(crate) struct JsonParser<'j> {
     jiter: Jiter<'j>,
+    // Backing buffer for `take_raw_value` (union re-parse), wired up in later tasks.
+    #[allow(dead_code)]
     data: &'j [u8],
 }
 
@@ -62,6 +66,7 @@ impl<'j> JsonParser<'j> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_int(&mut self) -> Result<ParsedInt, SerdeError> {
         let peek = self.jiter.peek().map_err(err)?;
         match self.jiter.known_int(peek).map_err(err)? {
@@ -71,6 +76,7 @@ impl<'j> JsonParser<'j> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_f64(&mut self) -> Result<f64, SerdeError> {
         let peek = self.jiter.peek().map_err(err)?;
         self.jiter.known_float(peek).map_err(err)
@@ -117,12 +123,14 @@ impl<'j> JsonParser<'j> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn skip_value(&mut self) -> Result<(), SerdeError> {
         self.jiter.next_skip().map_err(err)
     }
 
     /// Skip the whole value and return its raw slice (union re-parse).
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_raw_value(&mut self) -> Result<&'j [u8], SerdeError> {
         // peek consumes whitespace; current_index lands on the value start
         self.jiter.peek().map_err(err)?;

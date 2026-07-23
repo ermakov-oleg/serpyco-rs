@@ -21,6 +21,8 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
+    // Used by direct-path encoders in later tasks for type-mismatch messages.
+    #[allow(dead_code)]
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Kind::Null => "null",
@@ -165,6 +167,7 @@ impl<'j> Parser<'j> {
     }
 
     /// Sub-parser of the same format over a slice (union/discriminator re-parse).
+    #[allow(dead_code)]
     pub(crate) fn sub_parser(&self, data: &'j [u8]) -> Parser<'j> {
         match self {
             Parser::Json(_) => Parser::Json(JsonParser::new(data)),
@@ -193,6 +196,7 @@ impl<'j> Parser<'j> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_int(&mut self) -> Result<ParsedInt, SerdeError> {
         match self {
             Parser::Json(p) => p.take_int(),
@@ -200,6 +204,7 @@ impl<'j> Parser<'j> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_f64(&mut self) -> Result<f64, SerdeError> {
         match self {
             Parser::Json(p) => p.take_f64(),
@@ -254,6 +259,7 @@ impl<'j> Parser<'j> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn skip_value(&mut self) -> Result<(), SerdeError> {
         match self {
             Parser::Json(p) => p.skip_value(),
@@ -262,6 +268,7 @@ impl<'j> Parser<'j> {
 
     /// Skip the whole value and return its raw slice (union re-parse).
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn take_raw_value(&mut self) -> Result<&'j [u8], SerdeError> {
         match self {
             Parser::Json(p) => p.take_raw_value(),

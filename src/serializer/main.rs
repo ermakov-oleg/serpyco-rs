@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
+use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::{PyKeyError, PyRuntimeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyMapping, PyString};
+use pyo3::types::{PyByteArray, PyBytes, PyDict, PyList, PyMapping, PyMemoryView, PyString};
 use pyo3::{intern, PyAny, PyResult};
 
+use crate::format::{Parser, Writer};
 use crate::python::{get_object_type, BaseTypeInfo, EntityFieldInfo, Type};
 use crate::serde_error::SerdeError;
 use crate::serializer::encoders::{
@@ -74,6 +76,54 @@ impl Serializer {
     }
 
     #[inline]
+    pub fn dump_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        value: &Bound<'py, PyAny>,
+        format: u8,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let ctx = Context::new(false, self.max_recursion_depth);
+        let mut writer = Writer::new(format)?;
+        self.encoder
+            .dump_format(value, &mut writer, &ctx)
+            .map_err(SerdeError::into_py_err)?;
+        Ok(PyBytes::new(py, writer.as_bytes()))
+    }
+
+    #[inline]
+    pub fn load_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        data: &Bound<'py, PyAny>,
+        format: u8,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let buf = InputBuffer::extract(data)?;
+        let mut parser = Parser::new(format, buf.as_slice())?;
+        let instance_path = InstancePath::new();
+        let ctx = Context::new(false, self.max_recursion_depth);
+        match self
+            .encoder
+            .load_format(py, &mut parser, &instance_path, &ctx)
+        {
+            Ok(value) => {
+                // Well-formed value: the stream must have nothing left over.
+                parser.finish().map_err(SerdeError::into_py_err)?;
+                Ok(value)
+            }
+            // A raw Python error (parser DecodeError, KeyboardInterrupt, ...)
+            // is the primary failure; return it untouched.
+            Err(err @ SerdeError::Py(_)) => Err(err.into_py_err()),
+            // The value parsed structurally but failed validation. If the stream
+            // also carries trailing garbage the input is malformed JSON, so that
+            // decode error takes priority over the schema error.
+            Err(schema_err) => {
+                parser.finish().map_err(SerdeError::into_py_err)?;
+                Err(schema_err.into_py_err())
+            }
+        }
+    }
+
+    #[inline]
     pub fn load_query_params<'py>(
         &'py self,
         data: &Bound<'py, PyAny>,
@@ -128,6 +178,41 @@ impl Serializer {
         encoder
             .load(&new_data, &instance_path, &ctx)
             .map_err(SerdeError::into_py_err)
+    }
+}
+
+/// load_bytes input: bytes/str borrowed without copy; bytearray/memoryview copied
+/// (safety: the buffer could mutate during parsing).
+enum InputBuffer<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Vec<u8>),
+}
+
+impl<'a> InputBuffer<'a> {
+    fn extract(data: &'a Bound<'a, PyAny>) -> PyResult<Self> {
+        if let Ok(b) = data.cast::<PyBytes>() {
+            return Ok(InputBuffer::Borrowed(b.as_bytes()));
+        }
+        if let Ok(s) = data.cast::<PyString>() {
+            return Ok(InputBuffer::Borrowed(s.to_str()?.as_bytes()));
+        }
+        if let Ok(b) = data.cast::<PyByteArray>() {
+            return Ok(InputBuffer::Owned(b.to_vec()));
+        }
+        if data.cast::<PyMemoryView>().is_ok() {
+            let buffer: PyBuffer<u8> = PyBuffer::get(data)?;
+            return Ok(InputBuffer::Owned(buffer.to_vec(data.py())?));
+        }
+        Err(PyRuntimeError::new_err(
+            "expected bytes, bytearray, memoryview or str",
+        ))
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            InputBuffer::Borrowed(s) => s,
+            InputBuffer::Owned(v) => v,
+        }
     }
 }
 

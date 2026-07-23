@@ -1,8 +1,8 @@
 import abc
 from collections.abc import Callable
-from typing import Annotated, Any, Generic, Protocol, TypeVar, cast, overload
+from typing import Annotated, Any, Final, Generic, Protocol, TypeVar, cast, overload
 
-from typing_extensions import TypeForm
+from typing_extensions import TypeForm, TypeVar as _TypeVarExt
 
 from ._custom_types import CustomType
 from ._describe import describe_type
@@ -32,7 +32,27 @@ class _MultiMapping(Protocol[_T, _D]):
     def getall(self, key: str, default: _D = ...) -> list[_T] | _D: ...
 
 
-class Serializer(Generic[_T]):
+class Codec:
+    """Marker for a byte-oriented serialization format."""
+
+    _format_id: int
+    _name: str
+
+    def __repr__(self) -> str:
+        return f'<Codec {self._name}>'
+
+
+class Json(Codec):
+    _format_id = 0
+    _name = 'json'
+
+
+JSON: Final[Json] = Json()
+
+_CodecT = _TypeVarExt('_CodecT', bound='Codec | None', default=None)
+
+
+class Serializer(Generic[_T, _CodecT]):
     _type_info: BaseType
 
     def __init__(
@@ -44,6 +64,7 @@ class Serializer(Generic[_T]):
         force_default_for_optional: bool = False,
         naive_datetime_to_utc: bool = False,
         custom_type_resolver: Callable[[Any], CustomType[Any, Any] | None] | None = None,
+        codec: _CodecT = None,  # type: ignore[assignment]
         max_recursion_depth: int = 1000,
     ) -> None:
         """
@@ -57,6 +78,9 @@ class Serializer(Generic[_T]):
         :param custom_type_resolver: An optional callable that allows users to add support for their own types.
             This parameter should be a function that takes a type as input and returns an instance of CustomType
             if the user-defined type is supported, or None otherwise.
+        :param codec: An optional byte-oriented format (e.g. `JSON`) that binds this serializer to
+            `dump`/`load` directly to/from bytes. When set, `dump` returns `bytes` and `load` accepts
+            `bytes`/`bytearray`/`memoryview`/`str`. A per-call `codec=` argument overrides this default.
         :param max_recursion_depth: Maximum number of nested encoder calls before `dump`/`load` raise
             `RecursionError`. Guards against stack overflow on cyclic graphs and pathologically deep input.
             Lower this on platforms with a small thread stack (e.g. Windows defaults to ~1 MiB); raise it
@@ -70,21 +94,46 @@ class Serializer(Generic[_T]):
             t = cast(TypeForm[_T], Annotated[t, ForceDefaultForOptional])
         self._type_info = describe_type(t, custom_type_resolver=custom_type_resolver)
         self._schema = get_json_schema(self._type_info)
+        self._codec = codec
         self._encoder: _Serializer[_T] = _Serializer(self._type_info, naive_datetime_to_utc, max_recursion_depth)
 
-    def dump(self, value: _T) -> Any:
-        """Serialize the given value to a JSON-serializable object.
+    @overload
+    def dump(self: 'Serializer[_T, None]', value: _T, *, codec: None = None) -> Any: ...
+    @overload
+    def dump(self: 'Serializer[_T, None]', value: _T, *, codec: Codec) -> bytes: ...
+    @overload
+    def dump(self, value: _T, *, codec: 'Codec | None' = None) -> bytes: ...
+
+    def dump(self, value: _T, *, codec: 'Codec | None' = None) -> Any:
+        """Serialize the value: to a JSON-serializable object, or, when a codec
+        is bound (constructor or argument), directly to bytes.
 
         :param value: The value to serialize.
+        :param codec: Optional per-call format override (e.g. `JSON`).
         """
-        return self._encoder.dump(value)
+        active = codec if codec is not None else self._codec
+        if active is None:
+            return self._encoder.dump(value)
+        return self._encoder.dump_bytes(value, active._format_id)
 
-    def load(self, data: Any) -> _T:
-        """Deserialize the given JSON-serializable object to the target type.
+    @overload
+    def load(self: 'Serializer[_T, None]', data: Any, *, codec: None = None) -> _T: ...
+    @overload
+    def load(self: 'Serializer[_T, None]', data: 'bytes | bytearray | memoryview | str', *, codec: Codec) -> _T: ...
+    @overload
+    def load(self, data: 'bytes | bytearray | memoryview | str', *, codec: 'Codec | None' = None) -> _T: ...
+
+    def load(self, data: Any, *, codec: 'Codec | None' = None) -> _T:
+        """Deserialize: from a JSON-like object, or, when a codec is bound
+        (constructor or argument), directly from bytes.
 
         :param data: The data to deserialize.
+        :param codec: Optional per-call format override (e.g. `JSON`).
         """
-        return self._encoder.load(data)
+        active = codec if codec is not None else self._codec
+        if active is None:
+            return self._encoder.load(data)
+        return self._encoder.load_bytes(data, active._format_id)
 
     def load_query_params(self, data: _MultiMapping[Any, Any]) -> _T:
         """Deserialize the given query parameters to the target type.

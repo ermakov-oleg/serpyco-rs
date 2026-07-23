@@ -15,6 +15,8 @@ use pyo3::{prelude::*, IntoPyObjectExt};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
+use crate::format::bridge::{parse_any, write_any};
+use crate::format::{Kind, Parser, Writer};
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_tuple, dump_date,
     dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
@@ -39,6 +41,30 @@ pub(crate) trait Encoder: DynClone + Debug {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>>;
+
+    /// Streaming serialization to a format. Default goes through the generic
+    /// bridge: identical semantics to dump(); direct impls are an optimization.
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        let dumped = self.dump(value, ctx)?;
+        write_any(&dumped, writer, ctx)
+    }
+
+    /// Streaming deserialization from a format. Default goes through the bridge.
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
+    }
 
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         None
@@ -160,6 +186,29 @@ impl Encoder for IntEncoder {
             }
         }
         invalid_type!("integer", value, instance_path)
+    }
+
+    // The default bridge would hand a materialized Python int to `load`, whose
+    // i64 bounds-check overflows on integers outside the i64 range. Accept an
+    // unbounded big integer as-is (JSON has arbitrary-precision numbers);
+    // everything else delegates to `load` for full parity with the object path.
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        let value = parse_any(py, parser, ctx)?;
+        if self.type_info.min.is_none()
+            && self.type_info.max.is_none()
+            && value
+                .cast_exact::<PyInt>()
+                .is_ok_and(|i| i.extract::<i64>().is_err())
+        {
+            return Ok(value);
+        }
+        self.load(&value, instance_path, ctx)
     }
 }
 
@@ -329,6 +378,20 @@ impl Encoder for BytesEncoder {
         } else {
             invalid_type!("bytes", value, instance_path)
         }
+    }
+
+    // JSON has no bytes; give a clear error instead of the generic bridge
+    // "not serializable" message. load_format uses the default: parse_any
+    // yields a non-bytes value and `load` returns the same "bytes" error.
+    fn dump_format(
+        &self,
+        _value: &Bound<'_, PyAny>,
+        _writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        Err(SerdeError::Py(ValidationError::new_err(
+            "bytes values are not supported by this format".to_string(),
+        )))
     }
 }
 
@@ -805,6 +868,37 @@ impl Encoder for OptionalEncoder {
         }
     }
 
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        if value.is_none() {
+            writer.write_null();
+            Ok(())
+        } else {
+            self.encoder.dump_format(value, writer, ctx)
+        }
+    }
+
+    #[inline]
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Null {
+            parser.take_null()?;
+            Ok(py.None().into_bound(py))
+        } else {
+            self.encoder.load_format(py, parser, instance_path, ctx)
+        }
+    }
+
     fn is_sequence(&self) -> bool {
         self.encoder.is_sequence()
     }
@@ -1121,6 +1215,39 @@ impl Encoder for LazyEncoder {
             ))),
         }
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        let _guard = ctx.enter_depth()?;
+        match self.inner.get() {
+            Some(encoder) => encoder.dump_format(value, writer, ctx),
+            None => Err(SerdeError::Py(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            ))),
+        }
+    }
+
+    #[inline]
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        let _guard = ctx.enter_depth()?;
+        match self.inner.get() {
+            Some(encoder) => encoder.load_format(py, parser, instance_path, ctx),
+            None => Err(SerdeError::Py(PyRuntimeError::new_err(
+                "[RUST] Invalid recursive encoder".to_string(),
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1155,6 +1282,40 @@ impl Encoder for CustomEncoder {
                 .call1((value,))
                 .map_err(|err| SerdeError::from_user_callback(err, instance_path)),
             None => self.inner.load(value, instance_path, ctx),
+        }
+    }
+
+    // With a user callback we must materialize (run the callback via dump/load,
+    // then bridge the plain object); without one, delegate straight to inner's
+    // format methods to keep any direct optimization intact.
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        match self.dump {
+            Some(_) => {
+                let dumped = self.dump(value, ctx)?;
+                write_any(&dumped, writer, ctx)
+            }
+            None => self.inner.dump_format(value, writer, ctx),
+        }
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        match self.load {
+            Some(_) => {
+                let value = parse_any(py, parser, ctx)?;
+                self.load(&value, instance_path, ctx)
+            }
+            None => self.inner.load_format(py, parser, instance_path, ctx),
         }
     }
 
