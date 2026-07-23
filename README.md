@@ -62,10 +62,10 @@ Round-tripping the [benchmark model](bench/compare/libs/base.py) straight to/fro
 
 | Direction | serpyco-rs codec | serpyco-rs + orjson | msgspec |
 |-----------|------------------|---------------------|---------|
-| dump (object → bytes) | **0.029 ms** | 0.062 ms | 0.013 ms |
-| load (bytes → object) | **0.088 ms** | 0.091 ms | 0.044 ms |
+| dump (object → bytes) | **0.028 ms** | 0.059 ms | 0.013 ms |
+| load (bytes → object) | **0.069 ms** | 0.088 ms | 0.042 ms |
 
-Both directions are faster than going through `orjson` and an intermediate `dict`: encoding ~2.1x (no `dict` is built), decoding streams straight into typed objects without materializing a `dict` first. `msgspec`'s native bytes path is shown for reference.
+Both directions are faster than going through `orjson` and an intermediate `dict`: encoding ~2.1x (no `dict` is built) and decoding ~1.3x (streams straight into typed objects without materializing a `dict` first). `msgspec`'s native bytes path is shown for reference.
 
 ## Installation
 Use pip to install:
