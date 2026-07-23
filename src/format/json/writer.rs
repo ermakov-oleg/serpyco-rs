@@ -52,6 +52,14 @@ impl JsonWriter {
         self.buf.extend_from_slice(v.as_bytes());
     }
 
+    /// Append pre-formatted bytes that represent exactly one complete JSON value.
+    /// For JSON a value never touches the comma/has_item state, so this is a plain
+    /// buffer append.
+    #[inline]
+    pub(crate) fn write_raw_value(&mut self, raw: &[u8]) {
+        self.buf.extend_from_slice(raw);
+    }
+
     #[inline]
     pub(crate) fn write_f64(&mut self, v: f64) -> Result<(), &'static str> {
         if !v.is_finite() {

@@ -455,3 +455,34 @@ def test_discriminated_union_codec():
         assert [(e.message, e.instance_path) for e in c.value.errors] == [
             (e.message, e.instance_path) for e in d.value.errors
         ]
+
+
+def test_untagged_union_dump_entity():
+    from dataclasses import dataclass
+    import orjson
+    @dataclass
+    class P:
+        name: str
+        score: float
+    # entity is the SECOND member, after a scalar whose dump doesn't validate
+    s = Serializer(int | P, codec=JSON)
+    data = s.dump(P(name='n', score=1.5))
+    assert orjson.loads(data) == {'name': 'n', 'score': 1.5}
+    assert s.load(data) == P(name='n', score=1.5)
+    # scalar member still dumps correctly
+    assert orjson.loads(s.dump(7)) == 7
+    assert s.load(s.dump(7)) == 7
+
+
+def test_untagged_union_dump_roundtrip_both_orders():
+    from dataclasses import dataclass
+    import orjson
+    @dataclass
+    class A:
+        a: int
+    @dataclass
+    class B:
+        b: str
+    s = Serializer(A | B, codec=JSON)
+    assert s.load(s.dump(A(a=1))) == A(a=1)
+    assert s.load(s.dump(B(b='x'))) == B(b='x')

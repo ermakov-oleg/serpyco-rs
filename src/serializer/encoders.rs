@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 use dyn_clone::{clone_trait_object, DynClone};
 use nohash_hasher::IntMap;
 use num_bigint::BigInt;
-use pyo3::exceptions::PyRuntimeError;
+use pyo3::exceptions::{PyAttributeError, PyRuntimeError};
 use pyo3::types::{
     PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PySet,
     PyString, PyTime, PyType,
@@ -1067,7 +1067,19 @@ impl Encoder for EntityEncoder {
         let _guard = ctx.enter_depth()?;
         writer.begin_map();
         for field in &self.fields {
-            let field_val = value.getattr(&field.name)?;
+            // A missing attribute means the value isn't an instance of this
+            // entity's shape. Surface it as a Schema type-mismatch (like the
+            // scalar/container dump_format guards) so an enclosing untagged
+            // union skips to the next member, instead of a raw AttributeError
+            // that would abort union probing.
+            let field_val = match value.getattr(&field.name) {
+                Ok(v) => v,
+                Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
+                    let name = self.cls.bind(value.py()).name()?;
+                    return Err(invalid_type_dump_err(&name.to_string(), value));
+                }
+                Err(e) => return Err(e.into()),
+            };
             // Mirror the dict-path write condition
             // (`field.required || !self.omit_none || !dump_result.is_none()`):
             // only optional fields under omit_none need the dumped value first
@@ -1719,8 +1731,33 @@ impl Encoder for UnionEncoder {
         Err(invalid_type_err(&self.repr, value, instance_path))
     }
 
-    // dump_format stays on the bridge default: it materializes via self.dump
-    // (which already backtracks over each variant) and writes the result.
+    // dump_format probes each member's *validating* dump_format into a throwaway
+    // writer of the same format; the first that succeeds is spliced into the real
+    // writer as one complete value. The bridge default is unusable here: it goes
+    // through self.dump, whose member loop calls each scalar encoder's dump, and
+    // those do NOT type-validate (they clone the value), so `int | Entity` would
+    // "succeed" on the int member and then fail in write_any.
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        for encoder in &self.encoders {
+            // A member that fails mid-write only corrupts its throwaway probe,
+            // never the real writer.
+            let mut probe = writer.new_probe();
+            match encoder.dump_format(value, &mut probe, ctx) {
+                Ok(()) => {
+                    writer.write_raw_value(probe.as_bytes());
+                    return Ok(());
+                }
+                Err(SerdeError::Schema(_)) => continue,
+                Err(e @ SerdeError::Py(_)) => return Err(e),
+            }
+        }
+        Err(invalid_type_dump_err(&self.repr, value))
+    }
 
     fn load_format<'py>(
         &self,

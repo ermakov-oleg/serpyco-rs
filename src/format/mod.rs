@@ -61,6 +61,25 @@ impl Writer {
         }
     }
 
+    /// Fresh empty writer of the same format variant (union member probing).
+    /// Mirrors `Parser::sub_parser`'s same-format construction.
+    #[inline]
+    pub(crate) fn new_probe(&self) -> Writer {
+        match self {
+            Writer::Json(_) => Writer::Json(JsonWriter::new()),
+        }
+    }
+
+    /// Append pre-formatted bytes that MUST be a single well-formed value of this
+    /// format (used for union member probing: a member's bytes produced into a
+    /// probe writer are spliced into the real writer as one complete value).
+    #[inline]
+    pub(crate) fn write_raw_value(&mut self, raw: &[u8]) {
+        match self {
+            Writer::Json(w) => w.write_raw_value(raw),
+        }
+    }
+
     #[inline]
     pub(crate) fn write_null(&mut self) {
         match self {
