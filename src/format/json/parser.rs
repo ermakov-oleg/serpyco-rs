@@ -25,8 +25,7 @@ pub(crate) enum ParsedInt {
 #[derive(Debug)]
 pub(crate) struct JsonParser<'j> {
     jiter: Jiter<'j>,
-    // Backing buffer for `take_raw_value` (union re-parse), wired up in later tasks.
-    #[allow(dead_code)]
+    // Backing buffer for `take_raw_value` (union re-parse).
     data: &'j [u8],
 }
 
@@ -123,14 +122,12 @@ impl<'j> JsonParser<'j> {
     }
 
     #[inline]
-    #[allow(dead_code)]
     pub(crate) fn skip_value(&mut self) -> Result<(), SerdeError> {
         self.jiter.next_skip().map_err(err)
     }
 
     /// Skip the whole value and return its raw slice (union re-parse).
     #[inline]
-    #[allow(dead_code)]
     pub(crate) fn take_raw_value(&mut self) -> Result<&'j [u8], SerdeError> {
         // peek consumes whitespace; current_index lands on the value start
         self.jiter.peek().map_err(err)?;

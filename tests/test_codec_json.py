@@ -1,22 +1,24 @@
-import pytest
-
-import serpyco_rs
-
-
-def test_decode_error_exported():
-    assert issubclass(serpyco_rs.DecodeError, ValueError)
-
-
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Optional
+from ipaddress import IPv4Address
+from typing import Annotated, Any, Generic, Literal, Optional, TypeVar, Union
 
 import orjson
+import pytest
+from typing_extensions import NotRequired, TypedDict
 
-from serpyco_rs import JSON, Serializer
+import serpyco_rs
+from serpyco_rs import JSON, SchemaValidationError, Serializer, ValidationError
+from serpyco_rs._custom_types import CustomType
+from serpyco_rs.metadata import CustomEncoder, Discriminator, Flatten, Max, MaxLength, Min, MinLength
+
+
+def test_decode_error_exported():
+    assert issubclass(serpyco_rs.DecodeError, ValueError)
 
 
 class Color(Enum):
@@ -73,6 +75,83 @@ EVERYTHING = Everything(
 )
 
 
+# --- Models reused by the parity sweeps below ---------------------------------
+
+T = TypeVar('T')
+
+
+@dataclass
+class GenericBox(Generic[T]):
+    value: Optional[T] = None
+    path: Optional[str] = None
+
+
+@dataclass
+class Pair:
+    q: str
+    w: int
+
+
+@dataclass
+class Node:
+    value: str
+    next: Optional['Node'] = None
+
+
+@dataclass
+class Root:
+    head: Node
+
+
+class MovieTD(TypedDict):
+    name: str
+    year: int
+
+
+@dataclass
+class Outer:
+    inner: Inner
+
+
+# A custom-encoded scalar: CustomType needs a custom_type_resolver (a Serializer
+# kwarg), which the parametrized signature cannot pass, so the sweep exercises the
+# custom serialization path through CustomEncoder on a known base type instead.
+# The real CustomType path is covered by test_custom_type_resolver_parity.
+UpperStr = Annotated[str, CustomEncoder(serialize=str.upper, deserialize=str.lower)]
+
+
+# Untagged / discriminated union members (module-level for parametrization).
+@dataclass
+class UP:
+    name: str
+    score: float
+
+
+@dataclass
+class UA:
+    a: int
+
+
+@dataclass
+class UB:
+    b: str
+
+
+@dataclass
+class UCat:
+    kind: Literal['cat']
+    meow: str
+
+
+@dataclass
+class UDog:
+    kind: Literal['dog']
+    bark: str
+
+
+PetT = Annotated[Union[UCat, UDog], Discriminator('kind')]
+
+
 def test_dump_codec_roundtrip():
     s = Serializer(Everything)
     data = s.dump(EVERYTHING, codec=JSON)
@@ -113,8 +192,6 @@ def test_big_int_roundtrip():
 
 
 def test_malformed_json_raises_decode_error():
-    import serpyco_rs
-
     s = Serializer(Inner, codec=JSON)
     for bad in (b'{', b'', b'{"name": "x", "score": }', b'[1,]'):
         with pytest.raises(serpyco_rs.DecodeError):
@@ -129,21 +206,15 @@ def test_trailing_garbage_on_valid_doc_raises_decode_error():
 
 
 def test_schema_invalid_wellformed_raises_schema_error():
-    from serpyco_rs import SchemaValidationError
-
     s = Serializer(Inner, codec=JSON)
     with pytest.raises(SchemaValidationError):
         s.load(b'{"a": 1}')
 
 
 def test_schema_error_has_same_instance_path():
-    from serpyco_rs import SchemaValidationError
-
     s = Serializer(Everything)
     good = s.dump(EVERYTHING)
     good['nested'] = {'name': 'x', 'score': 'not a float'}
-    import pytest
-
     with pytest.raises(SchemaValidationError) as dict_err:
         s.load(good)
     with pytest.raises(SchemaValidationError) as codec_err:
@@ -154,31 +225,20 @@ def test_schema_error_has_same_instance_path():
 
 
 def test_bytes_field_json_dump_raises():
-    from serpyco_rs import ValidationError
-    import pytest
-
     s = Serializer(bytes, codec=JSON)
     with pytest.raises(ValidationError):
         s.dump(b'raw')
 
 
 def test_nan_raises():
-    from serpyco_rs import ValidationError
-    import pytest
-
     s = Serializer(float, codec=JSON)
     with pytest.raises(ValidationError):
         s.dump(float('nan'))
 
 
 def test_scalar_edges():
-    import pytest
-    from datetime import datetime, timezone
-    from decimal import Decimal
-
     s_int = Serializer(int, codec=JSON)
     assert s_int.load(b'-9223372036854775808') == -(2**63)
-    from serpyco_rs import SchemaValidationError
 
     with pytest.raises(SchemaValidationError):
         s_int.load(b'1.5')  # float is not a valid int -> schema error, NOT DecodeError
@@ -220,8 +280,6 @@ def test_containers_deep():
 
 
 def test_array_element_error_path():
-    from serpyco_rs import SchemaValidationError
-
     s = Serializer(list[int], codec=JSON)
     with pytest.raises(SchemaValidationError) as e:
         s.load(b'[1, "bad", 3]')
@@ -235,8 +293,6 @@ def test_array_element_error_path():
 
 
 def test_recursion_depth_codec():
-    from typing import Any
-
     s = Serializer(Any, codec=JSON)
     deep = b'[' * 2000 + b'1' + b']' * 2000
     with pytest.raises(RecursionError):
@@ -249,8 +305,6 @@ def test_entity_unknown_keys_skipped():
 
 
 def test_entity_missing_required_error_parity():
-    from serpyco_rs import SchemaValidationError
-
     s = Serializer(Inner)
     sc = Serializer(Inner, codec=JSON)
     bad = {'name': 'x'}  # missing score
@@ -258,12 +312,12 @@ def test_entity_missing_required_error_parity():
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
         sc.load(orjson.dumps(bad))
-    assert [(e.message, e.instance_path) for e in c.value.errors] == [(e.message, e.instance_path) for e in d.value.errors]
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [
+        (e.message, e.instance_path) for e in d.value.errors
+    ]
 
 
 def test_entity_field_error_path_parity():
-    from serpyco_rs import SchemaValidationError
-
     s = Serializer(Everything)
     sc = Serializer(Everything, codec=JSON)
     bad = s.dump(EVERYTHING)
@@ -272,7 +326,9 @@ def test_entity_field_error_path_parity():
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
         sc.load(orjson.dumps(bad))
-    assert [(e.message, e.instance_path) for e in c.value.errors] == [(e.message, e.instance_path) for e in d.value.errors]
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [
+        (e.message, e.instance_path) for e in d.value.errors
+    ]
 
 
 def test_entity_defaults_applied():
@@ -306,8 +362,6 @@ def test_omit_none_codec():
 
 
 def test_typeddict_codec_roundtrip():
-    from typing_extensions import TypedDict
-
     class Movie(TypedDict):
         name: str
         year: int
@@ -319,8 +373,6 @@ def test_typeddict_codec_roundtrip():
 
 
 def test_typeddict_codec_matches_dict_path():
-    from typing_extensions import TypedDict
-
     class Movie(TypedDict):
         name: str
         year: int
@@ -336,8 +388,6 @@ def test_typeddict_codec_matches_dict_path():
 
 
 def test_typeddict_partial_codec_parity():
-    from typing_extensions import NotRequired, TypedDict
-
     class Movie(TypedDict):
         name: str
         year: NotRequired[int]
@@ -350,10 +400,6 @@ def test_typeddict_partial_codec_parity():
 
 
 def test_flatten_parity_codec():
-    from typing import Annotated
-
-    from serpyco_rs.metadata import Flatten
-
     @dataclass
     class Address:
         street: str
@@ -404,8 +450,6 @@ def test_union_codec():
 
 
 def test_union_all_fail_parity():
-    import re
-
     def norm(errs):
         # serpyco appends a disambiguation counter to the union's type name on the
         # second Serializer built for the same type (repr "int | str" vs "int | str1").
@@ -425,10 +469,6 @@ def test_union_all_fail_parity():
 
 
 def test_discriminated_union_codec():
-    from typing import Annotated, Literal, Union
-
-    from serpyco_rs.metadata import Discriminator
-
     @dataclass
     class Cat:
         kind: Literal['cat']
@@ -458,12 +498,11 @@ def test_discriminated_union_codec():
 
 
 def test_untagged_union_dump_entity():
-    from dataclasses import dataclass
-    import orjson
     @dataclass
     class P:
         name: str
         score: float
+
     # entity is the SECOND member, after a scalar whose dump doesn't validate
     s = Serializer(int | P, codec=JSON)
     data = s.dump(P(name='n', score=1.5))
@@ -475,14 +514,200 @@ def test_untagged_union_dump_entity():
 
 
 def test_untagged_union_dump_roundtrip_both_orders():
-    from dataclasses import dataclass
-    import orjson
     @dataclass
     class A:
         a: int
+
     @dataclass
     class B:
         b: str
+
     s = Serializer(A | B, codec=JSON)
     assert s.load(s.dump(A(a=1))) == A(a=1)
     assert s.load(s.dump(B(b='x'))) == B(b='x')
+
+
+# --- Task 10: parity sweeps ---------------------------------------------------
+#
+# Prove the JSON codec path matches the dict path across the type system. Each
+# case is dumped through both paths (comparing the decoded codec JSON against the
+# dict-path dump) and round-tripped through the codec. KNOWN INTENTIONAL
+# DIVERGENCES are deliberately excluded here (see ROUNDTRIP_ONLY_CASES for unions
+# and the comments below): big int in a PLAIN int field, untagged-union dump, and
+# dump-side type coercion.
+
+PARITY_CASES: list[tuple[Any, Any]] = [
+    # scalars
+    (int, 42),
+    (int, -(2**63)),  # i64 lower boundary
+    (Any, 2**100),  # big int is fine inside Any (not a plain int field)
+    (float, 1.5),
+    (float, 3.14),  # ryu shortest repr must round-trip bit-identically
+    (str, 'hello "world"\n'),
+    (str, 'cyrillic ш and control \x1f'),
+    (bool, True),
+    (bool, False),
+    (Optional[int], None),
+    (Optional[int], 7),
+    (Decimal, Decimal('1.100')),  # precision preserved via raw number text
+    (uuid.UUID, uuid.UUID('12345678-1234-5678-1234-567812345678')),
+    (date, date(2026, 7, 23)),
+    (time, time(12, 30, 0)),
+    (datetime, datetime(2026, 7, 23, 12, 30, 0, tzinfo=timezone.utc)),
+    (Color, Color.RED),  # enum by value
+    (Color, Color.GREEN),
+    (Literal['foo', 'bar'], 'foo'),  # literal
+    # containers
+    (list[int], [1, 2, 3]),
+    (dict[str, int], {'a': 1, 'b': 2}),
+    (tuple[int, str], (1, 'x')),  # tuple -> list on the wire, tuple back
+    (tuple[int, str, float], (1, 'x', 0.5)),
+    (list[dict[str, list[int]]], [{'a': [1, 2]}, {'b': []}]),  # deeply nested
+    (Optional[list[Optional[int]]], [1, None, 2]),  # optional chain
+    (Optional[list[Optional[int]]], None),
+    # dataclasses / generics / recursion / typeddict / custom encoder
+    (Inner, Inner(name='inner', score=0.5)),
+    (Everything, EVERYTHING),  # big nested dataclass
+    (GenericBox[bool], GenericBox(value=True, path='some_path')),  # generic dataclass
+    (GenericBox[Pair], GenericBox(value=Pair(q='q', w=1), path='p')),  # generic w/ nested dc
+    (GenericBox[int], GenericBox(value=1)),
+    (Node, Node(value='1', next=Node(value='2'))),  # recursive
+    (Root, Root(head=Node(value='a', next=None))),
+    (MovieTD, {'name': 'Blade Runner', 'year': 1982}),  # TypedDict
+    (UpperStr, 'abc'),  # custom encoder through both paths
+]
+
+
+# Untagged-union dump is quirky by design (the dict path returns the object
+# unchanged and can even raise for A|B), so unions are proven with round-trip
+# parity only, never dump-equality against the dict path.
+ROUNDTRIP_ONLY_CASES: list[tuple[Any, Any]] = [
+    (int | str, 5),
+    (int | str, 'hello'),
+    (int | UP, UP(name='n', score=1.5)),  # entity as the second member
+    (int | UP, 7),
+    (UA | UB, UA(a=1)),
+    (UA | UB, UB(b='x')),
+    (PetT, UCat(kind='cat', meow='m')),  # discriminated union
+    (PetT, UDog(kind='dog', bark='woof')),
+]
+
+
+@pytest.mark.parametrize(('typ', 'value'), PARITY_CASES)
+def test_parity_dump(typ, value):
+    s = Serializer(typ)
+    sc = Serializer(typ, codec=JSON)
+    # Compare the decoded JSON of the codec dump to the dict-path dump.
+    assert orjson.loads(sc.dump(value)) == s.dump(value)
+
+
+@pytest.mark.parametrize(('typ', 'value'), PARITY_CASES)
+def test_parity_roundtrip(typ, value):
+    sc = Serializer(typ, codec=JSON)
+    assert sc.load(sc.dump(value)) == value
+
+
+@pytest.mark.parametrize(('typ', 'value'), ROUNDTRIP_ONLY_CASES)
+def test_parity_roundtrip_only(typ, value):
+    sc = Serializer(typ, codec=JSON)
+    assert sc.load(sc.dump(value)) == value
+
+
+def test_custom_type_resolver_parity():
+    # CustomType needs a custom_type_resolver (a Serializer kwarg), which the
+    # parametrized PARITY_CASES signature cannot supply, so its dump/round-trip
+    # parity is checked directly here.
+    class IPv4Type(CustomType[IPv4Address, str]):
+        def serialize(self, value: IPv4Address) -> str:
+            return str(value)
+
+        def deserialize(self, value: str) -> IPv4Address:
+            return IPv4Address(value)
+
+        def get_json_schema(self):
+            return {'type': 'string', 'format': 'ipv4'}
+
+    def resolver(t: type):
+        return IPv4Type() if t is IPv4Address else None
+
+    @dataclass
+    class Data:
+        ip: IPv4Address
+
+    val = Data(ip=IPv4Address('1.1.1.1'))
+    s = Serializer(Data, custom_type_resolver=resolver)
+    sc = Serializer(Data, custom_type_resolver=resolver, codec=JSON)
+    assert orjson.loads(sc.dump(val)) == s.dump(val)
+    assert sc.load(sc.dump(val)) == val
+
+
+# --- Task 10: error-parity sweep ----------------------------------------------
+#
+# Each case is a Python value that FAILS validation on the dict path; the codec
+# path (fed the orjson-encoded value) must produce the identical (message,
+# instance_path) list. Only SINGLE-invalid-field cases are used so wire-order vs
+# field-order multi-error reporting never matters and exact equality holds.
+# Union all-fail is excluded because it carries a global-naming counter artifact
+# in the message that needs normalization (covered by test_union_all_fail_parity).
+# Big-int-for-plain-int is excluded (a deliberate divergence, not a bug).
+
+ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
+    (int, '1'),  # wrong scalar type
+    (str, 1),
+    (list[int], [2, 3, 'foo']),  # array element error with index path
+    (dict[str, int], {'foo': 1, 'bar': '2'}),  # dict value error with key path
+    (Inner, {'name': 'x'}),  # missing required field
+    (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),  # nested field error path
+    (Annotated[int, Min(10), Max(100)], 1),  # below Min
+    (Annotated[int, Min(10), Max(100)], 101),  # above Max
+    (Annotated[str, MinLength(6), MaxLength(8)], 'hi'),  # below MinLength
+    (Annotated[str, MinLength(6), MaxLength(8)], 'hello world'),  # above MaxLength
+    (Color, 'blue'),  # enum invalid value
+    (Literal['foo', 'bar'], 1),  # literal invalid value
+    (tuple[int, str], [1, 2]),  # tuple element type
+    (tuple[int, str], [1]),  # tuple too short
+    (tuple[int, str], [1, 'x', 3]),  # tuple too long
+]
+
+
+@pytest.mark.parametrize(('typ', 'bad'), ERROR_PARITY_CASES)
+def test_error_parity(typ, bad):
+    s = Serializer(typ)
+    sc = Serializer(typ, codec=JSON)
+    with pytest.raises(SchemaValidationError) as dict_err:
+        s.load(bad)
+    with pytest.raises(SchemaValidationError) as codec_err:
+        sc.load(orjson.dumps(bad))
+    assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
+        (e.message, e.instance_path) for e in dict_err.value.errors
+    ]
+
+
+# --- Task 10: malformed-input (DecodeError) corpus ----------------------------
+#
+# Genuine JSON syntax errors, loaded through a permissive `Any` type so ONLY the
+# syntax (not the schema) can fail. Each must raise DecodeError with an int
+# position.
+
+
+@pytest.mark.parametrize(
+    'bad',
+    [
+        b'',
+        b'{',
+        b'}',
+        b'[1,2',
+        b'"unterminated',
+        b'{"a": 1,}',
+        b'nul',
+        b'1e',
+        b'{"a"}',
+        b'{,}',
+        b'[,]',
+    ],
+)
+def test_decode_error_corpus(bad):
+    s = Serializer(Any, codec=JSON)  # permissive: only JSON syntax can fail
+    with pytest.raises(serpyco_rs.DecodeError) as e:
+        s.load(bad)
+    assert isinstance(e.value.position, int)
