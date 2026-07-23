@@ -113,13 +113,12 @@ impl Serializer {
             // A raw Python error (parser DecodeError, KeyboardInterrupt, ...)
             // is the primary failure; return it untouched.
             Err(err @ SerdeError::Py(_)) => Err(err.into_py_err()),
-            // The value parsed structurally but failed validation. If the stream
-            // also carries trailing garbage the input is malformed JSON, so that
-            // decode error takes priority over the schema error.
-            Err(schema_err) => {
-                parser.finish().map_err(SerdeError::into_py_err)?;
-                Err(schema_err.into_py_err())
-            }
+            // Streaming encoders (Array/Tuple/Dict/Entity/TypedDict) can raise a
+            // schema error mid-structure, leaving the parser cursor mid-document.
+            // Do NOT call finish() here: a SchemaValidationError is more
+            // informative than a spurious DecodeError from an unconsumed tail
+            // and must not be masked by trailing-garbage detection.
+            Err(schema_err) => Err(schema_err.into_py_err()),
         }
     }
 

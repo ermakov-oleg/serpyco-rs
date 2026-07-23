@@ -116,9 +116,24 @@ def test_malformed_json_raises_decode_error():
     import serpyco_rs
 
     s = Serializer(Inner, codec=JSON)
-    for bad in (b'{', b'', b'{"name": "x", "score": }', b'[1,]', b'{"a":1} trailing'):
-        with __import__('pytest').raises(serpyco_rs.DecodeError):
+    for bad in (b'{', b'', b'{"name": "x", "score": }', b'[1,]'):
+        with pytest.raises(serpyco_rs.DecodeError):
             s.load(bad)
+
+
+def test_trailing_garbage_on_valid_doc_raises_decode_error():
+    s = Serializer(Inner, codec=JSON)
+    valid = s.dump(Inner(name='x', score=1.0))
+    with pytest.raises(serpyco_rs.DecodeError):
+        s.load(valid + b' trailing')
+
+
+def test_schema_invalid_wellformed_raises_schema_error():
+    from serpyco_rs import SchemaValidationError
+
+    s = Serializer(Inner, codec=JSON)
+    with pytest.raises(SchemaValidationError):
+        s.load(b'{"a": 1}')
 
 
 def test_schema_error_has_same_instance_path():
