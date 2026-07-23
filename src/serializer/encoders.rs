@@ -1052,6 +1052,31 @@ fn resolve_route(routing: &FxHashMap<String, usize>, key: Option<&str>) -> Route
     }
 }
 
+/// Per-object "field seen" bitset used by the streaming object-load paths: one
+/// bit per field, inline on the stack for the common case (<= 64 fields => one
+/// word) and spilling to the heap only for very wide objects — never the
+/// per-object `Vec<Option<_>>` alloc/free the value would otherwise cost. Ops
+/// are `#[inline(always)]`, so codegen matches open-coded shifts (cachegrind
+/// verified).
+struct SeenSet(SmallVec<[u64; 1]>);
+
+impl SeenSet {
+    #[inline(always)]
+    fn new(field_count: usize) -> Self {
+        SeenSet(smallvec![0u64; field_count.div_ceil(64)])
+    }
+
+    #[inline(always)]
+    fn mark(&mut self, idx: usize) {
+        self.0[idx >> 6] |= 1u64 << (idx & 63);
+    }
+
+    #[inline(always)]
+    fn contains(&self, idx: usize) -> bool {
+        self.0[idx >> 6] & (1u64 << (idx & 63)) != 0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EntityEncoder {
     pub(crate) cls: Py<PyType>,
@@ -1257,7 +1282,7 @@ impl Encoder for EntityEncoder {
             }
             let obj = create_instance(self.cls.bind(py))?;
             let n = self.fields.len();
-            let mut seen: SmallVec<[u64; 1]> = smallvec![0u64; n.div_ceil(64)];
+            let mut seen = SeenSet::new(n);
             let unknowns = PyDict::new(py);
             let mut key = parser.enter_map_known()?;
             while let Some(k) = key {
@@ -1267,7 +1292,7 @@ impl Encoder for EntityEncoder {
                         let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                         let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                         self.set_field(&obj, field, val)?;
-                        seen[idx >> 6] |= 1u64 << (idx & 63);
+                        seen.mark(idx);
                     }
                     None => {
                         // Unknown key -> destined for a flatten field. Materialize
@@ -1282,7 +1307,7 @@ impl Encoder for EntityEncoder {
             for (idx, field) in self.fields.iter().enumerate() {
                 let val = if field.is_flattened {
                     field.load_value(&unknowns, instance_path, ctx, &self.used_keys)?
-                } else if seen[idx >> 6] & (1u64 << (idx & 63)) == 0 {
+                } else if !seen.contains(idx) {
                     field.get_default(py, instance_path)?
                 } else {
                     continue; // already set from the stream
@@ -1304,7 +1329,7 @@ impl Encoder for EntityEncoder {
         // heap only for very wide entities. Defaults then fill unseen fields.
         // Keys resolve to a Copy `Route` while borrowed, so they are never
         // copied to owned Strings.
-        let mut seen: SmallVec<[u64; 1]> = smallvec![0u64; n.div_ceil(64)];
+        let mut seen = SeenSet::new(n);
         let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
         loop {
             match route {
@@ -1314,14 +1339,14 @@ impl Encoder for EntityEncoder {
                     let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                     let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                     self.set_field(&obj, field, val)?;
-                    seen[idx >> 6] |= 1u64 << (idx & 63);
+                    seen.mark(idx);
                 }
                 Route::Skip => parser.skip_value()?,
             }
             route = resolve_route(&self.format_routing, parser.next_key()?);
         }
         for (idx, field) in self.fields.iter().enumerate() {
-            if seen[idx >> 6] & (1u64 << (idx & 63)) == 0 {
+            if !seen.contains(idx) {
                 // Missing field: same default / missing-required error as the
                 // dict-path (get_default pushes dict_key_rs onto the base path).
                 let val = field.get_default(py, instance_path)?;
@@ -1517,7 +1542,7 @@ impl Encoder for TypedDictEncoder {
             }
             let dict = create_py_dict_known_size(py, self.fields.len())?;
             let n = self.fields.len();
-            let mut seen: SmallVec<[u64; 1]> = smallvec![0u64; n.div_ceil(64)];
+            let mut seen = SeenSet::new(n);
             let unknowns = PyDict::new(py);
             let mut key = parser.enter_map_known()?;
             while let Some(k) = key {
@@ -1527,7 +1552,7 @@ impl Encoder for TypedDictEncoder {
                         let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                         let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                         py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-                        seen[idx >> 6] |= 1u64 << (idx & 63);
+                        seen.mark(idx);
                     }
                     None => {
                         // Unknown key -> destined for a flatten field. Materialize
@@ -1542,7 +1567,7 @@ impl Encoder for TypedDictEncoder {
             for (idx, field) in self.fields.iter().enumerate() {
                 let val = if field.is_flattened {
                     field.load_value(&unknowns, instance_path, ctx, &self.used_keys)?
-                } else if seen[idx >> 6] & (1u64 << (idx & 63)) == 0 {
+                } else if !seen.contains(idx) {
                     field.get_default(py, instance_path)?
                 } else {
                     continue; // already inserted from the stream
@@ -1564,7 +1589,7 @@ impl Encoder for TypedDictEncoder {
         // and spills to the heap only for very wide typeddicts. Defaults then
         // fill unseen fields. Keys resolve to a Copy `Route` while borrowed,
         // so they are never copied to owned Strings.
-        let mut seen: SmallVec<[u64; 1]> = smallvec![0u64; n.div_ceil(64)];
+        let mut seen = SeenSet::new(n);
         let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
         loop {
             match route {
@@ -1574,14 +1599,14 @@ impl Encoder for TypedDictEncoder {
                     let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                     let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                     py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-                    seen[idx >> 6] |= 1u64 << (idx & 63);
+                    seen.mark(idx);
                 }
                 Route::Skip => parser.skip_value()?,
             }
             route = resolve_route(&self.format_routing, parser.next_key()?);
         }
         for (idx, field) in self.fields.iter().enumerate() {
-            if seen[idx >> 6] & (1u64 << (idx & 63)) == 0 {
+            if !seen.contains(idx) {
                 // Missing field: same default / missing-required error as the
                 // dict-path (get_default pushes dict_key_rs onto the base path).
                 let val = field.get_default(py, instance_path)?;
