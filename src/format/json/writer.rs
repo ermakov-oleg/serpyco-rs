@@ -60,6 +60,12 @@ impl JsonWriter {
         self.buf.extend_from_slice(raw);
     }
 
+    /// A JSON value is null iff its bytes are exactly `null`.
+    #[inline(always)]
+    pub(crate) fn value_is_null(&self, bytes: &[u8]) -> bool {
+        bytes == b"null"
+    }
+
     #[inline]
     pub(crate) fn write_f64(&mut self, v: f64) -> Result<(), &'static str> {
         if !v.is_finite() {

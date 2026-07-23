@@ -20,21 +20,6 @@ pub(crate) enum Kind {
     Map,
 }
 
-impl Kind {
-    // Used by direct-path encoders in later tasks for type-mismatch messages.
-    #[allow(dead_code)]
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            Kind::Null => "null",
-            Kind::Bool => "boolean",
-            Kind::Num => "number",
-            Kind::Str => "string",
-            Kind::Array => "array",
-            Kind::Map => "object",
-        }
-    }
-}
-
 pub(crate) const FORMAT_JSON: u8 = 0;
 
 /// Enum dispatch instead of dyn: closed set of formats;
@@ -77,6 +62,17 @@ impl Writer {
     pub(crate) fn write_raw_value(&mut self, raw: &[u8]) {
         match self {
             Writer::Json(w) => w.write_raw_value(raw),
+        }
+    }
+
+    /// Whether `bytes` — a single complete value produced by this format's
+    /// writer — encodes null. Lets omit_none decide format-agnostically whether
+    /// a probed value should be skipped, keeping each format's null
+    /// representation inside its own writer.
+    #[inline(always)]
+    pub(crate) fn value_is_null(&self, bytes: &[u8]) -> bool {
+        match self {
+            Writer::Json(w) => w.value_is_null(bytes),
         }
     }
 

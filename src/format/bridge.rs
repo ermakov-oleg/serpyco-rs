@@ -21,6 +21,76 @@ pub(crate) fn wrong_enum_err(items: &str, raw: &str, path: &InstancePath) -> Ser
     SchemaError::new(format!("{raw} is not one of {items}"), path).into()
 }
 
+/// Build a type-mismatch error for the value at the cursor: take its raw slice
+/// and render it into `wrong_type_err`. A parser/decode error while taking the
+/// value takes priority (as the bare `take_raw_value()?` did at each call site).
+#[inline]
+pub(crate) fn wrong_type_at_cursor(
+    parser: &mut Parser<'_>,
+    expected: &str,
+    path: &InstancePath,
+) -> SerdeError {
+    match parser.take_raw_value() {
+        Ok(raw) => wrong_type_err(expected, &String::from_utf8_lossy(raw), path),
+        Err(e) => e,
+    }
+}
+
+/// Enum-variant of [`wrong_type_at_cursor`] (`… is not one of <items>`).
+#[inline]
+pub(crate) fn wrong_enum_at_cursor(
+    parser: &mut Parser<'_>,
+    items: &str,
+    path: &InstancePath,
+) -> SerdeError {
+    match parser.take_raw_value() {
+        Ok(raw) => wrong_enum_err(items, &String::from_utf8_lossy(raw), path),
+        Err(e) => e,
+    }
+}
+
+/// `ValidationError("invalid number: …")` — the shared fallback for number text
+/// that fails to parse (only reachable on genuinely malformed input).
+#[inline]
+pub(crate) fn invalid_number_err(raw: &str) -> SerdeError {
+    SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
+}
+
+/// Parse integer-shaped number text (no dot/exponent) into a Python `int`,
+/// falling back to a Python big int beyond i64. Shared by `parse_any` and the
+/// scalar encoders that materialize an integer token.
+#[inline(always)]
+pub(crate) fn parse_int_text<'py>(py: Python<'py>, raw: &str) -> SerdeResult<Bound<'py, PyAny>> {
+    match raw.parse::<i64>() {
+        Ok(v) => Ok(v.into_bound_py_any(py)?),
+        Err(_) => {
+            let big: num_bigint::BigInt = raw.parse().map_err(|_| invalid_number_err(raw))?;
+            Ok(big.into_bound_py_any(py)?)
+        }
+    }
+}
+
+/// Stream a Python `int` to the writer: `i64` fast path, decimal-string fallback
+/// beyond i64. The caller has already narrowed `value` to `PyInt`.
+#[inline(always)]
+pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeResult<()> {
+    match v.extract::<i64>() {
+        Ok(i) => writer.write_i64(i),
+        Err(_) => writer.write_big_int(v.str()?.to_str()?),
+    }
+    Ok(())
+}
+
+/// Stream a Python `float` to the writer, mapping the format's "cannot represent"
+/// signal (JSON: NaN/Infinity) to a `ValidationError`. The caller has already
+/// narrowed `value` to `PyFloat`.
+#[inline(always)]
+pub(crate) fn write_py_float(writer: &mut Writer, v: &Bound<'_, PyFloat>) -> SerdeResult<()> {
+    writer
+        .write_f64(v.value())
+        .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))
+}
+
 /// Parser events -> plain Python objects (dict/list/str/int/float/bool/None).
 /// The point where the schema ends: Any fields, CustomType.load input, dict_flatten.
 pub(crate) fn parse_any<'py>(
@@ -41,21 +111,9 @@ pub(crate) fn parse_any<'py>(
             // Integer when there is no dot/exponent — mirrors json.loads.
             let raw = parser.take_number_str_known()?;
             if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-                match raw.parse::<i64>() {
-                    Ok(v) => Ok(v.into_bound_py_any(py)?),
-                    Err(_) => {
-                        let big: num_bigint::BigInt = raw.parse().map_err(|_| {
-                            SerdeError::Py(ValidationError::new_err(format!(
-                                "invalid number: {raw}"
-                            )))
-                        })?;
-                        Ok(big.into_bound_py_any(py)?)
-                    }
-                }
+                parse_int_text(py, raw)
             } else {
-                let v: f64 = raw.parse().map_err(|_| {
-                    SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
-                })?;
+                let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
                 Ok(PyFloat::new(py, v).into_any())
             }
         }
@@ -107,16 +165,11 @@ pub(crate) fn write_any(
         return Ok(());
     }
     if let Ok(v) = value.cast::<PyInt>() {
-        match v.extract::<i64>() {
-            Ok(v) => writer.write_i64(v),
-            Err(_) => writer.write_big_int(v.str()?.to_str()?),
-        }
+        write_py_int(writer, v)?;
         return Ok(());
     }
     if let Ok(v) = value.cast::<PyFloat>() {
-        writer
-            .write_f64(v.value())
-            .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
+        write_py_float(writer, v)?;
         return Ok(());
     }
     if let Ok(v) = value.cast::<PyString>() {

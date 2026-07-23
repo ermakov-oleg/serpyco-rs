@@ -8,7 +8,6 @@ use std::sync::{Arc, OnceLock};
 
 use dyn_clone::{clone_trait_object, DynClone};
 use nohash_hasher::IntMap;
-use num_bigint::BigInt;
 use pyo3::exceptions::{PyAttributeError, PyRuntimeError};
 use pyo3::types::{
     PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PySet,
@@ -19,7 +18,10 @@ use pyo3::{prelude::*, IntoPyObjectExt};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::format::bridge::{parse_any, write_any, wrong_enum_err, wrong_type_err};
+use crate::format::bridge::{
+    invalid_number_err, parse_any, parse_int_text, write_any, write_py_float, write_py_int,
+    wrong_enum_at_cursor, wrong_type_at_cursor, wrong_type_err,
+};
 use crate::format::json::parser::ParsedInt;
 use crate::format::{Kind, Parser, Writer};
 use crate::python::{
@@ -163,9 +165,7 @@ impl Encoder for NoneEncoder {
             parser.take_null_known()?;
             return Ok(py.None().into_bound(py));
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("None", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "None", instance_path))
     }
 }
 
@@ -210,11 +210,9 @@ impl Encoder for NeverEncoder {
         _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         // Never type cannot be loaded - error natively, no Python materialization.
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err(
+        Err(wrong_type_at_cursor(
+            parser,
             "Never (no value allowed)",
-            &raw,
             instance_path,
         ))
     }
@@ -260,10 +258,7 @@ impl Encoder for IntEncoder {
         _ctx: &Context,
     ) -> SerdeResult<()> {
         if let Ok(v) = value.cast_exact::<PyInt>() {
-            match v.extract::<i64>() {
-                Ok(i) => writer.write_i64(i),
-                Err(_) => writer.write_big_int(v.str()?.to_str()?),
-            }
+            write_py_int(writer, v)?;
             return Ok(());
         }
         invalid_type_dump!("integer", value)
@@ -304,17 +299,13 @@ impl Encoder for IntEncoder {
                     // for the same "integer" schema error; a genuinely malformed
                     // number re-errors here as a DecodeError (same as before).
                     let raw = parser.take_number_str_known()?;
-                    let v: f64 = raw.parse().map_err(|_| {
-                        SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
-                    })?;
+                    let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
                     let materialized = PyFloat::new(py, v).into_any();
                     return self.load(&materialized, instance_path, ctx);
                 }
             }
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("integer", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "integer", instance_path))
     }
 }
 
@@ -361,16 +352,11 @@ impl Encoder for FloatEncoder {
         _ctx: &Context,
     ) -> SerdeResult<()> {
         if let Ok(v) = value.cast::<PyFloat>() {
-            writer
-                .write_f64(v.value())
-                .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
+            write_py_float(writer, v)?;
             return Ok(());
         }
         if let Ok(v) = value.cast::<PyInt>() {
-            match v.extract::<i64>() {
-                Ok(i) => writer.write_i64(i),
-                Err(_) => writer.write_big_int(v.str()?.to_str()?),
-            }
+            write_py_int(writer, v)?;
             return Ok(());
         }
         invalid_type_dump!("number", value)
@@ -390,17 +376,7 @@ impl Encoder for FloatEncoder {
         if parser.peek()? == Kind::Num {
             let raw = parser.take_number_str_known()?;
             if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-                let materialized = match raw.parse::<i64>() {
-                    Ok(v) => v.into_bound_py_any(py)?,
-                    Err(_) => {
-                        let big: BigInt = raw.parse().map_err(|_| {
-                            SerdeError::Py(ValidationError::new_err(format!(
-                                "invalid number: {raw}"
-                            )))
-                        })?;
-                        big.into_bound_py_any(py)?
-                    }
-                };
+                let materialized = parse_int_text(py, raw)?;
                 return self.load(&materialized, instance_path, ctx);
             }
             if let Ok(v) = raw.parse::<f64>() {
@@ -410,13 +386,9 @@ impl Encoder for FloatEncoder {
             // Unreachable in practice: jiter only hands us syntactically valid
             // JSON number text, which always parses as f64. Kept as a safe,
             // non-panicking fallback with the same error `parse_any` would give.
-            return Err(SerdeError::Py(ValidationError::new_err(format!(
-                "invalid number: {raw}"
-            ))));
+            return Err(invalid_number_err(raw));
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("number", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "number", instance_path))
     }
 }
 
@@ -496,9 +468,7 @@ impl Encoder for DecimalEncoder {
                     }
                     // Unreachable in practice: jiter only hands us syntactically
                     // valid JSON number text, which always parses as f64.
-                    Err(_) => Err(SerdeError::Py(ValidationError::new_err(format!(
-                        "invalid number: {raw}"
-                    )))),
+                    Err(_) => Err(invalid_number_err(raw)),
                 }
             }
             Kind::Str => {
@@ -515,11 +485,7 @@ impl Encoder for DecimalEncoder {
                     }
                 }
             }
-            _ => {
-                let raw = parser.take_raw_value()?;
-                let raw = String::from_utf8_lossy(raw);
-                Err(wrong_type_err("decimal", &raw, instance_path))
-            }
+            _ => Err(wrong_type_at_cursor(parser, "decimal", instance_path)),
         }
     }
 }
@@ -588,9 +554,7 @@ impl Encoder for StringEncoder {
             )?;
             return Ok(py_str.into_any());
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("string", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "string", instance_path))
     }
 }
 
@@ -650,9 +614,7 @@ impl Encoder for BooleanEncoder {
             let b = parser.take_bool_known()?;
             return Ok(PyBool::new(py, b).to_owned().into_any());
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("boolean", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "boolean", instance_path))
     }
 }
 
@@ -705,6 +667,28 @@ fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()>
     Ok(())
 }
 
+/// omit_none for a fixed-key field: dump `value` via `encoder` into a probe and,
+/// unless it encodes the format's null, emit `key` followed by the value's
+/// bytes. Equivalent to the dict-path `is_none()` check without materializing
+/// the value via `dump` + `write_any`. Shared by `EntityEncoder` and
+/// `TypedDictEncoder` (their optional-field write is identical).
+#[inline(always)]
+fn dump_field_unless_null(
+    writer: &mut Writer,
+    key: &str,
+    encoder: &TEncoder,
+    value: &Bound<'_, PyAny>,
+    ctx: &Context,
+) -> SerdeResult<()> {
+    let mut probe = writer.new_probe();
+    encoder.dump_format(value, &mut probe, ctx)?;
+    if !writer.value_is_null(probe.as_bytes()) {
+        writer.map_key(key);
+        writer.write_raw_value(probe.as_bytes());
+    }
+    Ok(())
+}
+
 /// Write an already-resolved enum/literal serialized value by its concrete
 /// Python type. The common str/int members stream directly, keeping them off
 /// the generic `write_any` bridge; anything unusual (float, None, container
@@ -725,20 +709,57 @@ fn write_scalar_item(
         return Ok(());
     }
     if let Ok(v) = item.cast::<PyInt>() {
-        match v.extract::<i64>() {
-            Ok(i) => writer.write_i64(i),
-            Err(_) => writer.write_big_int(v.str()?.to_str()?),
-        }
+        write_py_int(writer, v)?;
         return Ok(());
     }
     if let Ok(v) = item.cast::<PyFloat>() {
-        writer
-            .write_f64(v.value())
-            .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
+        write_py_float(writer, v)?;
         return Ok(());
     }
     // Exotic value (None / container / other): full-fidelity fallback.
     write_any(item, writer, ctx)
+}
+
+/// Read a scalar enum/literal member directly from the parser for the common
+/// str/int members, then delegate the map lookup + error handling to `load` so
+/// the miss/error behavior stays byte-identical to the object path. Non-scalar
+/// (or float-shaped) tokens defer to `load` as well. Shared by `EnumEncoder`
+/// and `LiteralEncoder`, whose `load_format` bodies are otherwise identical.
+#[inline(always)]
+fn load_enum_scalar<'py>(
+    py: Python<'py>,
+    parser: &mut Parser<'_>,
+    instance_path: &InstancePath,
+    ctx: &Context,
+    enum_items: &str,
+    load: impl Fn(&Bound<'py, PyAny>, &InstancePath, &Context) -> SerdeResult<Bound<'py, PyAny>>,
+) -> SerdeResult<Bound<'py, PyAny>> {
+    match parser.peek()? {
+        Kind::Str => {
+            let key = PyString::new(py, parser.take_str_known()?).into_any();
+            load(&key, instance_path, ctx)
+        }
+        Kind::Num => match parser.take_int_known() {
+            Ok(ParsedInt::I64(v)) => {
+                let key = v.into_bound_py_any(py)?;
+                load(&key, instance_path, ctx)
+            }
+            Ok(ParsedInt::Big(big)) => {
+                let key = big.into_bound_py_any(py)?;
+                load(&key, instance_path, ctx)
+            }
+            // Float-shaped token: the cursor is unmoved, so re-read the raw
+            // number and build a float, matching `parse_any` -> `load` which
+            // yields `invalid_enum_item` for a non-member.
+            Err(_) => {
+                let raw = parser.take_number_str_known()?;
+                let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
+                let key = PyFloat::new(py, v).into_any();
+                load(&key, instance_path, ctx)
+            }
+        },
+        _ => Err(wrong_enum_at_cursor(parser, enum_items, instance_path)),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -812,7 +833,7 @@ impl Encoder for DictionaryEncoder {
                     // the dict-path `is_none()` without materializing via dump.
                     let mut probe = writer.new_probe();
                     self.value_encoder.dump_format(&v, &mut probe, ctx)?;
-                    if probe.as_bytes() == b"null" {
+                    if writer.value_is_null(probe.as_bytes()) {
                         continue;
                     }
                     let key = self.key_encoder.dump(&k, ctx)?;
@@ -840,9 +861,7 @@ impl Encoder for DictionaryEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
-            let raw = parser.take_raw_value()?;
-            let raw = String::from_utf8_lossy(raw);
-            return Err(wrong_type_err("dict", &raw, instance_path));
+            return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
         let result_dict = PyDict::new(py);
         // The key `&str` borrows the parser buffer. Materialize it into a
@@ -975,9 +994,7 @@ impl Encoder for ArrayEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Array {
-            let raw = parser.take_raw_value()?;
-            let raw = String::from_utf8_lossy(raw);
-            return Err(wrong_type_err("list", &raw, instance_path));
+            return Err(wrong_type_at_cursor(parser, "list", instance_path));
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
@@ -1103,6 +1120,25 @@ impl Field {
     }
 }
 
+impl EntityEncoder {
+    /// Set a loaded field value on the instance, honouring the frozen/mutable
+    /// distinction: frozen entities disallow the fast unchecked setattr.
+    #[inline(always)]
+    fn set_field(
+        &self,
+        obj: &Bound<'_, PyAny>,
+        field: &Field,
+        val: Bound<'_, PyAny>,
+    ) -> SerdeResult<()> {
+        if self.is_frozen {
+            generic_set_attr(obj, field.name.as_ptr(), val)?;
+        } else {
+            set_attr_unchecked(obj, field.name.as_ptr(), val)?;
+        }
+        Ok(())
+    }
+}
+
 impl Encoder for EntityEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
@@ -1140,11 +1176,7 @@ impl Encoder for EntityEncoder {
 
         for field in &self.fields {
             let val = field.load_value(val, instance_path, ctx, &self.used_keys)?;
-            if self.is_frozen {
-                generic_set_attr(&obj, field.name.as_ptr(), val)?;
-            } else {
-                set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
-            };
+            self.set_field(&obj, field, val)?;
         }
 
         Ok(obj)
@@ -1185,16 +1217,15 @@ impl Encoder for EntityEncoder {
             // only optional fields under omit_none need the dumped value first
             // to decide whether to emit the key at all.
             if !field.required && self.omit_none {
-                // Stream the value into a probe via the concrete encoder: it
-                // writes exactly `null` iff the dumped value is None, so the
-                // byte check is equivalent to the dict-path `is_none()` without
-                // materializing via dump + write_any.
-                let mut probe = writer.new_probe();
-                field.encoder.dump_format(&field_val, &mut probe, ctx)?;
-                if probe.as_bytes() != b"null" {
-                    writer.map_key(&field.dict_key_rs);
-                    writer.write_raw_value(probe.as_bytes());
-                }
+                // omit_none: skip the key when the value dumps to the format's
+                // null (equivalent to the dict-path `is_none()`).
+                dump_field_unless_null(
+                    writer,
+                    &field.dict_key_rs,
+                    &*field.encoder,
+                    &field_val,
+                    ctx,
+                )?;
             } else {
                 writer.map_key(&field.dict_key_rs);
                 field.encoder.dump_format(&field_val, writer, ctx)?;
@@ -1222,9 +1253,7 @@ impl Encoder for EntityEncoder {
         if self.has_flatten {
             let _guard = ctx.enter_depth()?;
             if parser.peek()? != Kind::Map {
-                let raw = parser.take_raw_value()?;
-                let raw = String::from_utf8_lossy(raw);
-                return Err(wrong_type_err("object", &raw, instance_path));
+                return Err(wrong_type_at_cursor(parser, "object", instance_path));
             }
             let obj = create_instance(self.cls.bind(py))?;
             let n = self.fields.len();
@@ -1237,11 +1266,7 @@ impl Encoder for EntityEncoder {
                         let field = &self.fields[idx];
                         let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                         let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
-                        if self.is_frozen {
-                            generic_set_attr(&obj, field.name.as_ptr(), val)?;
-                        } else {
-                            set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
-                        }
+                        self.set_field(&obj, field, val)?;
                         seen[idx >> 6] |= 1u64 << (idx & 63);
                     }
                     None => {
@@ -1262,19 +1287,13 @@ impl Encoder for EntityEncoder {
                 } else {
                     continue; // already set from the stream
                 };
-                if self.is_frozen {
-                    generic_set_attr(&obj, field.name.as_ptr(), val)?;
-                } else {
-                    set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
-                }
+                self.set_field(&obj, field, val)?;
             }
             return Ok(obj);
         }
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
-            let raw = parser.take_raw_value()?;
-            let raw = String::from_utf8_lossy(raw);
-            return Err(wrong_type_err("object", &raw, instance_path));
+            return Err(wrong_type_at_cursor(parser, "object", instance_path));
         }
         let obj = create_instance(self.cls.bind(py))?;
         let n = self.fields.len();
@@ -1294,11 +1313,7 @@ impl Encoder for EntityEncoder {
                     let field = &self.fields[idx];
                     let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                     let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
-                    if self.is_frozen {
-                        generic_set_attr(&obj, field.name.as_ptr(), val)?;
-                    } else {
-                        set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
-                    }
+                    self.set_field(&obj, field, val)?;
                     seen[idx >> 6] |= 1u64 << (idx & 63);
                 }
                 Route::Skip => parser.skip_value()?,
@@ -1310,11 +1325,7 @@ impl Encoder for EntityEncoder {
                 // Missing field: same default / missing-required error as the
                 // dict-path (get_default pushes dict_key_rs onto the base path).
                 let val = field.get_default(py, instance_path)?;
-                if self.is_frozen {
-                    generic_set_attr(&obj, field.name.as_ptr(), val)?;
-                } else {
-                    set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
-                }
+                self.set_field(&obj, field, val)?;
             }
         }
         Ok(obj)
@@ -1464,16 +1475,15 @@ impl Encoder for TypedDictEncoder {
             // Mirror the dict-path write condition
             // (`field.required || !self.omit_none || !dump_result.is_none()`).
             if !field.required && self.omit_none {
-                // Stream the value into a probe via the concrete encoder: it
-                // writes exactly `null` iff the dumped value is None, so the
-                // byte check is equivalent to the dict-path `is_none()` without
-                // materializing via dump + write_any.
-                let mut probe = writer.new_probe();
-                field.encoder.dump_format(&field_val, &mut probe, ctx)?;
-                if probe.as_bytes() != b"null" {
-                    writer.map_key(&field.dict_key_rs);
-                    writer.write_raw_value(probe.as_bytes());
-                }
+                // omit_none: skip the key when the value dumps to the format's
+                // null (equivalent to the dict-path `is_none()`).
+                dump_field_unless_null(
+                    writer,
+                    &field.dict_key_rs,
+                    &*field.encoder,
+                    &field_val,
+                    ctx,
+                )?;
             } else {
                 writer.map_key(&field.dict_key_rs);
                 field.encoder.dump_format(&field_val, writer, ctx)?;
@@ -1503,9 +1513,7 @@ impl Encoder for TypedDictEncoder {
         if self.has_flatten {
             let _guard = ctx.enter_depth()?;
             if parser.peek()? != Kind::Map {
-                let raw = parser.take_raw_value()?;
-                let raw = String::from_utf8_lossy(raw);
-                return Err(wrong_type_err("dict", &raw, instance_path));
+                return Err(wrong_type_at_cursor(parser, "dict", instance_path));
             }
             let dict = create_py_dict_known_size(py, self.fields.len())?;
             let n = self.fields.len();
@@ -1545,9 +1553,7 @@ impl Encoder for TypedDictEncoder {
         }
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
-            let raw = parser.take_raw_value()?;
-            let raw = String::from_utf8_lossy(raw);
-            return Err(wrong_type_err("dict", &raw, instance_path));
+            return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
         let dict = create_py_dict_known_size(py, self.fields.len())?;
         let n = self.fields.len();
@@ -1653,9 +1659,7 @@ impl Encoder for UUIDEncoder {
             // no Python materialization.
             return Err(wrong_type_err("uuid", s, instance_path));
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("uuid", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "uuid", instance_path))
     }
 }
 
@@ -1710,10 +1714,6 @@ impl Encoder for EnumEncoder {
         invalid_enum_item!(&self.enum_items, value, &InstancePath::new())
     }
 
-    // Reads the scalar directly from the parser for the common str/int members,
-    // then delegates the map lookup + error handling to `self.load` so the
-    // miss/error behavior stays byte-identical to the object path. Non-scalar
-    // (or float-shaped) tokens fall back through `parse_any`/`self.load`.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -1721,38 +1721,14 @@ impl Encoder for EnumEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        match parser.peek()? {
-            Kind::Str => {
-                let key = PyString::new(py, parser.take_str_known()?).into_any();
-                self.load(&key, instance_path, ctx)
-            }
-            Kind::Num => match parser.take_int_known() {
-                Ok(ParsedInt::I64(v)) => {
-                    let key = v.into_bound_py_any(py)?;
-                    self.load(&key, instance_path, ctx)
-                }
-                Ok(ParsedInt::Big(big)) => {
-                    let key = big.into_bound_py_any(py)?;
-                    self.load(&key, instance_path, ctx)
-                }
-                // Float-shaped token: the cursor is unmoved, so re-read the raw
-                // number and build a float, matching `parse_any` -> `self.load`
-                // which yields `invalid_enum_item` for a non-member.
-                Err(_) => {
-                    let raw = parser.take_number_str_known()?;
-                    let v: f64 = raw.parse().map_err(|_| {
-                        SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
-                    })?;
-                    let key = PyFloat::new(py, v).into_any();
-                    self.load(&key, instance_path, ctx)
-                }
-            },
-            _ => {
-                let raw = parser.take_raw_value()?;
-                let raw = String::from_utf8_lossy(raw);
-                Err(wrong_enum_err(&self.enum_items, &raw, instance_path))
-            }
-        }
+        load_enum_scalar(
+            py,
+            parser,
+            instance_path,
+            ctx,
+            &self.enum_items,
+            |v, p, c| self.load(v, p, c),
+        )
     }
 }
 
@@ -1805,10 +1781,6 @@ impl Encoder for LiteralEncoder {
         invalid_enum_item!(&self.enum_items, value, &InstancePath::new())
     }
 
-    // Reads the scalar directly from the parser for the common str/int members,
-    // then delegates the map lookup + error handling to `self.load` so the
-    // miss/error behavior stays byte-identical to the object path. Non-scalar
-    // (or float-shaped) tokens fall back through `parse_any`/`self.load`.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -1816,38 +1788,14 @@ impl Encoder for LiteralEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        match parser.peek()? {
-            Kind::Str => {
-                let key = PyString::new(py, parser.take_str_known()?).into_any();
-                self.load(&key, instance_path, ctx)
-            }
-            Kind::Num => match parser.take_int_known() {
-                Ok(ParsedInt::I64(v)) => {
-                    let key = v.into_bound_py_any(py)?;
-                    self.load(&key, instance_path, ctx)
-                }
-                Ok(ParsedInt::Big(big)) => {
-                    let key = big.into_bound_py_any(py)?;
-                    self.load(&key, instance_path, ctx)
-                }
-                // Float-shaped token: the cursor is unmoved, so re-read the raw
-                // number and build a float, matching `parse_any` -> `self.load`
-                // which yields `invalid_enum_item` for a non-member.
-                Err(_) => {
-                    let raw = parser.take_number_str_known()?;
-                    let v: f64 = raw.parse().map_err(|_| {
-                        SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
-                    })?;
-                    let key = PyFloat::new(py, v).into_any();
-                    self.load(&key, instance_path, ctx)
-                }
-            },
-            _ => {
-                let raw = parser.take_raw_value()?;
-                let raw = String::from_utf8_lossy(raw);
-                Err(wrong_enum_err(&self.enum_items, &raw, instance_path))
-            }
-        }
+        load_enum_scalar(
+            py,
+            parser,
+            instance_path,
+            ctx,
+            &self.enum_items,
+            |v, p, c| self.load(v, p, c),
+        )
     }
 }
 
@@ -2000,9 +1948,7 @@ impl Encoder for TupleEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Array {
-            let raw = parser.take_raw_value()?;
-            let raw = String::from_utf8_lossy(raw);
-            return Err(wrong_type_err("sequence", &raw, instance_path));
+            return Err(wrong_type_at_cursor(parser, "sequence", instance_path));
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
@@ -2136,6 +2082,15 @@ impl Encoder for UnionEncoder {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiscriminatorKey(String);
 
+// Lets `HashMap<DiscriminatorKey, _>` be probed by a borrowed `&str`, so the
+// streaming load path looks up the parsed tag without allocating a throwaway
+// key. Hash/Eq derive from the inner `String`, which are `str`-consistent.
+impl std::borrow::Borrow<str> for DiscriminatorKey {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
 impl TryFrom<&Bound<'_, PyAny>> for DiscriminatorKey {
     type Error = ();
 
@@ -2231,9 +2186,7 @@ impl Encoder for DiscriminatedUnionEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? != Kind::Map {
-            let raw = parser.take_raw_value()?;
-            let raw = String::from_utf8_lossy(raw);
-            return Err(wrong_type_err("dict", &raw, instance_path));
+            return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
         let span = parser.take_raw_value()?;
         // Scan forward on a throwaway sub-parser to find the discriminator value,
@@ -2267,7 +2220,7 @@ impl Encoder for DiscriminatedUnionEncoder {
         };
         // Select the encoder by tag; unknown tag -> same Schema error (message and
         // instance_path) as the object path.
-        match self.encoders.get(&DiscriminatorKey(tag.clone())) {
+        match self.encoders.get(tag.as_str()) {
             Some(encoder) => {
                 let mut sub = parser.sub_parser(span);
                 encoder.load_format(py, &mut sub, instance_path, ctx)
@@ -2342,9 +2295,7 @@ impl Encoder for TimeEncoder {
             // Invalid time text -> native error, no Python materialization.
             return Err(wrong_type_err("time", s, instance_path));
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("time", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "time", instance_path))
     }
 }
 
@@ -2408,9 +2359,7 @@ impl Encoder for DateTimeEncoder {
             // Invalid datetime text -> native error, no Python materialization.
             return Err(wrong_type_err("datetime", s, instance_path));
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("datetime", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "datetime", instance_path))
     }
 }
 
@@ -2472,9 +2421,7 @@ impl Encoder for DateEncoder {
             // Invalid date text -> native error, no Python materialization.
             return Err(wrong_type_err("date", s, instance_path));
         }
-        let raw = parser.take_raw_value()?;
-        let raw = String::from_utf8_lossy(raw);
-        Err(wrong_type_err("date", &raw, instance_path))
+        Err(wrong_type_at_cursor(parser, "date", instance_path))
     }
 }
 
