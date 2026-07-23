@@ -2241,16 +2241,21 @@ impl Encoder for DiscriminatedUnionEncoder {
         let mut tag: Option<String> = None;
         {
             let mut scan = parser.sub_parser(span);
-            let mut key = scan.enter_map()?.map(str::to_owned);
+            // Compare each key as a borrowed &str — no per-key String alloc. `k`'s
+            // borrow ends at the comparison (NLL), before the next `&mut scan` call,
+            // so enter_map/next_key need no `to_owned`.
+            let mut key = scan.enter_map()?;
             while let Some(k) = key {
                 if k == self.load_discriminator_rs {
                     if scan.peek()? == Kind::Str {
+                        // `to_owned` required: the tag outlives this scan sub-parser
+                        // (used below to select the variant encoder).
                         tag = Some(scan.take_str_known()?.to_owned());
                     }
                     break;
                 }
                 scan.skip_value()?;
-                key = scan.next_key()?.map(str::to_owned);
+                key = scan.next_key()?;
             }
         }
         let Some(tag) = tag else {
