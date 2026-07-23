@@ -46,9 +46,9 @@ _run-lint mode="fix":
     cd python/serpyco_rs && {{uv}} run --no-sync ruff check {{ if mode == "fix" { "--fix" } else { "" } }} .
 
 _run-type-check:
-    PYTHONPATH=python {{uv}} run --no-sync pyright python/serpyco_rs
+    PYTHONPATH=python {{uv}} run --no-sync pyright python/serpyco_rs tests/test_codec_typing.py
     PYTHONPATH=python {{uv}} run --no-sync pyright --verifytypes serpyco_rs
-    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs --strict --implicit-reexport --enable-incomplete-feature=TypeForm --pretty
+    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs tests/test_codec_typing.py --strict --implicit-reexport --enable-incomplete-feature=TypeForm --pretty
 
 _run-bench target="bench":
     {{uv}} run --no-sync pytest {{target}} --verbose \
