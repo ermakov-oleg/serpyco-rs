@@ -304,6 +304,7 @@ dependencies = [
  "pyo3-ffi",
  "rustc-hash",
  "ryu",
+ "smallvec",
  "speedate",
  "uuid",
 ]

@@ -17,6 +17,7 @@ speedate = "0.17.0"
 dyn-clone = "1.0.20"
 nohash-hasher = "0.2"
 rustc-hash = "2"
+smallvec = "1"
 
 uuid = "1"
 
