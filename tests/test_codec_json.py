@@ -380,3 +380,78 @@ def test_flatten_parity_codec():
     # load parity: round-trips through the bridge fallback
     assert s_codec.load(s_codec.dump(person)) == person
     assert s_codec.load(orjson.dumps(s_dict.dump(person))) == person
+
+
+def test_union_codec():
+    @dataclass
+    class P:
+        name: str
+        score: float
+
+    s = Serializer(int | str | P, codec=JSON)
+    # primitive members: streaming materializes via parse_any and reuses the load loop
+    assert s.load(b'5') == 5
+    assert s.load(b'"x"') == 'x'
+    # container member: raw span is captured and re-parsed by the matching variant
+    assert s.load(b'{"name": "n", "score": 1.0}') == P(name='n', score=1.0)
+    # discriminator-free container with extra keys still round-trips to the entity
+    assert s.load(b'{"score": 2.5, "name": "z"}') == P(name='z', score=2.5)
+    # round-trip of primitive members (dataclass dump inside an untagged union is a
+    # pre-existing dict-path behavior returning the object unchanged, so it is not
+    # serializable to JSON; only the streaming load path is in scope here)
+    assert s.load(s.dump(5)) == 5
+    assert s.load(s.dump('x')) == 'x'
+
+
+def test_union_all_fail_parity():
+    import re
+
+    def norm(errs):
+        # serpyco appends a disambiguation counter to the union's type name on the
+        # second Serializer built for the same type (repr "int | str" vs "int | str1").
+        # That counter is a global-naming artifact: the streaming and dict paths of one
+        # Serializer share self.repr, so strip the trailing counter to make the
+        # cross-serializer message comparison meaningful.
+        return [(re.sub(r'\d*"$', '"', e.message), e.instance_path) for e in errs]
+
+    s = Serializer(int | str)
+    sc = Serializer(int | str, codec=JSON)
+    bad = [1, 2, 3]  # neither int nor str -> drives the container all-fail branch
+    with pytest.raises(serpyco_rs.SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(serpyco_rs.SchemaValidationError) as c:
+        sc.load(orjson.dumps(bad))
+    assert norm(c.value.errors) == norm(d.value.errors)
+
+
+def test_discriminated_union_codec():
+    from typing import Annotated, Literal, Union
+
+    from serpyco_rs.metadata import Discriminator
+
+    @dataclass
+    class Cat:
+        kind: Literal['cat']
+        meow: str
+
+    @dataclass
+    class Dog:
+        kind: Literal['dog']
+        bark: str
+
+    Pet = Annotated[Union[Cat, Dog], Discriminator('kind')]
+    s = Serializer(Pet, codec=JSON)
+    # discriminator NOT first key -> requires scan-ahead over the captured span
+    assert s.load(b'{"meow": "m", "kind": "cat"}') == Cat(kind='cat', meow='m')
+    assert s.load(s.dump(Dog(kind='dog', bark='woof'))) == Dog(kind='dog', bark='woof')
+
+    # unknown tag + missing discriminator: parity with the dict-path
+    sd = Serializer(Pet)
+    for bad in ({'kind': 'fish', 'meow': 'm'}, {'meow': 'm'}):
+        with pytest.raises(serpyco_rs.SchemaValidationError) as d:
+            sd.load(bad)
+        with pytest.raises(serpyco_rs.SchemaValidationError) as c:
+            s.load(orjson.dumps(bad))
+        assert [(e.message, e.instance_path) for e in c.value.errors] == [
+            (e.message, e.instance_path) for e in d.value.errors
+        ]

@@ -1718,6 +1718,46 @@ impl Encoder for UnionEncoder {
         }
         Err(invalid_type_err(&self.repr, value, instance_path))
     }
+
+    // dump_format stays on the bridge default: it materializes via self.dump
+    // (which already backtracks over each variant) and writes the result.
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        match parser.peek()? {
+            // Primitives: materialization is cheap; reuse the object-path variant
+            // loop for identical errors. parse_any fully consumes the value, so the
+            // main cursor stays correct.
+            Kind::Null | Kind::Bool | Kind::Num | Kind::Str => {
+                let value = parse_any(py, parser, ctx)?;
+                self.load(&value, instance_path, ctx)
+            }
+            // Containers: capture the raw span, try each variant on a fresh
+            // sub-parser. take_raw_value advances the main parser past the whole
+            // value, so a variant that partially consumes then fails can't corrupt
+            // the main cursor (each attempt re-parses the isolated span).
+            Kind::Array | Kind::Map => {
+                let span = parser.take_raw_value()?;
+                for encoder in &self.encoders {
+                    let mut sub = parser.sub_parser(span);
+                    match encoder.load_format(py, &mut sub, instance_path, ctx) {
+                        Ok(v) => return Ok(v),
+                        Err(SerdeError::Schema(_)) => continue,
+                        Err(e @ SerdeError::Py(_)) => return Err(e),
+                    }
+                }
+                // All variants rejected: same Schema error as the object path.
+                let mut sub = parser.sub_parser(span);
+                let value = parse_any(py, &mut sub, ctx)?;
+                Err(invalid_type_err(&self.repr, &value, instance_path))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1804,6 +1844,64 @@ impl Encoder for DiscriminatedUnionEncoder {
             encoder.load(value, instance_path, ctx)
         } else {
             invalid_type!("dict", value, instance_path)
+        }
+    }
+
+    // dump_format stays on the bridge default: it materializes via self.dump
+    // (which selects the variant by discriminator) and writes the result.
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? != Kind::Map {
+            // Non-object input: let the object path raise the standard "dict" error.
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let span = parser.take_raw_value()?;
+        // Scan forward on a throwaway sub-parser to find the discriminator value,
+        // regardless of key order.
+        let mut tag: Option<String> = None;
+        {
+            let mut scan = parser.sub_parser(span);
+            let mut key = scan.enter_map()?.map(str::to_owned);
+            while let Some(k) = key {
+                if k == self.load_discriminator_rs {
+                    if scan.peek()? == Kind::Str {
+                        tag = Some(scan.take_str()?.to_owned());
+                    }
+                    break;
+                }
+                scan.skip_value()?;
+                key = scan.next_key()?.map(str::to_owned);
+            }
+        }
+        let Some(tag) = tag else {
+            // Missing/non-string discriminator: re-run the object path for the exact
+            // error (missing_required_property, or the non-string discriminator error).
+            let mut sub = parser.sub_parser(span);
+            let value = parse_any(py, &mut sub, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        };
+        // Select the encoder by tag; unknown tag -> same Schema error (message and
+        // instance_path) as the object path.
+        match self.encoders.get(&DiscriminatorKey(tag.clone())) {
+            Some(encoder) => {
+                let mut sub = parser.sub_parser(span);
+                encoder.load_format(py, &mut sub, instance_path, ctx)
+            }
+            None => {
+                let instance_path = instance_path.push(self.load_discriminator_rs.as_str());
+                Err(no_encoder_for_discriminator(
+                    &tag,
+                    &self.keys,
+                    &instance_path,
+                ))
+            }
         }
     }
 }
