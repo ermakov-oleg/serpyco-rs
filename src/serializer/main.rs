@@ -528,7 +528,7 @@ fn extract_custom_encoder(
 /// Used by the streaming load path to route keys straight to their encoder;
 /// flatten fields are excluded because the streaming path is skipped entirely
 /// when any field is flattened (see `EntityEncoder`/`TypedDictEncoder`).
-fn build_format_routing(fields: &[Field]) -> HashMap<String, usize> {
+fn build_format_routing(fields: &[Field]) -> rustc_hash::FxHashMap<String, usize> {
     fields
         .iter()
         .enumerate()

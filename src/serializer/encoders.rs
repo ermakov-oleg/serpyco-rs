@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+
+use rustc_hash::FxHashMap;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::{Arc, OnceLock};
@@ -1009,7 +1011,7 @@ enum Route {
 /// Resolve a borrowed key to a `Route` (no allocation). `None` (end of object)
 /// -> `End`; a known key -> `Field(idx)`; anything else -> `Skip`.
 #[inline]
-fn resolve_route(routing: &HashMap<String, usize>, key: Option<&str>) -> Route {
+fn resolve_route(routing: &FxHashMap<String, usize>, key: Option<&str>) -> Route {
     match key {
         Some(k) => match routing.get(k) {
             Some(&idx) => Route::Field(idx),
@@ -1028,7 +1030,7 @@ pub struct EntityEncoder {
     pub(crate) used_keys: Py<PySet>,
     /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
     /// Empty is fine; used only by the streaming (no-flatten) load path.
-    pub(crate) format_routing: HashMap<String, usize>,
+    pub(crate) format_routing: FxHashMap<String, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -1206,10 +1208,51 @@ impl Encoder for EntityEncoder {
             let value = parse_any(py, parser, ctx)?;
             return self.load(&value, instance_path, ctx);
         }
-        let mut slots: Vec<Option<Bound<'py, PyAny>>> =
-            (0..self.fields.len()).map(|_| None).collect();
-        // Resolve each borrowed key to a Copy `Route` while the borrow is alive,
-        // so keys are never copied to owned Strings.
+        let obj = create_instance(self.cls.bind(py))?;
+        let n = self.fields.len();
+        // Fast, allocation-free path for the common case (<= 64 fields): set
+        // attributes directly as keys arrive, tracking which fields were seen in
+        // a bitmask, then fill defaults for the unseen ones. This avoids the
+        // per-entity `Vec<Option<Bound>>` allocation (a hot alloc/free on
+        // entity-heavy loads). Keys are resolved to a Copy `Route` while the
+        // borrow is alive, so keys are never copied to owned Strings.
+        if n <= 64 {
+            let mut seen: u64 = 0;
+            let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
+            loop {
+                match route {
+                    Route::End => break,
+                    Route::Field(idx) => {
+                        let field = &self.fields[idx];
+                        let field_path = instance_path.push(field.dict_key_rs.as_str());
+                        let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
+                        if self.is_frozen {
+                            generic_set_attr(&obj, field.name.as_ptr(), val)?;
+                        } else {
+                            set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
+                        }
+                        seen |= 1u64 << idx;
+                    }
+                    Route::Skip => parser.skip_value()?,
+                }
+                route = resolve_route(&self.format_routing, parser.next_key()?);
+            }
+            for (idx, field) in self.fields.iter().enumerate() {
+                if seen & (1u64 << idx) == 0 {
+                    // Missing field: same default / missing-required error as the
+                    // dict-path (get_default pushes dict_key_rs onto the base path).
+                    let val = field.get_default(py, instance_path)?;
+                    if self.is_frozen {
+                        generic_set_attr(&obj, field.name.as_ptr(), val)?;
+                    } else {
+                        set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
+                    }
+                }
+            }
+            return Ok(obj);
+        }
+        // Fallback for entities with > 64 fields: collect into slots first.
+        let mut slots: Vec<Option<Bound<'py, PyAny>>> = (0..n).map(|_| None).collect();
         let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
         loop {
             match route {
@@ -1223,12 +1266,9 @@ impl Encoder for EntityEncoder {
             }
             route = resolve_route(&self.format_routing, parser.next_key()?);
         }
-        let obj = create_instance(self.cls.bind(py))?;
         for (idx, field) in self.fields.iter().enumerate() {
             let val = match slots[idx].take() {
                 Some(v) => v,
-                // Missing field: same default / missing-required error as the
-                // dict-path (get_default pushes dict_key_rs onto the base path).
                 None => field.get_default(py, instance_path)?,
             };
             if self.is_frozen {
@@ -1285,7 +1325,7 @@ pub struct TypedDictEncoder {
     pub(crate) used_keys: Py<PySet>,
     /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
     /// Empty is fine; used only by the streaming (no-flatten) load path.
-    pub(crate) format_routing: HashMap<String, usize>,
+    pub(crate) format_routing: FxHashMap<String, usize>,
 }
 
 impl Encoder for TypedDictEncoder {
