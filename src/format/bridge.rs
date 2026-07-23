@@ -72,8 +72,8 @@ pub(crate) fn parse_any<'py>(
     }
 }
 
-/// Arbitrary Python tree -> writer events. Exact-type sniffing like orjson.
-/// Non-string dict keys are written as str(key) (OPT_NON_STR_KEYS behavior).
+/// Arbitrary Python tree -> writer events. isinstance-based type sniffing
+/// (accepts subclasses). Non-string dict keys are stringified via str(key).
 pub(crate) fn write_any(
     value: &Bound<'_, PyAny>,
     writer: &mut Writer,
