@@ -1435,10 +1435,16 @@ impl Encoder for TypedDictEncoder {
             let value = parse_any(py, parser, ctx)?;
             return self.load(&value, instance_path, ctx);
         }
-        let mut slots: Vec<Option<Bound<'py, PyAny>>> =
-            (0..self.fields.len()).map(|_| None).collect();
-        // Resolve each borrowed key to a Copy `Route` while the borrow is alive,
-        // so keys are never copied to owned Strings.
+        let dict = create_py_dict_known_size(py, self.fields.len())?;
+        let n = self.fields.len();
+        // Insert values directly into the result dict as keys arrive (no
+        // per-load `Vec<Option<Bound>>` — a hot alloc/free on typeddict-heavy
+        // loads), tracking which fields were seen in an inline bitset that
+        // lives on the stack for the common case (<= 64 fields => one word)
+        // and spills to the heap only for very wide typeddicts. Defaults then
+        // fill unseen fields. Keys resolve to a Copy `Route` while borrowed,
+        // so they are never copied to owned Strings.
+        let mut seen: SmallVec<[u64; 1]> = smallvec![0u64; n.div_ceil(64)];
         let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
         loop {
             match route {
@@ -1446,21 +1452,21 @@ impl Encoder for TypedDictEncoder {
                 Route::Field(idx) => {
                     let field = &self.fields[idx];
                     let field_path = instance_path.push(field.dict_key_rs.as_str());
-                    slots[idx] = Some(field.encoder.load_format(py, parser, &field_path, ctx)?);
+                    let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
+                    py_dict_set_item(&dict, field.name.as_ptr(), val)?;
+                    seen[idx >> 6] |= 1u64 << (idx & 63);
                 }
                 Route::Skip => parser.skip_value()?,
             }
             route = resolve_route(&self.format_routing, parser.next_key()?);
         }
-        let dict = create_py_dict_known_size(py, self.fields.len())?;
         for (idx, field) in self.fields.iter().enumerate() {
-            let val = match slots[idx].take() {
-                Some(v) => v,
+            if seen[idx >> 6] & (1u64 << (idx & 63)) == 0 {
                 // Missing field: same default / missing-required error as the
                 // dict-path (get_default pushes dict_key_rs onto the base path).
-                None => field.get_default(py, instance_path)?,
-            };
-            py_dict_set_item(&dict, field.name.as_ptr(), val)?;
+                let val = field.get_default(py, instance_path)?;
+                py_dict_set_item(&dict, field.name.as_ptr(), val)?;
+            }
         }
         Ok(dict.into_any())
     }
