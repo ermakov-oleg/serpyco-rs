@@ -15,6 +15,11 @@ pub(crate) enum ParsedInt {
 /// Pull-parser over jiter. All jiter (syntax) errors map to DecodeError with
 /// a byte position; schema mismatches are NOT the parser's job — encoders
 /// decide via peek + take_*.
+///
+/// Every `take_*` method is self-positioning: it peeks internally first (peek
+/// eats leading whitespace and lands the cursor on the value byte), so
+/// encoders may call `take_*` directly after `next_key`/`enter_array` without
+/// a preceding peek of their own.
 #[derive(Debug)]
 pub(crate) struct JsonParser<'j> {
     jiter: Jiter<'j>,
@@ -44,6 +49,9 @@ impl<'j> JsonParser<'j> {
 
     #[inline]
     pub(crate) fn take_null(&mut self) -> Result<(), SerdeError> {
+        // known_null() doesn't eat whitespace on its own — peek first to
+        // land the cursor on the value byte (e.g. after a `next_key` colon).
+        self.jiter.peek().map_err(err)?;
         self.jiter.known_null().map_err(err)
     }
 
@@ -78,6 +86,9 @@ impl<'j> JsonParser<'j> {
 
     #[inline]
     pub(crate) fn take_str(&mut self) -> Result<&str, SerdeError> {
+        // known_str() doesn't eat whitespace on its own — peek first to
+        // land the cursor on the value byte (e.g. after a `next_key` colon).
+        self.jiter.peek().map_err(err)?;
         self.jiter.known_str().map_err(err)
     }
 
@@ -111,6 +122,7 @@ impl<'j> JsonParser<'j> {
     }
 
     /// Skip the whole value and return its raw slice (union re-parse).
+    #[inline]
     pub(crate) fn take_raw_value(&mut self) -> Result<&'j [u8], SerdeError> {
         // peek consumes whitespace; current_index lands on the value start
         self.jiter.peek().map_err(err)?;
@@ -121,6 +133,7 @@ impl<'j> JsonParser<'j> {
     }
 
     /// Ensure input is fully consumed (trailing garbage → DecodeError).
+    #[inline]
     pub(crate) fn finish(&mut self) -> Result<(), SerdeError> {
         self.jiter.finish().map_err(err)
     }
@@ -137,6 +150,10 @@ fn err(e: JiterError) -> SerdeError {
     SerdeError::Py(decode_err(&e))
 }
 
+// Build the message from `error_type` alone (not `JiterError`'s own Display,
+// which already appends "at index N") — `DecodeError.__str__` appends
+// "(position N)" itself, so using `{e}` here would double the offset.
+#[inline]
 pub(crate) fn decode_err(e: &JiterError) -> PyErr {
-    DecodeError::new_err((format!("{e}"), e.index))
+    DecodeError::new_err((format!("{}", e.error_type), e.index))
 }
