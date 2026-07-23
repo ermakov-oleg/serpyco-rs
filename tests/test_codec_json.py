@@ -641,6 +641,79 @@ def test_flatten_wrong_type_error_parity_codec():
     assert 'not of type "object"' in d.value.errors[0].message
 
 
+def test_typeddict_flatten_struct_only_parity_codec():
+    class Address(TypedDict):
+        street: str
+        city: str
+
+    class Person(TypedDict):
+        name: str
+        address: Annotated[Address, Flatten]
+
+    person: Person = {'name': 'John', 'address': {'street': '123 Main', 'city': 'NYC'}}
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    assert json.loads(sc.dump(person)) == s.dump(person)
+    assert sc.load(sc.dump(person)) == person
+    assert sc.load(json.dumps(s.dump(person))) == s.load(s.dump(person))
+
+
+def test_typeddict_flatten_dict_only_parity_codec():
+    class Person(TypedDict):
+        name: str
+        extra: Annotated[dict[str, Any], Flatten]
+
+    person: Person = {'name': 'John', 'extra': {'phone': '555-1234', 'age': 30}}
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    assert json.loads(sc.dump(person)) == s.dump(person)
+    assert sc.load(sc.dump(person)) == person
+    assert sc.load(json.dumps(s.dump(person))) == s.load(s.dump(person))
+
+
+def test_typeddict_flatten_struct_and_dict_parity_codec():
+    class Address(TypedDict):
+        street: str
+        city: str
+        country: str
+
+    class Person(TypedDict):
+        name: str
+        age: int
+        address: Annotated[Address, Flatten]
+        extra: Annotated[dict[str, Any], Flatten]
+
+    person: Person = {
+        'name': 'John',
+        'age': 30,
+        'address': {'street': '123 Main', 'city': 'NYC', 'country': 'USA'},
+        'extra': {'phone': '555-1234'},
+    }
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    assert json.loads(sc.dump(person)) == s.dump(person)
+    assert sc.load(sc.dump(person)) == person
+    assert sc.load(json.dumps(s.dump(person))) == s.load(s.dump(person))
+
+
+def test_typeddict_flatten_missing_optional_default_parity_codec():
+    class Address(TypedDict):
+        street: str
+        city: NotRequired[str]
+
+    class Person(TypedDict):
+        name: str
+        address: Annotated[Address, Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    # 'city' is entirely absent from the wire payload; Address.city is
+    # NotRequired, so the dict-path default (None) applies.
+    raw = b'{"name": "John", "street": "123 Main"}'
+    assert sc.load(raw) == s.load(json.loads(raw))
+    assert sc.load(raw) == {'name': 'John', 'address': {'street': '123 Main', 'city': None}}
+
+
 def test_union_codec():
     @dataclass
     class P:
