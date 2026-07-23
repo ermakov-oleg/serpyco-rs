@@ -40,7 +40,11 @@ CONTENDERS = {
         'dump': lambda o: orjson.dumps(serpyco_rs.dump(o)),
         'load': lambda b: serpyco_rs.load(orjson.loads(b)),
         'obj': serpyco_rs.test_object,
-        'skip_refcount': False,
+        # orjson keeps an internal key cache whose entries shift
+        # sys.gettotalrefcount across a gc.collect(); that is orjson's behavior,
+        # not a leak in this project (the serpyco_rs_codec contender is the one
+        # whose refcounts we actually guard).
+        'skip_refcount': True,
     },
     'msgspec': {
         'dump': _msgspec_dump,
