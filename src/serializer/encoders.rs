@@ -1235,7 +1235,7 @@ impl Encoder for EntityEncoder {
                 match self.format_routing.get(k) {
                     Some(&idx) => {
                         let field = &self.fields[idx];
-                        let field_path = instance_path.push(field.dict_key_rs.as_str());
+                        let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                         let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                         if self.is_frozen {
                             generic_set_attr(&obj, field.name.as_ptr(), val)?;
@@ -1292,7 +1292,7 @@ impl Encoder for EntityEncoder {
                 Route::End => break,
                 Route::Field(idx) => {
                     let field = &self.fields[idx];
-                    let field_path = instance_path.push(field.dict_key_rs.as_str());
+                    let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                     let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                     if self.is_frozen {
                         generic_set_attr(&obj, field.name.as_ptr(), val)?;
@@ -1516,7 +1516,7 @@ impl Encoder for TypedDictEncoder {
                 match self.format_routing.get(k) {
                     Some(&idx) => {
                         let field = &self.fields[idx];
-                        let field_path = instance_path.push(field.dict_key_rs.as_str());
+                        let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                         let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                         py_dict_set_item(&dict, field.name.as_ptr(), val)?;
                         seen[idx >> 6] |= 1u64 << (idx & 63);
@@ -1565,7 +1565,7 @@ impl Encoder for TypedDictEncoder {
                 Route::End => break,
                 Route::Field(idx) => {
                     let field = &self.fields[idx];
-                    let field_path = instance_path.push(field.dict_key_rs.as_str());
+                    let field_path = instance_path.push(field.dict_key.bind(py).as_any());
                     let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                     py_dict_set_item(&dict, field.name.as_ptr(), val)?;
                     seen[idx >> 6] |= 1u64 << (idx & 63);
