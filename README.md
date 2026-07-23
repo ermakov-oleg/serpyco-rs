@@ -62,10 +62,10 @@ Round-tripping the [benchmark model](bench/compare/libs/base.py) straight to/fro
 
 | Direction | serpyco-rs codec | serpyco-rs + orjson | msgspec |
 |-----------|------------------|---------------------|---------|
-| dump (object → bytes) | **0.028 ms** | 0.060 ms | 0.013 ms |
-| load (bytes → object) | 0.099 ms | 0.089 ms | 0.043 ms |
+| dump (object → bytes) | **0.029 ms** | 0.062 ms | 0.013 ms |
+| load (bytes → object) | **0.088 ms** | 0.091 ms | 0.044 ms |
 
-Encoding straight to bytes is ~2.1x faster than `dump()` + `orjson.dumps()`, because no intermediate `dict` is built. Decoding is currently on par with `orjson.loads()` + `load()` (both reconstruct the same objects). `msgspec`'s native bytes path is shown for reference.
+Both directions are faster than going through `orjson` and an intermediate `dict`: encoding ~2.1x (no `dict` is built), decoding streams straight into typed objects without materializing a `dict` first. `msgspec`'s native bytes path is shown for reference.
 
 ## Installation
 Use pip to install:
