@@ -19,7 +19,7 @@ use pyo3::{prelude::*, IntoPyObjectExt};
 use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::format::bridge::{parse_any, write_any};
+use crate::format::bridge::{parse_any, write_any, wrong_enum_err, wrong_type_err};
 use crate::format::json::parser::ParsedInt;
 use crate::format::{Kind, Parser, Writer};
 use crate::python::{
@@ -157,14 +157,15 @@ impl Encoder for NoneEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Null {
             parser.take_null_known()?;
             return Ok(py.None().into_bound(py));
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("None", &raw, instance_path))
     }
 }
 
@@ -203,14 +204,19 @@ impl Encoder for NeverEncoder {
     #[inline]
     fn load_format<'py>(
         &self,
-        py: Python<'py>,
+        _py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        // Never type cannot be loaded - delegate to `load` for the standard error.
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        // Never type cannot be loaded - error natively, no Python materialization.
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err(
+            "Never (no value allowed)",
+            &raw,
+            instance_path,
+        ))
     }
 }
 
@@ -306,8 +312,9 @@ impl Encoder for IntEncoder {
                 }
             }
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("integer", &raw, instance_path))
     }
 }
 
@@ -407,8 +414,9 @@ impl Encoder for FloatEncoder {
                 "invalid number: {raw}"
             ))));
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("number", &raw, instance_path))
     }
 }
 
@@ -508,8 +516,9 @@ impl Encoder for DecimalEncoder {
                 }
             }
             _ => {
-                let value = parse_any(py, parser, ctx)?;
-                self.load(&value, instance_path, ctx)
+                let raw = parser.take_raw_value()?;
+                let raw = String::from_utf8_lossy(raw);
+                Err(wrong_type_err("decimal", &raw, instance_path))
             }
         }
     }
@@ -566,7 +575,7 @@ impl Encoder for StringEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
             let s = parser.take_str_known()?;
@@ -579,8 +588,9 @@ impl Encoder for StringEncoder {
             )?;
             return Ok(py_str.into_any());
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("string", &raw, instance_path))
     }
 }
 
@@ -634,14 +644,15 @@ impl Encoder for BooleanEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Bool {
             let b = parser.take_bool_known()?;
             return Ok(PyBool::new(py, b).to_owned().into_any());
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("boolean", &raw, instance_path))
     }
 }
 
@@ -1526,7 +1537,7 @@ impl Encoder for UUIDEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
             let s = parser.take_str_known()?;
@@ -1535,12 +1546,13 @@ impl Encoder for UUIDEncoder {
                     return Ok(result);
                 }
             }
-            // Invalid UUID text (or the constructor rejected it) -> same error as `load`.
-            let materialized = PyString::new(py, s).into_any();
-            return self.load(&materialized, instance_path, ctx);
+            // Invalid UUID text (or the constructor rejected it) -> native error,
+            // no Python materialization.
+            return Err(wrong_type_err("uuid", s, instance_path));
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("uuid", &raw, instance_path))
     }
 }
 
@@ -1633,8 +1645,9 @@ impl Encoder for EnumEncoder {
                 }
             },
             _ => {
-                let value = parse_any(py, parser, ctx)?;
-                self.load(&value, instance_path, ctx)
+                let raw = parser.take_raw_value()?;
+                let raw = String::from_utf8_lossy(raw);
+                Err(wrong_enum_err(&self.enum_items, &raw, instance_path))
             }
         }
     }
@@ -1727,8 +1740,9 @@ impl Encoder for LiteralEncoder {
                 }
             },
             _ => {
-                let value = parse_any(py, parser, ctx)?;
-                self.load(&value, instance_path, ctx)
+                let raw = parser.take_raw_value()?;
+                let raw = String::from_utf8_lossy(raw);
+                Err(wrong_enum_err(&self.enum_items, &raw, instance_path))
             }
         }
     }
@@ -2222,18 +2236,19 @@ impl Encoder for TimeEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
             let s = parser.take_str_known()?;
             if let Ok(result) = parse_time(py, s) {
                 return Ok(result.into_any());
             }
-            let materialized = PyString::new(py, s).into_any();
-            return self.load(&materialized, instance_path, ctx);
+            // Invalid time text -> native error, no Python materialization.
+            return Err(wrong_type_err("time", s, instance_path));
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("time", &raw, instance_path))
     }
 }
 
@@ -2287,18 +2302,19 @@ impl Encoder for DateTimeEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
             let s = parser.take_str_known()?;
             if let Ok(result) = parse_datetime(py, s) {
                 return Ok(result.into_any());
             }
-            let materialized = PyString::new(py, s).into_any();
-            return self.load(&materialized, instance_path, ctx);
+            // Invalid datetime text -> native error, no Python materialization.
+            return Err(wrong_type_err("datetime", s, instance_path));
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("datetime", &raw, instance_path))
     }
 }
 
@@ -2350,18 +2366,19 @@ impl Encoder for DateEncoder {
         py: Python<'py>,
         parser: &mut Parser<'_>,
         instance_path: &InstancePath,
-        ctx: &Context,
+        _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
             let s = parser.take_str_known()?;
             if let Ok(result) = parse_date(py, s) {
                 return Ok(result.into_any());
             }
-            let materialized = PyString::new(py, s).into_any();
-            return self.load(&materialized, instance_path, ctx);
+            // Invalid date text -> native error, no Python materialization.
+            return Err(wrong_type_err("date", s, instance_path));
         }
-        let value = parse_any(py, parser, ctx)?;
-        self.load(&value, instance_path, ctx)
+        let raw = parser.take_raw_value()?;
+        let raw = String::from_utf8_lossy(raw);
+        Err(wrong_type_err("date", &raw, instance_path))
     }
 }
 

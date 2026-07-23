@@ -4,8 +4,22 @@ use pyo3::IntoPyObjectExt;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::format::{Kind, Parser, Writer};
-use crate::serde_error::{SerdeError, SerdeResult};
-use crate::validator::Context;
+use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
+use crate::validator::{Context, InstancePath};
+
+/// Native schema type-mismatch for the streaming path — no Python materialization.
+/// `raw` is the offending value's raw JSON (caller supplies it, either from
+/// `parser.take_raw_value()` when the value is still unread, or the already-taken
+/// token). Value formatting may differ from the dict-path (raw JSON vs Python repr);
+/// the `expected` clause and instance_path match.
+pub(crate) fn wrong_type_err(expected: &str, raw: &str, path: &InstancePath) -> SerdeError {
+    SchemaError::new(format!(r#"{raw} is not of type "{expected}""#), path).into()
+}
+
+/// Same shape as the dict-path enum error (`… is not one of <items>`).
+pub(crate) fn wrong_enum_err(items: &str, raw: &str, path: &InstancePath) -> SerdeError {
+    SchemaError::new(format!("{raw} is not one of {items}"), path).into()
+}
 
 /// Parser events -> plain Python objects (dict/list/str/int/float/bool/None).
 /// The point where the schema ends: Any fields, CustomType.load input, dict_flatten.
