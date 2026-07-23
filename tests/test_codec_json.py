@@ -169,3 +169,31 @@ def test_nan_raises():
     s = Serializer(float, codec=JSON)
     with pytest.raises(ValidationError):
         s.dump(float('nan'))
+
+
+def test_scalar_edges():
+    import pytest
+    from datetime import datetime, timezone
+    from decimal import Decimal
+
+    s_int = Serializer(int, codec=JSON)
+    assert s_int.load(b'-9223372036854775808') == -(2**63)
+    from serpyco_rs import SchemaValidationError
+
+    with pytest.raises(SchemaValidationError):
+        s_int.load(b'1.5')  # float is not a valid int -> schema error, NOT DecodeError
+
+    s_float = Serializer(float, codec=JSON)
+    assert s_float.load(b'1') == 1.0  # int coerces to float, as on the dict path
+
+    s_str = Serializer(str, codec=JSON)
+    assert s_str.load('"a\\nb\\u0000"'.encode()) == 'a\nb\x00'
+    assert s_str.load(s_str.dump('cyrillic sh and \x1f')) == 'cyrillic sh and \x1f'
+
+    s_dt = Serializer(datetime, codec=JSON)
+    val = datetime(2026, 7, 23, 12, 0, 0, tzinfo=timezone.utc)
+    assert s_dt.load(s_dt.dump(val)) == val
+
+    s_dec = Serializer(Decimal, codec=JSON)
+    assert s_dec.load(b'"1.100"') == Decimal('1.100')
+    assert s_dec.load(b'1.1') == Decimal('1.1')  # precision from raw text, not repr(float)

@@ -5,6 +5,7 @@ use std::sync::{Arc, OnceLock};
 
 use dyn_clone::{clone_trait_object, DynClone};
 use nohash_hasher::IntMap;
+use num_bigint::BigInt;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{
     PyBool, PyBytes, PyDate, PyDateTime, PyDict, PyFloat, PyInt, PyList, PySequence, PySet,
@@ -131,6 +132,36 @@ impl Encoder for NoneEncoder {
         }
         invalid_type!("None", value, instance_path)
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        if value.is_none() {
+            writer.write_null();
+            return Ok(());
+        }
+        invalid_type_dump!("None", value)
+    }
+
+    #[inline]
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Null {
+            parser.take_null()?;
+            return Ok(py.None().into_bound(py));
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +183,30 @@ impl Encoder for NeverEncoder {
     ) -> SerdeResult<Bound<'a, PyAny>> {
         // Never type cannot be loaded - any value is invalid
         invalid_type!("Never (no value allowed)", value, instance_path)
+    }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        _writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        // Never type should not have any values to dump
+        invalid_type_dump!("Never", value)
+    }
+
+    #[inline]
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        // Never type cannot be loaded - delegate to `load` for the standard error.
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
     }
 }
 
@@ -188,10 +243,28 @@ impl Encoder for IntEncoder {
         invalid_type!("integer", value, instance_path)
     }
 
-    // The default bridge would hand a materialized Python int to `load`, whose
-    // i64 bounds-check overflows on integers outside the i64 range. Accept an
-    // unbounded big integer as-is (JSON has arbitrary-precision numbers);
-    // everything else delegates to `load` for full parity with the object path.
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        if let Ok(v) = value.cast_exact::<PyInt>() {
+            match v.extract::<i64>() {
+                Ok(i) => writer.write_i64(i),
+                Err(_) => writer.write_big_int(v.str()?.to_str()?),
+            }
+            return Ok(());
+        }
+        invalid_type_dump!("integer", value)
+    }
+
+    // Mirrors `parse_any`'s own int/float split (integer text has no dot/exponent)
+    // instead of calling `take_int()` directly: jiter's `known_int` errors with a
+    // DecodeError-shaped "expected int, found float" on a float-looking token
+    // (e.g. `1.5`), but the dict-path produces a SchemaValidationError ("not of
+    // type integer") for that input. Splitting on the raw text avoids the wrong
+    // error class entirely.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -199,15 +272,40 @@ impl Encoder for IntEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        let value = parse_any(py, parser, ctx)?;
-        if self.type_info.min.is_none()
-            && self.type_info.max.is_none()
-            && value
-                .cast_exact::<PyInt>()
-                .is_ok_and(|i| i.extract::<i64>().is_err())
-        {
-            return Ok(value);
+        if parser.peek()? == Kind::Num {
+            let raw = parser.take_number_str()?;
+            if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+                match raw.parse::<i64>() {
+                    Ok(v) => {
+                        check_bounds!(v, self.type_info, instance_path)?;
+                        return Ok(v.into_bound_py_any(py)?);
+                    }
+                    Err(_) => {
+                        let big: BigInt = raw.parse().map_err(|_| {
+                            SerdeError::Py(ValidationError::new_err(format!(
+                                "invalid number: {raw}"
+                            )))
+                        })?;
+                        // Unbounded: accept arbitrary-precision integers as-is
+                        // (the i64 bounds-check in `load` would overflow on these).
+                        if self.type_info.min.is_none() && self.type_info.max.is_none() {
+                            return Ok(big.into_bound_py_any(py)?);
+                        }
+                        // Bounded: materialize and let `load` apply the standard
+                        // (overflowing) bounds check, identical to the bridge default.
+                        let materialized = big.into_bound_py_any(py)?;
+                        return self.load(&materialized, instance_path, ctx);
+                    }
+                }
+            }
+            // Float-shaped token: not a valid int -> same error `load` gives a float value.
+            let v: f64 = raw.parse().map_err(|_| {
+                SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
+            })?;
+            let materialized = PyFloat::new(py, v).into_any();
+            return self.load(&materialized, instance_path, ctx);
         }
+        let value = parse_any(py, parser, ctx)?;
         self.load(&value, instance_path, ctx)
     }
 }
@@ -246,6 +344,55 @@ impl Encoder for FloatEncoder {
             }
         }
         invalid_type!("number", value, instance_path)
+    }
+
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        if let Ok(v) = value.cast::<PyFloat>() {
+            writer
+                .write_f64(v.value())
+                .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
+            return Ok(());
+        }
+        if let Ok(v) = value.cast::<PyInt>() {
+            match v.extract::<i64>() {
+                Ok(i) => writer.write_i64(i),
+                Err(_) => writer.write_big_int(v.str()?.to_str()?),
+            }
+            return Ok(());
+        }
+        invalid_type_dump!("number", value)
+    }
+
+    // `take_number_str` + a plain f64 parse sidesteps any ambiguity in calling
+    // `take_f64()` on an integer-looking token; it also matches the dict-path,
+    // where `load(1)` (an int) coerces to `1.0` just like `load(1.5)` does.
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Num {
+            let raw = parser.take_number_str()?;
+            if let Ok(v) = raw.parse::<f64>() {
+                check_bounds!(v, self.type_info, instance_path)?;
+                return Ok(PyFloat::new(py, v).into_any());
+            }
+            // Unreachable in practice: jiter only hands us syntactically valid
+            // JSON number text, which always parses as f64. Kept as a safe,
+            // non-panicking fallback with the same error `parse_any` would give.
+            return Err(SerdeError::Py(ValidationError::new_err(format!(
+                "invalid number: {raw}"
+            ))));
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
     }
 }
 
@@ -292,6 +439,64 @@ impl Encoder for DecimalEncoder {
             invalid_type!("decimal", value, instance_path)
         }
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        writer.write_str(value.str()?.to_str()?);
+        Ok(())
+    }
+
+    // Builds the Decimal straight from the raw JSON text (not through an f64
+    // round-trip), so precision beyond what f64 can represent survives — e.g.
+    // `load(b'1.1')` gives `Decimal('1.1')` instead of a float-repr artifact.
+    // The f64 parse below is only used for the bounds check.
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        match parser.peek()? {
+            Kind::Num => {
+                let raw = parser.take_number_str()?;
+                match raw.parse::<f64>() {
+                    Ok(v) => {
+                        check_bounds!(v, self.type_info, instance_path)?;
+                        Ok(self.decimal_cls.bind(py).call1((PyString::new(py, raw),))?)
+                    }
+                    // Unreachable in practice: jiter only hands us syntactically
+                    // valid JSON number text, which always parses as f64.
+                    Err(_) => Err(SerdeError::Py(ValidationError::new_err(format!(
+                        "invalid number: {raw}"
+                    )))),
+                }
+            }
+            Kind::Str => {
+                let s = parser.take_str()?;
+                match s.parse::<f64>() {
+                    Ok(v) => {
+                        check_bounds!(v, self.type_info, instance_path)?;
+                        Ok(self.decimal_cls.bind(py).call1((PyString::new(py, s),))?)
+                    }
+                    Err(_) => {
+                        // Not a decimal-shaped string -> same error as `load`.
+                        let materialized = PyString::new(py, s).into_any();
+                        self.load(&materialized, instance_path, ctx)
+                    }
+                }
+            }
+            _ => {
+                let value = parse_any(py, parser, ctx)?;
+                self.load(&value, instance_path, ctx)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -324,6 +529,43 @@ impl Encoder for StringEncoder {
             invalid_type!("string", value, instance_path)
         }
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        if let Ok(v) = value.cast::<PyString>() {
+            writer.write_str(v.to_str()?);
+            return Ok(());
+        }
+        invalid_type_dump!("string", value)
+    }
+
+    #[inline]
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Str {
+            let s = parser.take_str()?;
+            let py_str = PyString::new(py, s);
+            check_length(
+                &py_str,
+                self.type_info.min_length,
+                self.type_info.max_length,
+                instance_path,
+            )?;
+            return Ok(py_str.into_any());
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -354,6 +596,36 @@ impl Encoder for BooleanEncoder {
         }
 
         invalid_type!("boolean", value, instance_path)
+    }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        if let Ok(v) = value.cast::<PyBool>() {
+            writer.write_bool(v.is_true());
+            return Ok(());
+        }
+        invalid_type_dump!("boolean", value)
+    }
+
+    #[inline]
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Bool {
+            let b = parser.take_bool()?;
+            return Ok(PyBool::new(py, b).to_owned().into_any());
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
     }
 }
 
@@ -764,6 +1036,39 @@ impl Encoder for UUIDEncoder {
         }
         invalid_type!("uuid", value, instance_path)
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        writer.write_str(value.str()?.to_str()?);
+        Ok(())
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Str {
+            let s = parser.take_str()?;
+            if Uuid::parse_str(s).is_ok() {
+                if let Ok(result) = self.uuid_cls.bind(py).call1((s,)) {
+                    return Ok(result);
+                }
+            }
+            // Invalid UUID text (or the constructor rejected it) -> same error as `load`.
+            let materialized = PyString::new(py, s).into_any();
+            return self.load(&materialized, instance_path, ctx);
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1112,6 +1417,40 @@ impl Encoder for TimeEncoder {
         }
         invalid_type!("time", value, instance_path)
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        let py_time = value
+            .cast::<PyTime>()
+            .map_err(|_| invalid_type_dump_err("time", value))?;
+        let result = dump_time(py_time)?;
+        writer.write_str(&result);
+        Ok(())
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Str {
+            let s = parser.take_str()?;
+            if let Ok(result) = parse_time(py, s) {
+                return Ok(result.into_any());
+            }
+            let materialized = PyString::new(py, s).into_any();
+            return self.load(&materialized, instance_path, ctx);
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1143,6 +1482,40 @@ impl Encoder for DateTimeEncoder {
         }
         invalid_type!("datetime", value, instance_path)
     }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        let py_datetime = value
+            .cast::<PyDateTime>()
+            .map_err(|_| invalid_type_dump_err("datetime", value))?;
+        let result = dump_datetime(py_datetime, self.naive_datetime_to_utc)?;
+        writer.write_str(&result);
+        Ok(())
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Str {
+            let s = parser.take_str()?;
+            if let Ok(result) = parse_datetime(py, s) {
+                return Ok(result.into_any());
+            }
+            let materialized = PyString::new(py, s).into_any();
+            return self.load(&materialized, instance_path, ctx);
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1171,6 +1544,40 @@ impl Encoder for DateEncoder {
             }
         }
         invalid_type!("date", value, instance_path)
+    }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        _ctx: &Context,
+    ) -> SerdeResult<()> {
+        let py_date = value
+            .cast::<PyDate>()
+            .map_err(|_| invalid_type_dump_err("date", value))?;
+        let result = dump_date(py_date);
+        writer.write_str(&result);
+        Ok(())
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Str {
+            let s = parser.take_str()?;
+            if let Ok(result) = parse_date(py, s) {
+                return Ok(result.into_any());
+            }
+            let materialized = PyString::new(py, s).into_any();
+            return self.load(&materialized, instance_path, ctx);
+        }
+        let value = parse_any(py, parser, ctx)?;
+        self.load(&value, instance_path, ctx)
     }
 }
 
