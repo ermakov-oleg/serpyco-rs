@@ -417,6 +417,7 @@ pub fn get_encoder(
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
             let format_routing = build_format_routing(&fields);
+            let has_flatten = fields.iter().any(|f| f.is_flattened);
 
             let encoder = EntityEncoder {
                 fields,
@@ -425,6 +426,7 @@ pub fn get_encoder(
                 cls: type_info.cls.clone_ref(py),
                 used_keys: type_info.used_keys.clone_ref(py),
                 format_routing,
+                has_flatten,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -434,12 +436,14 @@ pub fn get_encoder(
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
             let format_routing = build_format_routing(&fields);
+            let has_flatten = fields.iter().any(|f| f.is_flattened);
 
             let encoder = TypedDictEncoder {
                 fields,
                 omit_none: type_info.omit_none,
                 used_keys: type_info.used_keys.clone_ref(py),
                 format_routing,
+                has_flatten,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?

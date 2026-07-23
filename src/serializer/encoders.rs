@@ -1045,6 +1045,9 @@ pub struct EntityEncoder {
     /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
     /// Empty is fine; used only by the streaming (no-flatten) load path.
     pub(crate) format_routing: FxHashMap<String, usize>,
+    /// Cached `fields.iter().any(|f| f.is_flattened)`, computed once at
+    /// construction so the format hot paths don't rescan on every call.
+    pub(crate) has_flatten: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1157,7 +1160,7 @@ impl Encoder for EntityEncoder {
         writer: &mut Writer,
         ctx: &Context,
     ) -> SerdeResult<()> {
-        if self.fields.iter().any(|f| f.is_flattened) {
+        if self.has_flatten {
             let dumped = self.dump(value, ctx)?;
             return write_any(&dumped, writer, ctx);
         }
@@ -1212,7 +1215,7 @@ impl Encoder for EntityEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        if self.fields.iter().any(|f| f.is_flattened) {
+        if self.has_flatten {
             let value = parse_any(py, parser, ctx)?;
             return self.load(&value, instance_path, ctx);
         }
@@ -1312,6 +1315,9 @@ pub struct TypedDictEncoder {
     /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
     /// Empty is fine; used only by the streaming (no-flatten) load path.
     pub(crate) format_routing: FxHashMap<String, usize>,
+    /// Cached `fields.iter().any(|f| f.is_flattened)`, computed once at
+    /// construction so the format hot paths don't rescan on every call.
+    pub(crate) has_flatten: bool,
 }
 
 impl Encoder for TypedDictEncoder {
@@ -1380,7 +1386,7 @@ impl Encoder for TypedDictEncoder {
         writer: &mut Writer,
         ctx: &Context,
     ) -> SerdeResult<()> {
-        if self.fields.iter().any(|f| f.is_flattened) {
+        if self.has_flatten {
             let dumped = self.dump(value, ctx)?;
             return write_any(&dumped, writer, ctx);
         }
@@ -1438,7 +1444,7 @@ impl Encoder for TypedDictEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        if self.fields.iter().any(|f| f.is_flattened) {
+        if self.has_flatten {
             let value = parse_any(py, parser, ctx)?;
             return self.load(&value, instance_path, ctx);
         }
