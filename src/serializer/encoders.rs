@@ -945,6 +945,9 @@ pub struct EntityEncoder {
     pub(crate) is_frozen: bool,
     pub(crate) fields: Vec<Field>,
     pub(crate) used_keys: Py<PySet>,
+    /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
+    /// Empty is fine; used only by the streaming (no-flatten) load path.
+    pub(crate) format_routing: HashMap<String, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -1047,6 +1050,97 @@ impl Encoder for EntityEncoder {
         Ok(obj)
     }
 
+    // Streams the object directly to the writer, avoiding the intermediate
+    // PyDict the dict-path (dump) builds. Flatten entities keep full parity via
+    // the bridge (materialize + write_any) — streaming flatten is a future
+    // optimization.
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        if self.fields.iter().any(|f| f.is_flattened) {
+            let dumped = self.dump(value, ctx)?;
+            return write_any(&dumped, writer, ctx);
+        }
+        let _guard = ctx.enter_depth()?;
+        writer.begin_map();
+        for field in &self.fields {
+            let field_val = value.getattr(&field.name)?;
+            // Mirror the dict-path write condition
+            // (`field.required || !self.omit_none || !dump_result.is_none()`):
+            // only optional fields under omit_none need the dumped value first
+            // to decide whether to emit the key at all.
+            if !field.required && self.omit_none {
+                let dumped = field.encoder.dump(&field_val, ctx)?;
+                if !dumped.is_none() {
+                    writer.map_key(&field.dict_key_rs);
+                    write_any(&dumped, writer, ctx)?;
+                }
+            } else {
+                writer.map_key(&field.dict_key_rs);
+                field.encoder.dump_format(&field_val, writer, ctx)?;
+            }
+        }
+        writer.end_map();
+        Ok(())
+    }
+
+    // Streams straight into a class instance, avoiding the intermediate PyDict
+    // the dict-path (load) parses first. Keys are routed via `format_routing`;
+    // unknown keys are skipped. Flatten entities fall back to the bridge for
+    // full parity.
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if self.fields.iter().any(|f| f.is_flattened) {
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let _guard = ctx.enter_depth()?;
+        if parser.peek()? != Kind::Map {
+            // Non-object input -> let `load` raise the standard "object" error.
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let mut slots: Vec<Option<Bound<'py, PyAny>>> =
+            (0..self.fields.len()).map(|_| None).collect();
+        // enter_map returns Option<&str>; copy the key out before recursing
+        // (the parser reuses its buffer across calls).
+        let mut next_key: Option<String> = parser.enter_map()?.map(str::to_owned);
+        while let Some(key) = next_key {
+            match self.format_routing.get(key.as_str()) {
+                Some(&idx) => {
+                    let field = &self.fields[idx];
+                    let field_path = instance_path.push(field.dict_key_rs.as_str());
+                    slots[idx] = Some(field.encoder.load_format(py, parser, &field_path, ctx)?);
+                }
+                None => parser.skip_value()?,
+            }
+            next_key = parser.next_key()?.map(str::to_owned);
+        }
+        let obj = create_instance(self.cls.bind(py))?;
+        for (idx, field) in self.fields.iter().enumerate() {
+            let val = match slots[idx].take() {
+                Some(v) => v,
+                // Missing field: same default / missing-required error as the
+                // dict-path (get_default pushes dict_key_rs onto the base path).
+                None => field.get_default(py, instance_path)?,
+            };
+            if self.is_frozen {
+                generic_set_attr(&obj, field.name.as_ptr(), val)?;
+            } else {
+                set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
+            }
+        }
+        Ok(obj)
+    }
+
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
     }
@@ -1090,6 +1184,9 @@ pub struct TypedDictEncoder {
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
     pub(crate) used_keys: Py<PySet>,
+    /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
+    /// Empty is fine; used only by the streaming (no-flatten) load path.
+    pub(crate) format_routing: HashMap<String, usize>,
 }
 
 impl Encoder for TypedDictEncoder {
@@ -1147,6 +1244,107 @@ impl Encoder for TypedDictEncoder {
         }
         Ok(dict.into_any())
     }
+
+    // Streams the mapping directly to the writer, avoiding the intermediate
+    // PyDict the dict-path (dump) builds. Missing/optional/required handling
+    // mirrors the dict-path exactly: a missing required key errors, a missing
+    // optional key is skipped. Flatten typeddicts fall back to the bridge.
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        if self.fields.iter().any(|f| f.is_flattened) {
+            let dumped = self.dump(value, ctx)?;
+            return write_any(&dumped, writer, ctx);
+        }
+        let _guard = ctx.enter_depth()?;
+        let value = match value.cast::<PyDict>() {
+            Ok(val) => val,
+            _ => invalid_type_dump!("dict", value),
+        };
+        writer.begin_map();
+        for field in &self.fields {
+            let field_val = match value.get_item(&field.name) {
+                Ok(Some(val)) => val,
+                _ => {
+                    if field.required {
+                        return Err(SerdeError::Py(ValidationError::new_err(format!(
+                            "data dictionary is missing required parameter {}",
+                            field.name
+                        ))));
+                    }
+                    // Missing optional key: skip entirely (no key emitted).
+                    continue;
+                }
+            };
+            // Mirror the dict-path write condition
+            // (`field.required || !self.omit_none || !dump_result.is_none()`).
+            if !field.required && self.omit_none {
+                let dumped = field.encoder.dump(&field_val, ctx)?;
+                if !dumped.is_none() {
+                    writer.map_key(&field.dict_key_rs);
+                    write_any(&dumped, writer, ctx)?;
+                }
+            } else {
+                writer.map_key(&field.dict_key_rs);
+                field.encoder.dump_format(&field_val, writer, ctx)?;
+            }
+        }
+        writer.end_map();
+        Ok(())
+    }
+
+    // Streams straight into the result PyDict, avoiding the intermediate PyDict
+    // the dict-path (load) parses first. Keys are routed via `format_routing`;
+    // unknown keys are skipped. Every field is written to the result (present
+    // value or its default), matching the dict-path. Flatten typeddicts fall
+    // back to the bridge for full parity.
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if self.fields.iter().any(|f| f.is_flattened) {
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let _guard = ctx.enter_depth()?;
+        if parser.peek()? != Kind::Map {
+            // Non-object input -> let `load` raise the standard "dict" error.
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let mut slots: Vec<Option<Bound<'py, PyAny>>> =
+            (0..self.fields.len()).map(|_| None).collect();
+        let mut next_key: Option<String> = parser.enter_map()?.map(str::to_owned);
+        while let Some(key) = next_key {
+            match self.format_routing.get(key.as_str()) {
+                Some(&idx) => {
+                    let field = &self.fields[idx];
+                    let field_path = instance_path.push(field.dict_key_rs.as_str());
+                    slots[idx] = Some(field.encoder.load_format(py, parser, &field_path, ctx)?);
+                }
+                None => parser.skip_value()?,
+            }
+            next_key = parser.next_key()?.map(str::to_owned);
+        }
+        let dict = create_py_dict_known_size(py, self.fields.len())?;
+        for (idx, field) in self.fields.iter().enumerate() {
+            let val = match slots[idx].take() {
+                Some(v) => v,
+                // Missing field: same default / missing-required error as the
+                // dict-path (get_default pushes dict_key_rs onto the base path).
+                None => field.get_default(py, instance_path)?,
+            };
+            py_dict_set_item(&dict, field.name.as_ptr(), val)?;
+        }
+        Ok(dict.into_any())
+    }
+
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
     }

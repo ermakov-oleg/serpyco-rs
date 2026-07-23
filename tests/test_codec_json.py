@@ -241,3 +241,142 @@ def test_recursion_depth_codec():
     deep = b'[' * 2000 + b'1' + b']' * 2000
     with pytest.raises(RecursionError):
         s.load(deep)
+
+
+def test_entity_unknown_keys_skipped():
+    s = Serializer(Inner, codec=JSON)
+    assert s.load(b'{"name": "x", "unknown": {"deep": [1]}, "score": 1.0}') == Inner(name='x', score=1.0)
+
+
+def test_entity_missing_required_error_parity():
+    from serpyco_rs import SchemaValidationError
+
+    s = Serializer(Inner)
+    sc = Serializer(Inner, codec=JSON)
+    bad = {'name': 'x'}  # missing score
+    with pytest.raises(SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(SchemaValidationError) as c:
+        sc.load(orjson.dumps(bad))
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [(e.message, e.instance_path) for e in d.value.errors]
+
+
+def test_entity_field_error_path_parity():
+    from serpyco_rs import SchemaValidationError
+
+    s = Serializer(Everything)
+    sc = Serializer(Everything, codec=JSON)
+    bad = s.dump(EVERYTHING)
+    bad['nested'] = {'name': 'x', 'score': 'notfloat'}
+    with pytest.raises(SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(SchemaValidationError) as c:
+        sc.load(orjson.dumps(bad))
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [(e.message, e.instance_path) for e in d.value.errors]
+
+
+def test_entity_defaults_applied():
+    s = Serializer(Everything, codec=JSON)
+    payload = Serializer(Everything).dump(EVERYTHING)
+    del payload['with_default']  # has default=5
+    del payload['items']  # has default_factory=list
+    obj = s.load(orjson.dumps(payload))
+    assert obj.with_default == 5
+    assert obj.items == []
+
+
+def test_camelcase_codec():
+    @dataclass
+    class TwoWords:
+        long_name: str
+
+    s = Serializer(TwoWords, camelcase_fields=True, codec=JSON)
+    assert orjson.loads(s.dump(TwoWords(long_name='a'))) == {'longName': 'a'}
+    assert s.load(b'{"longName": "a"}') == TwoWords(long_name='a')
+
+
+def test_omit_none_codec():
+    @dataclass
+    class WithOpt:
+        a: Optional[int] = None
+        b: int = 1
+
+    s = Serializer(WithOpt, omit_none=True, codec=JSON)
+    assert orjson.loads(s.dump(WithOpt())) == {'b': 1}
+
+
+def test_typeddict_codec_roundtrip():
+    from typing_extensions import TypedDict
+
+    class Movie(TypedDict):
+        name: str
+        year: int
+
+    s = Serializer(Movie, codec=JSON)
+    val: Movie = {'name': 'Blade Runner', 'year': 1982}
+    assert orjson.loads(s.dump(val)) == {'name': 'Blade Runner', 'year': 1982}
+    assert s.load(orjson.dumps(val)) == val
+
+
+def test_typeddict_codec_matches_dict_path():
+    from typing_extensions import TypedDict
+
+    class Movie(TypedDict):
+        name: str
+        year: int
+
+    s = Serializer(Movie)
+    sc = Serializer(Movie, codec=JSON)
+    val: Movie = {'name': 'Blade Runner', 'year': 1982}
+    # dump parity
+    assert orjson.loads(sc.dump(val)) == s.dump(val)
+    # load parity (including unknown-key skipping)
+    raw = b'{"name": "x", "year": 1, "unknown": [1, 2]}'
+    assert sc.load(raw) == s.load(orjson.loads(raw))
+
+
+def test_typeddict_partial_codec_parity():
+    from typing_extensions import NotRequired, TypedDict
+
+    class Movie(TypedDict):
+        name: str
+        year: NotRequired[int]
+
+    s = Serializer(Movie)
+    sc = Serializer(Movie, codec=JSON)
+    val: Movie = {'name': 'x'}  # optional 'year' omitted
+    assert orjson.loads(sc.dump(val)) == s.dump(val)
+    assert sc.load(orjson.dumps(val)) == s.load(dict(val))
+
+
+def test_flatten_parity_codec():
+    from typing import Annotated
+
+    from serpyco_rs.metadata import Flatten
+
+    @dataclass
+    class Address:
+        street: str
+        city: str
+        country: str
+
+    @dataclass
+    class Person:
+        name: str
+        age: int
+        address: Annotated[Address, Flatten]
+        extra: Annotated[dict[str, Any], Flatten]
+
+    person = Person(
+        name='John',
+        age=30,
+        address=Address(street='123 Main', city='NYC', country='USA'),
+        extra={'phone': '555-1234'},
+    )
+    s_dict = Serializer(Person)
+    s_codec = Serializer(Person, codec=JSON)
+    # dump parity: streaming falls back to the bridge for flatten entities
+    assert orjson.loads(s_codec.dump(person)) == s_dict.dump(person)
+    # load parity: round-trips through the bridge fallback
+    assert s_codec.load(s_codec.dump(person)) == person
+    assert s_codec.load(orjson.dumps(s_dict.dump(person))) == person

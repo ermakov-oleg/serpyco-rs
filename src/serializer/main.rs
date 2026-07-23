@@ -404,12 +404,15 @@ pub fn get_encoder(
             let fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
+            let format_routing = build_format_routing(&fields);
+
             let encoder = EntityEncoder {
                 fields,
                 omit_none: type_info.omit_none,
                 is_frozen: type_info.is_frozen,
                 cls: type_info.cls.clone_ref(py),
                 used_keys: type_info.used_keys.clone_ref(py),
+                format_routing,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -418,10 +421,13 @@ pub fn get_encoder(
             let fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
+            let format_routing = build_format_routing(&fields);
+
             let encoder = TypedDictEncoder {
                 fields,
                 omit_none: type_info.omit_none,
                 used_keys: type_info.used_keys.clone_ref(py),
+                format_routing,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -504,6 +510,19 @@ fn extract_custom_encoder(
             Some(deserialize.unbind())
         },
     ))
+}
+
+/// Maps JSON key (`dict_key_rs`) -> field index for non-flatten fields only.
+/// Used by the streaming load path to route keys straight to their encoder;
+/// flatten fields are excluded because the streaming path is skipped entirely
+/// when any field is flattened (see `EntityEncoder`/`TypedDictEncoder`).
+fn build_format_routing(fields: &[Field]) -> HashMap<String, usize> {
+    fields
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| !f.is_flattened)
+        .map(|(i, f)| (f.dict_key_rs.clone(), i))
+        .collect()
 }
 
 fn iterate_on_fields(
