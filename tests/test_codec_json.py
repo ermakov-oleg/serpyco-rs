@@ -184,7 +184,14 @@ def test_scalar_edges():
         s_int.load(b'1.5')  # float is not a valid int -> schema error, NOT DecodeError
 
     s_float = Serializer(float, codec=JSON)
-    assert s_float.load(b'1') == 1.0  # int coerces to float, as on the dict path
+    # Integer JSON in a float field returns an int, exactly like the dict path
+    # (equality 1 == 1.0 holds; the point is the int type matches the dict path).
+    dict_result = Serializer(float).load(1)
+    codec_result = s_float.load(b'1')
+    assert codec_result == dict_result
+    assert type(codec_result) is type(dict_result)
+    assert s_float.load(b'1.5') == 1.5
+    assert type(s_float.load(b'1.5')) is float
 
     s_str = Serializer(str, codec=JSON)
     assert s_str.load('"a\\nb\\u0000"'.encode()) == 'a\nb\x00'

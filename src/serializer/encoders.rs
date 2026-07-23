@@ -368,9 +368,10 @@ impl Encoder for FloatEncoder {
         invalid_type_dump!("number", value)
     }
 
-    // `take_number_str` + a plain f64 parse sidesteps any ambiguity in calling
-    // `take_f64()` on an integer-looking token; it also matches the dict-path,
-    // where `load(1)` (an int) coerces to `1.0` just like `load(1.5)` does.
+    // Integer-shaped tokens (no dot/exponent) are materialized as a Python int
+    // and deferred to `self.load`, so a float field returns an int for `b'1'`,
+    // exactly like the dict-path (`load(1)` returns `1`, not `1.0`). Float-shaped
+    // tokens keep the fast direct-parse path below.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -380,6 +381,20 @@ impl Encoder for FloatEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Num {
             let raw = parser.take_number_str()?;
+            if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+                let materialized = match raw.parse::<i64>() {
+                    Ok(v) => v.into_bound_py_any(py)?,
+                    Err(_) => {
+                        let big: BigInt = raw.parse().map_err(|_| {
+                            SerdeError::Py(ValidationError::new_err(format!(
+                                "invalid number: {raw}"
+                            )))
+                        })?;
+                        big.into_bound_py_any(py)?
+                    }
+                };
+                return self.load(&materialized, instance_path, ctx);
+            }
             if let Ok(v) = raw.parse::<f64>() {
                 check_bounds!(v, self.type_info, instance_path)?;
                 return Ok(PyFloat::new(py, v).into_any());
