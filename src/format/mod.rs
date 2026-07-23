@@ -1,4 +1,4 @@
-// pub(crate) mod bridge; // will be added in Task 3 — keep commented
+pub(crate) mod bridge;
 pub(crate) mod json;
 
 use pyo3::exceptions::PyValueError;
