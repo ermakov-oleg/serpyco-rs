@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -7,7 +8,6 @@ from enum import Enum
 from ipaddress import IPv4Address
 from typing import Annotated, Any, Generic, Literal, Optional, TypeVar, Union
 
-import orjson
 import pytest
 from typing_extensions import NotRequired, TypedDict
 
@@ -161,7 +161,7 @@ def test_dump_codec_roundtrip():
 
 def test_dump_codec_matches_dict_path():
     s = Serializer(Everything)
-    assert orjson.loads(s.dump(EVERYTHING, codec=JSON)) == s.dump(EVERYTHING)
+    assert json.loads(s.dump(EVERYTHING, codec=JSON)) == s.dump(EVERYTHING)
 
 
 def test_codec_in_constructor():
@@ -188,7 +188,7 @@ def test_big_int_roundtrip():
     s = Serializer(int, codec=JSON)
     big = 2**100
     assert s.load(s.dump(big)) == big
-    assert orjson.loads(s.dump(big)) == big
+    assert json.loads(s.dump(big)) == big
 
 
 def test_malformed_json_raises_decode_error():
@@ -218,7 +218,7 @@ def test_schema_error_has_same_instance_path():
     with pytest.raises(SchemaValidationError) as dict_err:
         s.load(good)
     with pytest.raises(SchemaValidationError) as codec_err:
-        s.load(orjson.dumps(good), codec=JSON)
+        s.load(json.dumps(good), codec=JSON)
     assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
         (e.message, e.instance_path) for e in dict_err.value.errors
     ]
@@ -275,7 +275,7 @@ def test_containers_deep():
     assert s2.load(s2.dump((1, 'x', 0.5))) == (1, 'x', 0.5)
 
     s3 = Serializer(dict[str, int], codec=JSON)
-    assert orjson.loads(s3.dump({'k': 1})) == {'k': 1}
+    assert json.loads(s3.dump({'k': 1})) == {'k': 1}
     assert s3.load(b'{"k": 1}') == {'k': 1}
 
 
@@ -311,7 +311,7 @@ def test_entity_missing_required_error_parity():
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(orjson.dumps(bad))
+        sc.load(json.dumps(bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -325,7 +325,7 @@ def test_entity_field_error_path_parity():
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(orjson.dumps(bad))
+        sc.load(json.dumps(bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -336,7 +336,7 @@ def test_entity_defaults_applied():
     payload = Serializer(Everything).dump(EVERYTHING)
     del payload['with_default']  # has default=5
     del payload['items']  # has default_factory=list
-    obj = s.load(orjson.dumps(payload))
+    obj = s.load(json.dumps(payload))
     assert obj.with_default == 5
     assert obj.items == []
 
@@ -347,7 +347,7 @@ def test_camelcase_codec():
         long_name: str
 
     s = Serializer(TwoWords, camelcase_fields=True, codec=JSON)
-    assert orjson.loads(s.dump(TwoWords(long_name='a'))) == {'longName': 'a'}
+    assert json.loads(s.dump(TwoWords(long_name='a'))) == {'longName': 'a'}
     assert s.load(b'{"longName": "a"}') == TwoWords(long_name='a')
 
 
@@ -358,7 +358,7 @@ def test_omit_none_codec():
         b: int = 1
 
     s = Serializer(WithOpt, omit_none=True, codec=JSON)
-    assert orjson.loads(s.dump(WithOpt())) == {'b': 1}
+    assert json.loads(s.dump(WithOpt())) == {'b': 1}
 
 
 def test_typeddict_codec_roundtrip():
@@ -368,8 +368,8 @@ def test_typeddict_codec_roundtrip():
 
     s = Serializer(Movie, codec=JSON)
     val: Movie = {'name': 'Blade Runner', 'year': 1982}
-    assert orjson.loads(s.dump(val)) == {'name': 'Blade Runner', 'year': 1982}
-    assert s.load(orjson.dumps(val)) == val
+    assert json.loads(s.dump(val)) == {'name': 'Blade Runner', 'year': 1982}
+    assert s.load(json.dumps(val)) == val
 
 
 def test_typeddict_codec_matches_dict_path():
@@ -381,10 +381,10 @@ def test_typeddict_codec_matches_dict_path():
     sc = Serializer(Movie, codec=JSON)
     val: Movie = {'name': 'Blade Runner', 'year': 1982}
     # dump parity
-    assert orjson.loads(sc.dump(val)) == s.dump(val)
+    assert json.loads(sc.dump(val)) == s.dump(val)
     # load parity (including unknown-key skipping)
     raw = b'{"name": "x", "year": 1, "unknown": [1, 2]}'
-    assert sc.load(raw) == s.load(orjson.loads(raw))
+    assert sc.load(raw) == s.load(json.loads(raw))
 
 
 def test_typeddict_partial_codec_parity():
@@ -395,8 +395,8 @@ def test_typeddict_partial_codec_parity():
     s = Serializer(Movie)
     sc = Serializer(Movie, codec=JSON)
     val: Movie = {'name': 'x'}  # optional 'year' omitted
-    assert orjson.loads(sc.dump(val)) == s.dump(val)
-    assert sc.load(orjson.dumps(val)) == s.load(dict(val))
+    assert json.loads(sc.dump(val)) == s.dump(val)
+    assert sc.load(json.dumps(val)) == s.load(dict(val))
 
 
 def test_flatten_parity_codec():
@@ -422,10 +422,10 @@ def test_flatten_parity_codec():
     s_dict = Serializer(Person)
     s_codec = Serializer(Person, codec=JSON)
     # dump parity: streaming falls back to the bridge for flatten entities
-    assert orjson.loads(s_codec.dump(person)) == s_dict.dump(person)
+    assert json.loads(s_codec.dump(person)) == s_dict.dump(person)
     # load parity: round-trips through the bridge fallback
     assert s_codec.load(s_codec.dump(person)) == person
-    assert s_codec.load(orjson.dumps(s_dict.dump(person))) == person
+    assert s_codec.load(json.dumps(s_dict.dump(person))) == person
 
 
 def test_union_codec():
@@ -464,7 +464,7 @@ def test_union_all_fail_parity():
     with pytest.raises(serpyco_rs.SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-        sc.load(orjson.dumps(bad))
+        sc.load(json.dumps(bad))
     assert norm(c.value.errors) == norm(d.value.errors)
 
 
@@ -491,7 +491,7 @@ def test_discriminated_union_codec():
         with pytest.raises(serpyco_rs.SchemaValidationError) as d:
             sd.load(bad)
         with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-            s.load(orjson.dumps(bad))
+            s.load(json.dumps(bad))
         assert [(e.message, e.instance_path) for e in c.value.errors] == [
             (e.message, e.instance_path) for e in d.value.errors
         ]
@@ -506,10 +506,10 @@ def test_untagged_union_dump_entity():
     # entity is the SECOND member, after a scalar whose dump doesn't validate
     s = Serializer(int | P, codec=JSON)
     data = s.dump(P(name='n', score=1.5))
-    assert orjson.loads(data) == {'name': 'n', 'score': 1.5}
+    assert json.loads(data) == {'name': 'n', 'score': 1.5}
     assert s.load(data) == P(name='n', score=1.5)
     # scalar member still dumps correctly
-    assert orjson.loads(s.dump(7)) == 7
+    assert json.loads(s.dump(7)) == 7
     assert s.load(s.dump(7)) == 7
 
 
@@ -598,7 +598,7 @@ def test_parity_dump(typ, value):
     s = Serializer(typ)
     sc = Serializer(typ, codec=JSON)
     # Compare the decoded JSON of the codec dump to the dict-path dump.
-    assert orjson.loads(sc.dump(value)) == s.dump(value)
+    assert json.loads(sc.dump(value)) == s.dump(value)
 
 
 @pytest.mark.parametrize(('typ', 'value'), PARITY_CASES)
@@ -637,14 +637,14 @@ def test_custom_type_resolver_parity():
     val = Data(ip=IPv4Address('1.1.1.1'))
     s = Serializer(Data, custom_type_resolver=resolver)
     sc = Serializer(Data, custom_type_resolver=resolver, codec=JSON)
-    assert orjson.loads(sc.dump(val)) == s.dump(val)
+    assert json.loads(sc.dump(val)) == s.dump(val)
     assert sc.load(sc.dump(val)) == val
 
 
 # --- Task 10: error-parity sweep ----------------------------------------------
 #
 # Each case is a Python value that FAILS validation on the dict path; the codec
-# path (fed the orjson-encoded value) must produce the identical (message,
+# path (fed the JSON-encoded value) must produce the identical (message,
 # instance_path) list. Only SINGLE-invalid-field cases are used so wire-order vs
 # field-order multi-error reporting never matters and exact equality holds.
 # Union all-fail is excluded because it carries a global-naming counter artifact
@@ -677,7 +677,7 @@ def test_error_parity(typ, bad):
     with pytest.raises(SchemaValidationError) as dict_err:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as codec_err:
-        sc.load(orjson.dumps(bad))
+        sc.load(json.dumps(bad))
     assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
         (e.message, e.instance_path) for e in dict_err.value.errors
     ]
