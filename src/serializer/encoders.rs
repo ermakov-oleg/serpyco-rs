@@ -2611,6 +2611,9 @@ impl Encoder for CustomEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         match self.load {
             Some(_) => {
+                // Inherent bridge: the user's custom `load` callable operates on a
+                // Python object, so the value must be materialized first. This is a
+                // deliberate exception to the native streaming path, not a gap.
                 let value = parse_any(py, parser, ctx)?;
                 self.load(&value, instance_path, ctx)
             }
