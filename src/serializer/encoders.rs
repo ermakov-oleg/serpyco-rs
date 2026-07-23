@@ -682,6 +682,17 @@ impl Encoder for BytesEncoder {
     }
 }
 
+/// Write a dumped dict key as a map key, mirroring `bridge::write_any`'s key
+/// handling: string keys go straight through, everything else via `str()`.
+#[inline]
+fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()> {
+    match key.cast::<PyString>() {
+        Ok(s) => writer.map_key(s.to_str()?),
+        Err(_) => writer.map_key(key.str()?.to_str()?),
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,
@@ -728,6 +739,70 @@ impl Encoder for DictionaryEncoder {
         } else {
             invalid_type_dump!("dict", value)
         }
+    }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        let _guard = ctx.enter_depth()?;
+        if let Ok(dict) = value.cast::<PyDict>() {
+            writer.begin_map();
+            for (k, v) in dict.iter() {
+                if self.omit_none {
+                    // omit_none needs to know whether the dumped value is
+                    // None before the key is written, so materialize it
+                    // first and stream it back out via write_any.
+                    let dumped_value = self.value_encoder.dump(&v, ctx)?;
+                    if dumped_value.is_none() {
+                        continue;
+                    }
+                    let key = self.key_encoder.dump(&k, ctx)?;
+                    write_map_key(&key, writer)?;
+                    write_any(&dumped_value, writer, ctx)?;
+                } else {
+                    let key = self.key_encoder.dump(&k, ctx)?;
+                    write_map_key(&key, writer)?;
+                    self.value_encoder.dump_format(&v, writer, ctx)?;
+                }
+            }
+            writer.end_map();
+            Ok(())
+        } else {
+            invalid_type_dump!("dict", value)
+        }
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        let _guard = ctx.enter_depth()?;
+        if parser.peek()? != Kind::Map {
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let result_dict = PyDict::new(py);
+        // Keys borrow from the parser buffer, so copy each one out before the
+        // next `load_format` call can move the cursor and invalidate it.
+        let mut key = parser.enter_map()?.map(str::to_owned);
+        while let Some(k) = key {
+            let item_path = instance_path.push(k.as_str());
+            let py_key_raw = PyString::new(py, &k).into_any();
+            let py_key = self.key_encoder.load(&py_key_raw, &item_path, ctx)?;
+            let py_value = self
+                .value_encoder
+                .load_format(py, parser, &item_path, ctx)?;
+            py_dict_set_item(&result_dict, py_key.as_ptr(), py_value)?;
+            key = parser.next_key()?.map(str::to_owned);
+        }
+        Ok(result_dict.into_any())
     }
 
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
@@ -797,6 +872,65 @@ impl Encoder for ArrayEncoder {
         } else {
             invalid_type!("list", value, instance_path)
         }
+    }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        let _guard = ctx.enter_depth()?;
+        if let Ok(list) = value.cast::<PyList>() {
+            writer.begin_array();
+            for index in 0..list.len() {
+                writer.array_item();
+                let item = py_list_get_item(list, index)?;
+                self.encoder.dump_format(&item, writer, ctx)?;
+            }
+            writer.end_array();
+            Ok(())
+        } else {
+            invalid_type_dump!("list", value)
+        }
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        let _guard = ctx.enter_depth()?;
+        if parser.peek()? != Kind::Array {
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
+        if parser.enter_array()? {
+            loop {
+                // Length bounds can only be checked after the closing bracket
+                // is seen, so an element-type error here surfaces before a
+                // would-be length error (unlike the dict path, which checks
+                // length against the raw input up front).
+                let item_path = instance_path.push(items.len());
+                items.push(self.encoder.load_format(py, parser, &item_path, ctx)?);
+                if !parser.next_array_item()? {
+                    break;
+                }
+            }
+        }
+        let list = PyList::new(py, items)?;
+        check_sequence_bounds(
+            &list,
+            list.len(),
+            self.min_length,
+            self.max_length,
+            Some(instance_path),
+        )?;
+        Ok(list.into_any())
     }
 
     fn is_sequence(&self) -> bool {
@@ -1273,6 +1407,77 @@ impl Encoder for TupleEncoder {
         } else {
             invalid_type!("sequence", value, instance_path)
         }
+    }
+
+    #[inline]
+    fn dump_format(
+        &self,
+        value: &Bound<'_, PyAny>,
+        writer: &mut Writer,
+        ctx: &Context,
+    ) -> SerdeResult<()> {
+        let _guard = ctx.enter_depth()?;
+        if let Ok(seq) = value.cast::<PySequence>() {
+            let seq_len = seq.len()?;
+            check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
+            writer.begin_array();
+            for index in 0..seq_len {
+                writer.array_item();
+                let item = seq.get_item(index)?;
+                self.encoders[index].dump_format(&item, writer, ctx)?;
+            }
+            writer.end_array();
+            Ok(())
+        } else {
+            invalid_type_dump!("sequence", value)
+        }
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        let _guard = ctx.enter_depth()?;
+        if parser.peek()? != Kind::Array {
+            let value = parse_any(py, parser, ctx)?;
+            return self.load(&value, instance_path, ctx);
+        }
+        let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
+        if parser.enter_array()? {
+            loop {
+                let idx = items.len();
+                if idx < self.encoders.len() {
+                    let item_path = instance_path.push(idx);
+                    items.push(self.encoders[idx].load_format(py, parser, &item_path, ctx)?);
+                } else {
+                    // More items than expected encoders: consume them
+                    // generically so the final count still reflects what the
+                    // input actually contains, giving the same "has more
+                    // than N items" error check_sequence_size would raise.
+                    items.push(parse_any(py, parser, ctx)?);
+                }
+                if !parser.next_array_item()? {
+                    break;
+                }
+            }
+        }
+        // Length can only be known once the closing bracket is seen, so a
+        // type error on one of the first `encoders.len()` items surfaces
+        // before a would-be length error here (unlike the dict path, which
+        // checks length against the raw input up front). The list built from
+        // already-converted items is used for the length-error message
+        // (dict path shows the raw input instead).
+        let list = PyList::new(py, items)?;
+        let seq = list.cast::<PySequence>().map_err(PyErr::from)?;
+        check_sequence_size(seq, list.len(), self.encoders.len(), Some(instance_path))?;
+        let result = create_py_tuple(py, list.len())?;
+        for (index, item) in list.iter().enumerate() {
+            py_tuple_set_item(&result, index, item);
+        }
+        Ok(result.into_any())
     }
 
     fn is_sequence(&self) -> bool {

@@ -204,3 +204,40 @@ def test_scalar_edges():
     s_dec = Serializer(Decimal, codec=JSON)
     assert s_dec.load(b'"1.100"') == Decimal('1.100')
     assert s_dec.load(b'1.1') == Decimal('1.1')  # precision from raw text, not repr(float)
+
+
+def test_containers_deep():
+    s = Serializer(list[dict[str, list[int]]], codec=JSON)
+    val = [{'a': [1, 2]}, {'b': []}]
+    assert s.load(s.dump(val)) == val
+
+    s2 = Serializer(tuple[int, str, float], codec=JSON)
+    assert s2.load(s2.dump((1, 'x', 0.5))) == (1, 'x', 0.5)
+
+    s3 = Serializer(dict[str, int], codec=JSON)
+    assert orjson.loads(s3.dump({'k': 1})) == {'k': 1}
+    assert s3.load(b'{"k": 1}') == {'k': 1}
+
+
+def test_array_element_error_path():
+    from serpyco_rs import SchemaValidationError
+
+    s = Serializer(list[int], codec=JSON)
+    with pytest.raises(SchemaValidationError) as e:
+        s.load(b'[1, "bad", 3]')
+    # element error must carry the index path, exactly like the dict path
+    dict_s = Serializer(list[int])
+    with pytest.raises(SchemaValidationError) as d:
+        dict_s.load([1, 'bad', 3])
+    assert [(x.message, x.instance_path) for x in e.value.errors] == [
+        (x.message, x.instance_path) for x in d.value.errors
+    ]
+
+
+def test_recursion_depth_codec():
+    from typing import Any
+
+    s = Serializer(Any, codec=JSON)
+    deep = b'[' * 2000 + b'1' + b']' * 2000
+    with pytest.raises(RecursionError):
+        s.load(deep)
