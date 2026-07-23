@@ -41,6 +41,10 @@ def tab(obj):
         'Relative (latency)',
     )
     for group, val in sorted(obj.items(), reverse=True):
+        # Skip groups that don't cover the classic dict-path libraries
+        # (e.g. the end-to-end bytes benchmarks, which have a different lib set).
+        if not all(lib in val for lib in LIBRARIES):
+            continue
         buf.write('\n' + '#### ' + group + '\n\n')
         table = []
         for lib in LIBRARIES:

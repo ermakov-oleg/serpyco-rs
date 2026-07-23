@@ -33,6 +33,40 @@ You can also embed other dataclasses in a definition.
 
 The main use-case for serpyco-rs is to serialize objects for an API, but it can be helpful whenever you need to transform objects to/from builtin Python types.
 
+## Serializing to/from bytes (codec API)
+
+By default `dump`/`load` convert between objects and builtin Python types (`dict`, `list`, ...), leaving the JSON layer to you. Binding a `codec` makes the serializer work directly with `bytes`, skipping the intermediate `dict`:
+
+```python
+import serpyco_rs
+from serpyco_rs import JSON
+
+serializer = serpyco_rs.Serializer(Example, codec=JSON)
+
+raw = serializer.dump(Example(name="foo", num=2, tags=["hello", "world"]))
+print(raw)
+>> b'{"name":"foo","num":2,"tags":["hello","world"]}'
+
+obj = serializer.load(raw)
+>> Example(name='foo', num=2, tags=['hello', 'world'])
+```
+
+- `dump(value)` returns `bytes`; `load(data)` accepts `bytes`, `bytearray`, `memoryview`, or `str`.
+- The codec can also be passed per call, overriding (or opting into) the bound format: `serializer.dump(value, codec=JSON)` / `serializer.load(raw, codec=JSON)`.
+- Malformed input raises `DecodeError`; schema violations raise `SchemaValidationError` — the same validation as the dict-based path.
+- Only `JSON` ships today. The format layer is abstracted, and a `msgpack` codec is planned.
+
+### Benchmarks (end-to-end bytes)
+
+Round-tripping the [benchmark model](bench/compare/libs/base.py) straight to/from `bytes` (macOS, Apple M4 Max, Python 3.14), median latency:
+
+| Direction | serpyco-rs codec | serpyco-rs + orjson | msgspec |
+|-----------|------------------|---------------------|---------|
+| dump (object → bytes) | **0.028 ms** | 0.060 ms | 0.013 ms |
+| load (bytes → object) | 0.099 ms | 0.089 ms | 0.043 ms |
+
+Encoding straight to bytes is ~2.1x faster than `dump()` + `orjson.dumps()`, because no intermediate `dict` is built. Decoding is currently on par with `orjson.loads()` + `load()` (both reconstruct the same objects). `msgspec`'s native bytes path is shown for reference.
+
 ## Installation
 Use pip to install:
 
