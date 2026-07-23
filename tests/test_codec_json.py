@@ -423,9 +423,222 @@ def test_flatten_parity_codec():
     s_codec = Serializer(Person, codec=JSON)
     # dump parity: streaming falls back to the bridge for flatten entities
     assert json.loads(s_codec.dump(person)) == s_dict.dump(person)
-    # load parity: round-trips through the bridge fallback
+    # load parity: native flatten streaming round-trips exactly like the bridge did
     assert s_codec.load(s_codec.dump(person)) == person
     assert s_codec.load(json.dumps(s_dict.dump(person))) == person
+
+
+def test_flatten_struct_only_parity_codec():
+    @dataclass
+    class Address:
+        street: str
+        city: str
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    person = Person(name='John', address=Address(street='123 Main', city='NYC'))
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    assert json.loads(sc.dump(person)) == s.dump(person)
+    assert sc.load(sc.dump(person)) == person
+    assert sc.load(json.dumps(s.dump(person))) == s.load(s.dump(person))
+
+
+def test_flatten_dict_only_parity_codec():
+    @dataclass
+    class Person:
+        name: str
+        extra: Annotated[dict[str, Any], Flatten]
+
+    person = Person(name='John', extra={'phone': '555-1234', 'age': 30})
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    assert json.loads(sc.dump(person)) == s.dump(person)
+    assert sc.load(sc.dump(person)) == person
+    assert sc.load(json.dumps(s.dump(person))) == s.load(s.dump(person))
+
+
+def test_flatten_nested_parity_codec():
+    # A flatten field whose own type contains a flatten field: the outer stream
+    # collects unknowns for `address`, then `Address.load` (dict path, unaffected
+    # by streaming) recurses into its own `geo` flatten field.
+    @dataclass
+    class GeoInfo:
+        lat: float
+        lon: float
+
+    @dataclass
+    class Address:
+        street: str
+        geo: Annotated[GeoInfo, Flatten]
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    person = Person(name='John', address=Address(street='123 Main', geo=GeoInfo(lat=1.0, lon=2.0)))
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    assert json.loads(sc.dump(person)) == s.dump(person)
+    assert sc.load(sc.dump(person)) == person
+    assert sc.load(json.dumps(s.dump(person))) == s.load(s.dump(person))
+
+
+def test_flatten_missing_optional_default_parity_codec():
+    @dataclass
+    class Address:
+        street: str
+        city: str = 'Unknown'
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    # 'city' is entirely absent from the wire payload; Address.city default applies.
+    raw = b'{"name": "John", "street": "123 Main"}'
+    assert sc.load(raw) == s.load(json.loads(raw))
+    assert sc.load(raw) == Person(name='John', address=Address(street='123 Main', city='Unknown'))
+
+
+def test_flatten_extra_unknown_keys_parity_codec():
+    @dataclass
+    class Address:
+        street: str
+        city: str
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+        extra: Annotated[dict[str, Any], Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    raw = b'{"name": "John", "street": "123 Main", "city": "NYC", "phone": "555-1234", "note": "vip"}'
+    expected = Person(
+        name='John',
+        address=Address(street='123 Main', city='NYC'),
+        extra={'phone': '555-1234', 'note': 'vip'},
+    )
+    assert sc.load(raw) == expected
+    assert sc.load(raw) == s.load(json.loads(raw))
+
+
+def test_flatten_struct_only_extra_key_dropped_parity_codec():
+    # With no dict-flatten catch-all, a truly unrecognized key is silently
+    # dropped (same as the dict path: Address.load never looks it up).
+    @dataclass
+    class Address:
+        street: str
+        city: str
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    raw = b'{"name": "John", "street": "123 Main", "city": "NYC", "unexpected": 123}'
+    assert sc.load(raw) == s.load(json.loads(raw))
+    assert sc.load(raw) == Person(name='John', address=Address(street='123 Main', city='NYC'))
+
+
+def test_flatten_field_error_path_parity_codec():
+    @dataclass
+    class Address:
+        street: str
+        city: str
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    bad = {'name': 'John', 'street': '123 Main', 'city': 123}
+    with pytest.raises(SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(SchemaValidationError) as c:
+        sc.load(json.dumps(bad))
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [
+        (e.message, e.instance_path) for e in d.value.errors
+    ]
+
+
+def test_flatten_missing_required_error_parity_codec():
+    @dataclass
+    class Address:
+        street: str
+        city: str
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    bad = {'name': 'John', 'street': '123 Main'}  # city missing entirely
+    with pytest.raises(SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(SchemaValidationError) as c:
+        sc.load(json.dumps(bad))
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [
+        (e.message, e.instance_path) for e in d.value.errors
+    ]
+
+
+def test_flatten_dict_value_error_path_parity_codec():
+    @dataclass
+    class Person:
+        name: str
+        extra: Annotated[dict[str, int], Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    bad = {'name': 'John', 'age': 'not-an-int'}
+    with pytest.raises(SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(SchemaValidationError) as c:
+        sc.load(json.dumps(bad))
+    assert [(e.message, e.instance_path) for e in c.value.errors] == [
+        (e.message, e.instance_path) for e in d.value.errors
+    ]
+
+
+def test_flatten_wrong_type_error_parity_codec():
+    @dataclass
+    class Address:
+        street: str
+
+    @dataclass
+    class Person:
+        name: str
+        address: Annotated[Address, Flatten]
+
+    s = Serializer(Person)
+    sc = Serializer(Person, codec=JSON)
+    with pytest.raises(SchemaValidationError) as d:
+        s.load([1, 2, 3])
+    with pytest.raises(SchemaValidationError) as c:
+        sc.load(b'[1,2,3]')
+    # instance_path parity is the invariant that matters here; the message text
+    # itself embeds the raw wire bytes on the codec path vs a Python repr() on
+    # the dict path (`[1,2,3]` vs `[1, 2, 3]`) -- a pre-existing wrong_type_err
+    # formatting quirk shared by every entity (flatten or not), out of scope
+    # for this native-flatten-streaming change.
+    assert [e.instance_path for e in c.value.errors] == [e.instance_path for e in d.value.errors]
+    assert 'not of type "object"' in c.value.errors[0].message
+    assert 'not of type "object"' in d.value.errors[0].message
 
 
 def test_union_codec():

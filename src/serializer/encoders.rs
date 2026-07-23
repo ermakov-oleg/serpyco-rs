@@ -1206,8 +1206,12 @@ impl Encoder for EntityEncoder {
 
     // Streams straight into a class instance, avoiding the intermediate PyDict
     // the dict-path (load) parses first. Keys are routed via `format_routing`;
-    // unknown keys are skipped. Flatten entities fall back to the bridge for
-    // full parity.
+    // unknown keys are skipped. Flatten entities stream natively too: routed
+    // keys are loaded straight into the instance as usual, while keys not in
+    // `format_routing` (i.e. destined for a flatten field) are materialized
+    // only as their individual values into an `unknowns` dict — never the
+    // whole object — which is then handed to each flatten field's existing
+    // `Field::load_value` (shared with the dict path) to resolve.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -1216,8 +1220,55 @@ impl Encoder for EntityEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if self.has_flatten {
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let _guard = ctx.enter_depth()?;
+            if parser.peek()? != Kind::Map {
+                let raw = parser.take_raw_value()?;
+                let raw = String::from_utf8_lossy(raw);
+                return Err(wrong_type_err("object", &raw, instance_path));
+            }
+            let obj = create_instance(self.cls.bind(py))?;
+            let n = self.fields.len();
+            let mut seen: SmallVec<[u64; 1]> = smallvec![0u64; n.div_ceil(64)];
+            let unknowns = PyDict::new(py);
+            let mut key = parser.enter_map_known()?;
+            while let Some(k) = key {
+                match self.format_routing.get(k) {
+                    Some(&idx) => {
+                        let field = &self.fields[idx];
+                        let field_path = instance_path.push(field.dict_key_rs.as_str());
+                        let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
+                        if self.is_frozen {
+                            generic_set_attr(&obj, field.name.as_ptr(), val)?;
+                        } else {
+                            set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
+                        }
+                        seen[idx >> 6] |= 1u64 << (idx & 63);
+                    }
+                    None => {
+                        // Unknown key -> destined for a flatten field. Materialize
+                        // only this value (not the whole object) into `unknowns`.
+                        let py_key = PyString::new(py, k);
+                        let v = parse_any(py, parser, ctx)?;
+                        unknowns.set_item(py_key, v)?;
+                    }
+                }
+                key = parser.next_key()?;
+            }
+            for (idx, field) in self.fields.iter().enumerate() {
+                let val = if field.is_flattened {
+                    field.load_value(&unknowns, instance_path, ctx, &self.used_keys)?
+                } else if seen[idx >> 6] & (1u64 << (idx & 63)) == 0 {
+                    field.get_default(py, instance_path)?
+                } else {
+                    continue; // already set from the stream
+                };
+                if self.is_frozen {
+                    generic_set_attr(&obj, field.name.as_ptr(), val)?;
+                } else {
+                    set_attr_unchecked(&obj, field.name.as_ptr(), val)?;
+                }
+            }
+            return Ok(obj);
         }
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
