@@ -60,14 +60,15 @@ pub(crate) fn parse_any<'py>(
         }
         Kind::Map => {
             let dict = PyDict::new(py);
-            // Keys borrow from the parser buffer, so copy each one out before
-            // the next `parse_any(...)` call can move the cursor and invalidate it.
-            let mut key = parser.enter_map_known()?.map(str::to_owned);
+            // The key `&str` borrows the parser buffer. Materialize it into a
+            // `PyString` immediately (PyString::new copies the bytes), ending the
+            // borrow so the parser is free for the recursive value parse.
+            let mut key = parser.enter_map_known()?;
             while let Some(k) = key {
-                let py_key = PyString::new(py, &k);
+                let py_key = PyString::new(py, k);
                 let value = parse_any(py, parser, ctx)?;
                 dict.set_item(py_key, value)?;
-                key = parser.next_key()?.map(str::to_owned);
+                key = parser.next_key()?;
             }
             Ok(dict.into_any())
         }
