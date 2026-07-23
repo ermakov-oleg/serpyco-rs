@@ -199,51 +199,66 @@ impl<'j> Parser<'j> {
         }
     }
 
+    /// Take `null`, already positioned by a preceding `peek()`.
     #[inline]
-    pub(crate) fn take_null(&mut self) -> Result<(), SerdeError> {
+    pub(crate) fn take_null_known(&mut self) -> Result<(), SerdeError> {
         match self {
-            Parser::Json(p) => p.take_null(),
+            Parser::Json(p) => p.take_null_known(),
         }
     }
 
+    /// Take a bool, already positioned + peeked by a preceding `peek()`.
     #[inline]
-    pub(crate) fn take_bool(&mut self) -> Result<bool, SerdeError> {
+    pub(crate) fn take_bool_known(&mut self) -> Result<bool, SerdeError> {
         match self {
-            Parser::Json(p) => p.take_bool(),
+            Parser::Json(p) => p.take_bool_known(),
         }
     }
 
+    /// Take an integer, already positioned + peeked by a preceding `peek()`.
     #[inline]
-    #[allow(dead_code)]
-    pub(crate) fn take_int(&mut self) -> Result<ParsedInt, SerdeError> {
+    pub(crate) fn take_int_known(&mut self) -> Result<ParsedInt, SerdeError> {
         match self {
-            Parser::Json(p) => p.take_int(),
+            Parser::Json(p) => p.take_int_known(),
         }
     }
 
+    /// Raw text of a number, already positioned + peeked by a preceding `peek()`.
     #[inline]
-    #[allow(dead_code)]
-    pub(crate) fn take_f64(&mut self) -> Result<f64, SerdeError> {
+    pub(crate) fn take_number_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
-            Parser::Json(p) => p.take_f64(),
+            Parser::Json(p) => p.take_number_str_known(),
         }
     }
 
-    /// Raw text of a number (for Decimal — no precision loss).
+    /// Take a string, already positioned by a preceding `peek()`.
     #[inline]
-    pub(crate) fn take_number_str(&mut self) -> Result<&str, SerdeError> {
+    pub(crate) fn take_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
-            Parser::Json(p) => p.take_number_str(),
+            Parser::Json(p) => p.take_str_known(),
         }
     }
 
+    /// Enter an object, already positioned + peeked by a preceding `peek()`.
+    /// None — empty object; Some(key) — first key.
     #[inline]
-    pub(crate) fn take_str(&mut self) -> Result<&str, SerdeError> {
+    pub(crate) fn enter_map_known(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
-            Parser::Json(p) => p.take_str(),
+            Parser::Json(p) => p.enter_map_known(),
         }
     }
 
+    /// Enter an array, already positioned + peeked by a preceding `peek()`.
+    /// true — has a first element; false — empty array.
+    #[inline]
+    pub(crate) fn enter_array_known(&mut self) -> Result<bool, SerdeError> {
+        match self {
+            Parser::Json(p) => p.enter_array_known(),
+        }
+    }
+
+    /// Enter an object, self-positioning (peeks internally). For a caller that
+    /// reads an object without a preceding `peek()` (discriminated-union scan).
     /// None — the object is empty; Some(key) — the first key.
     #[inline]
     pub(crate) fn enter_map(&mut self) -> Result<Option<&str>, SerdeError> {
@@ -257,14 +272,6 @@ impl<'j> Parser<'j> {
     pub(crate) fn next_key(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
             Parser::Json(p) => p.next_key(),
-        }
-    }
-
-    /// true — the array has a first element; false — empty array.
-    #[inline]
-    pub(crate) fn enter_array(&mut self) -> Result<bool, SerdeError> {
-        match self {
-            Parser::Json(p) => p.enter_array(),
         }
     }
 

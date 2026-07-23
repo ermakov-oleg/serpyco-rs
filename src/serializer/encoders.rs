@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::format::bridge::{parse_any, write_any};
+use crate::format::json::parser::ParsedInt;
 use crate::format::{Kind, Parser, Writer};
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_tuple, dump_date,
@@ -156,7 +157,7 @@ impl Encoder for NoneEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Null {
-            parser.take_null()?;
+            parser.take_null_known()?;
             return Ok(py.None().into_bound(py));
         }
         let value = parse_any(py, parser, ctx)?;
@@ -259,12 +260,11 @@ impl Encoder for IntEncoder {
         invalid_type_dump!("integer", value)
     }
 
-    // Mirrors `parse_any`'s own int/float split (integer text has no dot/exponent)
-    // instead of calling `take_int()` directly: jiter's `known_int` errors with a
-    // DecodeError-shaped "expected int, found float" on a float-looking token
-    // (e.g. `1.5`), but the dict-path produces a SchemaValidationError ("not of
-    // type integer") for that input. Splitting on the raw text avoids the wrong
-    // error class entirely.
+    // Decodes the integer straight from jiter (`take_int_known`) instead of a
+    // text round-trip. jiter's `known_int` rejects a float-shaped token (e.g.
+    // `1.5`) WITHOUT advancing the cursor, so on that error we re-read the raw
+    // number text and defer to `load(float)` — producing the SchemaValidationError
+    // ("not of type integer") the dict-path gives, not a DecodeError.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -273,37 +273,35 @@ impl Encoder for IntEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Num {
-            let raw = parser.take_number_str()?;
-            if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-                match raw.parse::<i64>() {
-                    Ok(v) => {
-                        check_bounds!(v, self.type_info, instance_path)?;
-                        return Ok(v.into_bound_py_any(py)?);
+            match parser.take_int_known() {
+                Ok(ParsedInt::I64(v)) => {
+                    check_bounds!(v, self.type_info, instance_path)?;
+                    return Ok(v.into_bound_py_any(py)?);
+                }
+                Ok(ParsedInt::Big(big)) => {
+                    // Unbounded: accept arbitrary-precision integers as-is
+                    // (the i64 bounds-check in `load` would overflow on these).
+                    if self.type_info.min.is_none() && self.type_info.max.is_none() {
+                        return Ok(big.into_bound_py_any(py)?);
                     }
-                    Err(_) => {
-                        let big: BigInt = raw.parse().map_err(|_| {
-                            SerdeError::Py(ValidationError::new_err(format!(
-                                "invalid number: {raw}"
-                            )))
-                        })?;
-                        // Unbounded: accept arbitrary-precision integers as-is
-                        // (the i64 bounds-check in `load` would overflow on these).
-                        if self.type_info.min.is_none() && self.type_info.max.is_none() {
-                            return Ok(big.into_bound_py_any(py)?);
-                        }
-                        // Bounded: materialize and let `load` apply the standard
-                        // (overflowing) bounds check, identical to the bridge default.
-                        let materialized = big.into_bound_py_any(py)?;
-                        return self.load(&materialized, instance_path, ctx);
-                    }
+                    // Bounded: materialize and let `load` apply the standard
+                    // (overflowing) bounds check, identical to the bridge default.
+                    let materialized = big.into_bound_py_any(py)?;
+                    return self.load(&materialized, instance_path, ctx);
+                }
+                Err(_) => {
+                    // Float-shaped (or malformed) token: the cursor is unmoved, so
+                    // re-read the raw number. A valid float defers to `load(float)`
+                    // for the same "integer" schema error; a genuinely malformed
+                    // number re-errors here as a DecodeError (same as before).
+                    let raw = parser.take_number_str_known()?;
+                    let v: f64 = raw.parse().map_err(|_| {
+                        SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
+                    })?;
+                    let materialized = PyFloat::new(py, v).into_any();
+                    return self.load(&materialized, instance_path, ctx);
                 }
             }
-            // Float-shaped token: not a valid int -> same error `load` gives a float value.
-            let v: f64 = raw.parse().map_err(|_| {
-                SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
-            })?;
-            let materialized = PyFloat::new(py, v).into_any();
-            return self.load(&materialized, instance_path, ctx);
         }
         let value = parse_any(py, parser, ctx)?;
         self.load(&value, instance_path, ctx)
@@ -380,7 +378,7 @@ impl Encoder for FloatEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Num {
-            let raw = parser.take_number_str()?;
+            let raw = parser.take_number_str_known()?;
             if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
                 let materialized = match raw.parse::<i64>() {
                     Ok(v) => v.into_bound_py_any(py)?,
@@ -479,7 +477,7 @@ impl Encoder for DecimalEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         match parser.peek()? {
             Kind::Num => {
-                let raw = parser.take_number_str()?;
+                let raw = parser.take_number_str_known()?;
                 match raw.parse::<f64>() {
                     Ok(v) => {
                         check_bounds!(v, self.type_info, instance_path)?;
@@ -493,7 +491,7 @@ impl Encoder for DecimalEncoder {
                 }
             }
             Kind::Str => {
-                let s = parser.take_str()?;
+                let s = parser.take_str_known()?;
                 match s.parse::<f64>() {
                     Ok(v) => {
                         check_bounds!(v, self.type_info, instance_path)?;
@@ -568,7 +566,7 @@ impl Encoder for StringEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
-            let s = parser.take_str()?;
+            let s = parser.take_str_known()?;
             let py_str = PyString::new(py, s);
             check_length(
                 &py_str,
@@ -636,7 +634,7 @@ impl Encoder for BooleanEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Bool {
-            let b = parser.take_bool()?;
+            let b = parser.take_bool_known()?;
             return Ok(PyBool::new(py, b).to_owned().into_any());
         }
         let value = parse_any(py, parser, ctx)?;
@@ -791,7 +789,7 @@ impl Encoder for DictionaryEncoder {
         let result_dict = PyDict::new(py);
         // Keys borrow from the parser buffer, so copy each one out before the
         // next `load_format` call can move the cursor and invalidate it.
-        let mut key = parser.enter_map()?.map(str::to_owned);
+        let mut key = parser.enter_map_known()?.map(str::to_owned);
         while let Some(k) = key {
             let item_path = instance_path.push(k.as_str());
             let py_key_raw = PyString::new(py, &k).into_any();
@@ -909,7 +907,7 @@ impl Encoder for ArrayEncoder {
             return self.load(&value, instance_path, ctx);
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
-        if parser.enter_array()? {
+        if parser.enter_array_known()? {
             loop {
                 // Length bounds can only be checked after the closing bracket
                 // is seen, so an element-type error here surfaces before a
@@ -935,6 +933,32 @@ impl Encoder for ArrayEncoder {
 
     fn is_sequence(&self) -> bool {
         true
+    }
+}
+
+/// Routing decision for one streamed object key, computed while the borrowed
+/// `&str` key is still alive so the key never has to be copied to an owned
+/// `String`. `Copy`, so it outlives the parser borrow that produced it.
+#[derive(Clone, Copy)]
+enum Route {
+    /// Key maps to `self.fields[idx]`.
+    Field(usize),
+    /// Unknown key — skip its value.
+    Skip,
+    /// End of object.
+    End,
+}
+
+/// Resolve a borrowed key to a `Route` (no allocation). `None` (end of object)
+/// -> `End`; a known key -> `Field(idx)`; anything else -> `Skip`.
+#[inline]
+fn resolve_route(routing: &HashMap<String, usize>, key: Option<&str>) -> Route {
+    match key {
+        Some(k) => match routing.get(k) {
+            Some(&idx) => Route::Field(idx),
+            None => Route::Skip,
+        },
+        None => Route::End,
     }
 }
 
@@ -1122,19 +1146,20 @@ impl Encoder for EntityEncoder {
         }
         let mut slots: Vec<Option<Bound<'py, PyAny>>> =
             (0..self.fields.len()).map(|_| None).collect();
-        // enter_map returns Option<&str>; copy the key out before recursing
-        // (the parser reuses its buffer across calls).
-        let mut next_key: Option<String> = parser.enter_map()?.map(str::to_owned);
-        while let Some(key) = next_key {
-            match self.format_routing.get(key.as_str()) {
-                Some(&idx) => {
+        // Resolve each borrowed key to a Copy `Route` while the borrow is alive,
+        // so keys are never copied to owned Strings.
+        let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
+        loop {
+            match route {
+                Route::End => break,
+                Route::Field(idx) => {
                     let field = &self.fields[idx];
                     let field_path = instance_path.push(field.dict_key_rs.as_str());
                     slots[idx] = Some(field.encoder.load_format(py, parser, &field_path, ctx)?);
                 }
-                None => parser.skip_value()?,
+                Route::Skip => parser.skip_value()?,
             }
-            next_key = parser.next_key()?.map(str::to_owned);
+            route = resolve_route(&self.format_routing, parser.next_key()?);
         }
         let obj = create_instance(self.cls.bind(py))?;
         for (idx, field) in self.fields.iter().enumerate() {
@@ -1332,17 +1357,20 @@ impl Encoder for TypedDictEncoder {
         }
         let mut slots: Vec<Option<Bound<'py, PyAny>>> =
             (0..self.fields.len()).map(|_| None).collect();
-        let mut next_key: Option<String> = parser.enter_map()?.map(str::to_owned);
-        while let Some(key) = next_key {
-            match self.format_routing.get(key.as_str()) {
-                Some(&idx) => {
+        // Resolve each borrowed key to a Copy `Route` while the borrow is alive,
+        // so keys are never copied to owned Strings.
+        let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
+        loop {
+            match route {
+                Route::End => break,
+                Route::Field(idx) => {
                     let field = &self.fields[idx];
                     let field_path = instance_path.push(field.dict_key_rs.as_str());
                     slots[idx] = Some(field.encoder.load_format(py, parser, &field_path, ctx)?);
                 }
-                None => parser.skip_value()?,
+                Route::Skip => parser.skip_value()?,
             }
-            next_key = parser.next_key()?.map(str::to_owned);
+            route = resolve_route(&self.format_routing, parser.next_key()?);
         }
         let dict = create_py_dict_known_size(py, self.fields.len())?;
         for (idx, field) in self.fields.iter().enumerate() {
@@ -1415,7 +1443,7 @@ impl Encoder for UUIDEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
-            let s = parser.take_str()?;
+            let s = parser.take_str_known()?;
             if Uuid::parse_str(s).is_ok() {
                 if let Ok(result) = self.uuid_cls.bind(py).call1((s,)) {
                     return Ok(result);
@@ -1556,7 +1584,7 @@ impl Encoder for OptionalEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Null {
-            parser.take_null()?;
+            parser.take_null_known()?;
             Ok(py.None().into_bound(py))
         } else {
             self.encoder.load_format(py, parser, instance_path, ctx)
@@ -1656,7 +1684,7 @@ impl Encoder for TupleEncoder {
             return self.load(&value, instance_path, ctx);
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
-        if parser.enter_array()? {
+        if parser.enter_array_known()? {
             loop {
                 let idx = items.len();
                 if idx < self.encoders.len() {
@@ -1909,7 +1937,7 @@ impl Encoder for DiscriminatedUnionEncoder {
             while let Some(k) = key {
                 if k == self.load_discriminator_rs {
                     if scan.peek()? == Kind::Str {
-                        tag = Some(scan.take_str()?.to_owned());
+                        tag = Some(scan.take_str_known()?.to_owned());
                     }
                     break;
                 }
@@ -1994,7 +2022,7 @@ impl Encoder for TimeEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
-            let s = parser.take_str()?;
+            let s = parser.take_str_known()?;
             if let Ok(result) = parse_time(py, s) {
                 return Ok(result.into_any());
             }
@@ -2059,7 +2087,7 @@ impl Encoder for DateTimeEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
-            let s = parser.take_str()?;
+            let s = parser.take_str_known()?;
             if let Ok(result) = parse_datetime(py, s) {
                 return Ok(result.into_any());
             }
@@ -2122,7 +2150,7 @@ impl Encoder for DateEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
-            let s = parser.take_str()?;
+            let s = parser.take_str_known()?;
             if let Ok(result) = parse_date(py, s) {
                 return Ok(result.into_any());
             }

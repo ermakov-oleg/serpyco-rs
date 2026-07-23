@@ -17,13 +17,15 @@ pub(crate) fn parse_any<'py>(
     let _guard = ctx.enter_depth()?;
     match parser.peek()? {
         Kind::Null => {
-            parser.take_null()?;
+            parser.take_null_known()?;
             Ok(py.None().into_bound(py))
         }
-        Kind::Bool => Ok(PyBool::new(py, parser.take_bool()?).to_owned().into_any()),
+        Kind::Bool => Ok(PyBool::new(py, parser.take_bool_known()?)
+            .to_owned()
+            .into_any()),
         Kind::Num => {
             // Integer when there is no dot/exponent — mirrors json.loads.
-            let raw = parser.take_number_str()?;
+            let raw = parser.take_number_str_known()?;
             if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
                 match raw.parse::<i64>() {
                     Ok(v) => Ok(v.into_bound_py_any(py)?),
@@ -43,10 +45,10 @@ pub(crate) fn parse_any<'py>(
                 Ok(PyFloat::new(py, v).into_any())
             }
         }
-        Kind::Str => Ok(PyString::new(py, parser.take_str()?).into_any()),
+        Kind::Str => Ok(PyString::new(py, parser.take_str_known()?).into_any()),
         Kind::Array => {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
-            if parser.enter_array()? {
+            if parser.enter_array_known()? {
                 loop {
                     items.push(parse_any(py, parser, ctx)?);
                     if !parser.next_array_item()? {
@@ -60,7 +62,7 @@ pub(crate) fn parse_any<'py>(
             let dict = PyDict::new(py);
             // Keys borrow from the parser buffer, so copy each one out before
             // the next `parse_any(...)` call can move the cursor and invalidate it.
-            let mut key = parser.enter_map()?.map(str::to_owned);
+            let mut key = parser.enter_map_known()?.map(str::to_owned);
             while let Some(k) = key {
                 let py_key = PyString::new(py, &k);
                 let value = parse_any(py, parser, ctx)?;
