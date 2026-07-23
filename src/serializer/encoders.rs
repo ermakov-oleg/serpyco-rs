@@ -840,8 +840,9 @@ impl Encoder for DictionaryEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let raw = parser.take_raw_value()?;
+            let raw = String::from_utf8_lossy(raw);
+            return Err(wrong_type_err("dict", &raw, instance_path));
         }
         let result_dict = PyDict::new(py);
         // The key `&str` borrows the parser buffer. Materialize it into a
@@ -974,8 +975,9 @@ impl Encoder for ArrayEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Array {
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let raw = parser.take_raw_value()?;
+            let raw = String::from_utf8_lossy(raw);
+            return Err(wrong_type_err("list", &raw, instance_path));
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
@@ -1216,9 +1218,9 @@ impl Encoder for EntityEncoder {
         }
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
-            // Non-object input -> let `load` raise the standard "object" error.
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let raw = parser.take_raw_value()?;
+            let raw = String::from_utf8_lossy(raw);
+            return Err(wrong_type_err("object", &raw, instance_path));
         }
         let obj = create_instance(self.cls.bind(py))?;
         let n = self.fields.len();
@@ -1442,9 +1444,9 @@ impl Encoder for TypedDictEncoder {
         }
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Map {
-            // Non-object input -> let `load` raise the standard "dict" error.
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let raw = parser.take_raw_value()?;
+            let raw = String::from_utf8_lossy(raw);
+            return Err(wrong_type_err("dict", &raw, instance_path));
         }
         let dict = create_py_dict_known_size(py, self.fields.len())?;
         let n = self.fields.len();
@@ -1897,8 +1899,9 @@ impl Encoder for TupleEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         let _guard = ctx.enter_depth()?;
         if parser.peek()? != Kind::Array {
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let raw = parser.take_raw_value()?;
+            let raw = String::from_utf8_lossy(raw);
+            return Err(wrong_type_err("sequence", &raw, instance_path));
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
@@ -2140,9 +2143,9 @@ impl Encoder for DiscriminatedUnionEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? != Kind::Map {
-            // Non-object input: let the object path raise the standard "dict" error.
-            let value = parse_any(py, parser, ctx)?;
-            return self.load(&value, instance_path, ctx);
+            let raw = parser.take_raw_value()?;
+            let raw = String::from_utf8_lossy(raw);
+            return Err(wrong_type_err("dict", &raw, instance_path));
         }
         let span = parser.take_raw_value()?;
         // Scan forward on a throwaway sub-parser to find the discriminator value,
