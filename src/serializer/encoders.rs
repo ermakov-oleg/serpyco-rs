@@ -1354,7 +1354,18 @@ impl Encoder for EntityEncoder {
         let _guard = ctx.enter_depth()?;
         let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
-            let field_val = value.getattr(&field.name)?;
+            let field_val = match value.getattr(&field.name) {
+                Ok(v) => v,
+                // A missing attribute means `value` isn't an instance of this
+                // entity's shape. Surface it as a Schema type-mismatch (not a raw
+                // AttributeError) so an enclosing untagged union skips to the next
+                // member instead of aborting. Mirrors the codec dump path.
+                Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
+                    let name = self.cls.bind(value.py()).name()?;
+                    return Err(invalid_type_dump_err(&name.to_string(), value));
+                }
+                Err(e) => return Err(e.into()),
+            };
             let dump_result = field.encoder.dump(&field_val, ctx)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
