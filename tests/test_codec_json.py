@@ -1039,7 +1039,7 @@ def test_codec_dict_omit_none_validates_key():
     with pytest.raises(serpyco_rs.SchemaValidationError):
         sd.dump(bad)  # dict path validates the key
     with pytest.raises(serpyco_rs.SchemaValidationError):
-        s.dump(bad)   # codec must too (currently returns b'{}')
+        s.dump(bad)  # codec must too (currently returns b'{}')
     # valid case still omits None values and dumps present ones
     assert s.dump({Color.RED: None}) == b'{}'
     assert json.loads(s.dump({Color.RED: 5})) == {'red': 5}
