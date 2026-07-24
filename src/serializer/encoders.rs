@@ -1077,6 +1077,161 @@ impl SeenSet {
     }
 }
 
+/// The streaming object codec shared by `EntityEncoder` (fields -> class
+/// instance) and `TypedDictEncoder` (fields -> dict). The load/dump *algorithm*
+/// (key routing, seen-bitset, flatten handling, omit_none) is identical; only
+/// the "sink" (how a field is stored / fetched and the container built) differs.
+/// The sink hooks are `#[inline(always)]`, so each `load_object_streaming` /
+/// `dump_object_streaming` monomorphization is as if hand-written per encoder
+/// (cachegrind-verified — no sink method survives as its own function).
+trait StreamingObject: Encoder {
+    /// Schema type-mismatch label ("object" / "dict").
+    const TYPE_NAME: &'static str;
+
+    fn fields(&self) -> &[Field];
+    fn format_routing(&self) -> &FxHashMap<String, usize>;
+    fn used_keys(&self) -> &Py<PySet>;
+    fn has_flatten(&self) -> bool;
+    fn omit_none(&self) -> bool;
+
+    // --- load sink (target type-erased to Bound<PyAny>; each impl re-narrows) ---
+    /// Create the container: a class instance / a dict.
+    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Bound<'py, PyAny>>;
+    /// Store a loaded field value into the container.
+    fn set(
+        &self,
+        target: &Bound<'_, PyAny>,
+        field: &Field,
+        val: Bound<'_, PyAny>,
+    ) -> SerdeResult<()>;
+
+    // --- dump source ---
+    /// Validate `value` is dumpable as this object before the field loop
+    /// (TypedDict: it must be a dict; Entity: no-op — a missing attr errors per field).
+    fn check_dump_source(&self, value: &Bound<'_, PyAny>) -> SerdeResult<()>;
+    /// Fetch a field's value for dumping. `Some(v)` -> dump it; `None` -> skip the
+    /// field (emit no key).
+    fn fetch<'py>(
+        &self,
+        value: &Bound<'py, PyAny>,
+        field: &Field,
+    ) -> SerdeResult<Option<Bound<'py, PyAny>>>;
+}
+
+/// Stream an object straight into `S`'s target, avoiding the intermediate PyDict
+/// the dict-path parses first. Keys route via `format_routing`; unknown keys are
+/// skipped (no-flatten) or materialized only as their own values into `unknowns`
+/// for the flatten fields to resolve (shared with the dict path via
+/// `Field::load_value`). Missing fields fall back to `get_default`.
+fn load_object_streaming<'py, S: StreamingObject>(
+    enc: &S,
+    py: Python<'py>,
+    parser: &mut Parser<'_>,
+    instance_path: &InstancePath,
+    ctx: &Context,
+) -> SerdeResult<Bound<'py, PyAny>> {
+    let _guard = ctx.enter_depth()?;
+    if parser.peek()? != Kind::Map {
+        return Err(wrong_type_at_cursor(parser, S::TYPE_NAME, instance_path));
+    }
+    let target = enc.create(py)?;
+    let fields = enc.fields();
+    // Set values directly as keys arrive (no per-object `Vec<Option<Bound>>` — a
+    // hot alloc/free), tracking seen fields in an inline bitset; defaults then
+    // fill unseen fields. Keys resolve while borrowed, never copied to Strings.
+    let mut seen = SeenSet::new(fields.len());
+    if enc.has_flatten() {
+        let unknowns = PyDict::new(py);
+        let mut key = parser.enter_map_known()?;
+        while let Some(k) = key {
+            match enc.format_routing().get(k) {
+                Some(&idx) => {
+                    let field = &fields[idx];
+                    let field_path = instance_path.push(field.dict_key.bind(py).as_any());
+                    let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
+                    enc.set(&target, field, val)?;
+                    seen.mark(idx);
+                }
+                None => {
+                    // Unknown key -> a flatten field's. Materialize only this
+                    // value (not the whole object) into `unknowns`.
+                    let py_key = PyString::new(py, k);
+                    let v = parse_any(py, parser, ctx)?;
+                    unknowns.set_item(py_key, v)?;
+                }
+            }
+            key = parser.next_key()?;
+        }
+        for (idx, field) in fields.iter().enumerate() {
+            let val = if field.is_flattened {
+                field.load_value(&unknowns, instance_path, ctx, enc.used_keys())?
+            } else if !seen.contains(idx) {
+                field.get_default(py, instance_path)?
+            } else {
+                continue; // already set from the stream
+            };
+            enc.set(&target, field, val)?;
+        }
+    } else {
+        let mut route = resolve_route(enc.format_routing(), parser.enter_map_known()?);
+        loop {
+            match route {
+                Route::End => break,
+                Route::Field(idx) => {
+                    let field = &fields[idx];
+                    let field_path = instance_path.push(field.dict_key.bind(py).as_any());
+                    let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
+                    enc.set(&target, field, val)?;
+                    seen.mark(idx);
+                }
+                Route::Skip => parser.skip_value()?,
+            }
+            route = resolve_route(enc.format_routing(), parser.next_key()?);
+        }
+        for (idx, field) in fields.iter().enumerate() {
+            if !seen.contains(idx) {
+                let val = field.get_default(py, instance_path)?;
+                enc.set(&target, field, val)?;
+            }
+        }
+    }
+    Ok(target)
+}
+
+/// Stream an object straight to the writer, avoiding the intermediate PyDict the
+/// dict-path (dump) builds. Flatten objects keep parity via the bridge
+/// (materialize + `write_any`).
+fn dump_object_streaming<S: StreamingObject>(
+    enc: &S,
+    value: &Bound<'_, PyAny>,
+    writer: &mut Writer,
+    ctx: &Context,
+) -> SerdeResult<()> {
+    if enc.has_flatten() {
+        let dumped = enc.dump(value, ctx)?;
+        return write_any(&dumped, writer, ctx);
+    }
+    let _guard = ctx.enter_depth()?;
+    enc.check_dump_source(value)?;
+    writer.begin_map();
+    for field in enc.fields() {
+        let Some(field_val) = enc.fetch(value, field)? else {
+            continue;
+        };
+        // Mirror the dict-path write condition
+        // (`field.required || !omit_none || !dump_result.is_none()`): only
+        // optional fields under omit_none need the dumped value first.
+        if !field.required && enc.omit_none() {
+            dump_field_unless_null(writer, &field.dict_key_rs, &*field.encoder, &field_val, ctx)?;
+        } else {
+            writer.map_key(&field.dict_key_rs);
+            field.encoder.dump_format(&field_val, writer, ctx)?;
+        }
+    }
+    writer.end_map();
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 pub struct EntityEncoder {
     pub(crate) cls: Py<PyType>,
@@ -1217,57 +1372,9 @@ impl Encoder for EntityEncoder {
         writer: &mut Writer,
         ctx: &Context,
     ) -> SerdeResult<()> {
-        if self.has_flatten {
-            let dumped = self.dump(value, ctx)?;
-            return write_any(&dumped, writer, ctx);
-        }
-        let _guard = ctx.enter_depth()?;
-        writer.begin_map();
-        for field in &self.fields {
-            // A missing attribute means the value isn't an instance of this
-            // entity's shape. Surface it as a Schema type-mismatch (like the
-            // scalar/container dump_format guards) so an enclosing untagged
-            // union skips to the next member, instead of a raw AttributeError
-            // that would abort union probing.
-            let field_val = match value.getattr(&field.name) {
-                Ok(v) => v,
-                Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                    let name = self.cls.bind(value.py()).name()?;
-                    return Err(invalid_type_dump_err(&name.to_string(), value));
-                }
-                Err(e) => return Err(e.into()),
-            };
-            // Mirror the dict-path write condition
-            // (`field.required || !self.omit_none || !dump_result.is_none()`):
-            // only optional fields under omit_none need the dumped value first
-            // to decide whether to emit the key at all.
-            if !field.required && self.omit_none {
-                // omit_none: skip the key when the value dumps to the format's
-                // null (equivalent to the dict-path `is_none()`).
-                dump_field_unless_null(
-                    writer,
-                    &field.dict_key_rs,
-                    &*field.encoder,
-                    &field_val,
-                    ctx,
-                )?;
-            } else {
-                writer.map_key(&field.dict_key_rs);
-                field.encoder.dump_format(&field_val, writer, ctx)?;
-            }
-        }
-        writer.end_map();
-        Ok(())
+        dump_object_streaming(self, value, writer, ctx)
     }
 
-    // Streams straight into a class instance, avoiding the intermediate PyDict
-    // the dict-path (load) parses first. Keys are routed via `format_routing`;
-    // unknown keys are skipped. Flatten entities stream natively too: routed
-    // keys are loaded straight into the instance as usual, while keys not in
-    // `format_routing` (i.e. destined for a flatten field) are materialized
-    // only as their individual values into an `unknowns` dict — never the
-    // whole object — which is then handed to each flatten field's existing
-    // `Field::load_value` (shared with the dict path) to resolve.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -1275,89 +1382,75 @@ impl Encoder for EntityEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        if self.has_flatten {
-            let _guard = ctx.enter_depth()?;
-            if parser.peek()? != Kind::Map {
-                return Err(wrong_type_at_cursor(parser, "object", instance_path));
-            }
-            let obj = create_instance(self.cls.bind(py))?;
-            let n = self.fields.len();
-            let mut seen = SeenSet::new(n);
-            let unknowns = PyDict::new(py);
-            let mut key = parser.enter_map_known()?;
-            while let Some(k) = key {
-                match self.format_routing.get(k) {
-                    Some(&idx) => {
-                        let field = &self.fields[idx];
-                        let field_path = instance_path.push(field.dict_key.bind(py).as_any());
-                        let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
-                        self.set_field(&obj, field, val)?;
-                        seen.mark(idx);
-                    }
-                    None => {
-                        // Unknown key -> destined for a flatten field. Materialize
-                        // only this value (not the whole object) into `unknowns`.
-                        let py_key = PyString::new(py, k);
-                        let v = parse_any(py, parser, ctx)?;
-                        unknowns.set_item(py_key, v)?;
-                    }
-                }
-                key = parser.next_key()?;
-            }
-            for (idx, field) in self.fields.iter().enumerate() {
-                let val = if field.is_flattened {
-                    field.load_value(&unknowns, instance_path, ctx, &self.used_keys)?
-                } else if !seen.contains(idx) {
-                    field.get_default(py, instance_path)?
-                } else {
-                    continue; // already set from the stream
-                };
-                self.set_field(&obj, field, val)?;
-            }
-            return Ok(obj);
-        }
-        let _guard = ctx.enter_depth()?;
-        if parser.peek()? != Kind::Map {
-            return Err(wrong_type_at_cursor(parser, "object", instance_path));
-        }
-        let obj = create_instance(self.cls.bind(py))?;
-        let n = self.fields.len();
-        // Set attributes directly as keys arrive (no per-entity
-        // `Vec<Option<Bound>>` — a hot alloc/free on entity-heavy loads),
-        // tracking which fields were seen in an inline bitset that lives on the
-        // stack for the common case (<= 64 fields => one word) and spills to the
-        // heap only for very wide entities. Defaults then fill unseen fields.
-        // Keys resolve to a Copy `Route` while borrowed, so they are never
-        // copied to owned Strings.
-        let mut seen = SeenSet::new(n);
-        let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
-        loop {
-            match route {
-                Route::End => break,
-                Route::Field(idx) => {
-                    let field = &self.fields[idx];
-                    let field_path = instance_path.push(field.dict_key.bind(py).as_any());
-                    let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
-                    self.set_field(&obj, field, val)?;
-                    seen.mark(idx);
-                }
-                Route::Skip => parser.skip_value()?,
-            }
-            route = resolve_route(&self.format_routing, parser.next_key()?);
-        }
-        for (idx, field) in self.fields.iter().enumerate() {
-            if !seen.contains(idx) {
-                // Missing field: same default / missing-required error as the
-                // dict-path (get_default pushes dict_key_rs onto the base path).
-                let val = field.get_default(py, instance_path)?;
-                self.set_field(&obj, field, val)?;
-            }
-        }
-        Ok(obj)
+        load_object_streaming(self, py, parser, instance_path, ctx)
     }
 
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
+    }
+}
+
+impl StreamingObject for EntityEncoder {
+    const TYPE_NAME: &'static str = "object";
+
+    #[inline(always)]
+    fn fields(&self) -> &[Field] {
+        &self.fields
+    }
+    #[inline(always)]
+    fn format_routing(&self) -> &FxHashMap<String, usize> {
+        &self.format_routing
+    }
+    #[inline(always)]
+    fn used_keys(&self) -> &Py<PySet> {
+        &self.used_keys
+    }
+    #[inline(always)]
+    fn has_flatten(&self) -> bool {
+        self.has_flatten
+    }
+    #[inline(always)]
+    fn omit_none(&self) -> bool {
+        self.omit_none
+    }
+
+    #[inline(always)]
+    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Bound<'py, PyAny>> {
+        Ok(create_instance(self.cls.bind(py))?)
+    }
+    #[inline(always)]
+    fn set(
+        &self,
+        target: &Bound<'_, PyAny>,
+        field: &Field,
+        val: Bound<'_, PyAny>,
+    ) -> SerdeResult<()> {
+        self.set_field(target, field, val)
+    }
+
+    #[inline(always)]
+    fn check_dump_source(&self, _value: &Bound<'_, PyAny>) -> SerdeResult<()> {
+        // Any object works — a missing attribute surfaces per field in `fetch`.
+        Ok(())
+    }
+    #[inline(always)]
+    fn fetch<'py>(
+        &self,
+        value: &Bound<'py, PyAny>,
+        field: &Field,
+    ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
+        // A missing attribute means the value isn't an instance of this entity's
+        // shape. Surface it as a Schema type-mismatch (like the scalar/container
+        // dump guards) so an enclosing untagged union skips to the next member
+        // instead of aborting on a raw AttributeError.
+        match value.getattr(&field.name) {
+            Ok(v) => Ok(Some(v)),
+            Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
+                let name = self.cls.bind(value.py()).name()?;
+                Err(invalid_type_dump_err(&name.to_string(), value))
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -1473,61 +1566,9 @@ impl Encoder for TypedDictEncoder {
         writer: &mut Writer,
         ctx: &Context,
     ) -> SerdeResult<()> {
-        if self.has_flatten {
-            let dumped = self.dump(value, ctx)?;
-            return write_any(&dumped, writer, ctx);
-        }
-        let _guard = ctx.enter_depth()?;
-        let value = match value.cast::<PyDict>() {
-            Ok(val) => val,
-            _ => invalid_type_dump!("dict", value),
-        };
-        writer.begin_map();
-        for field in &self.fields {
-            let field_val = match value.get_item(&field.name) {
-                Ok(Some(val)) => val,
-                _ => {
-                    if field.required {
-                        return Err(SerdeError::Py(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {}",
-                            field.name
-                        ))));
-                    }
-                    // Missing optional key: skip entirely (no key emitted).
-                    continue;
-                }
-            };
-            // Mirror the dict-path write condition
-            // (`field.required || !self.omit_none || !dump_result.is_none()`).
-            if !field.required && self.omit_none {
-                // omit_none: skip the key when the value dumps to the format's
-                // null (equivalent to the dict-path `is_none()`).
-                dump_field_unless_null(
-                    writer,
-                    &field.dict_key_rs,
-                    &*field.encoder,
-                    &field_val,
-                    ctx,
-                )?;
-            } else {
-                writer.map_key(&field.dict_key_rs);
-                field.encoder.dump_format(&field_val, writer, ctx)?;
-            }
-        }
-        writer.end_map();
-        Ok(())
+        dump_object_streaming(self, value, writer, ctx)
     }
 
-    // Streams straight into the result PyDict, avoiding the intermediate PyDict
-    // the dict-path (load) parses first. Keys are routed via `format_routing`;
-    // unknown keys are skipped. Every field is written to the result (present
-    // value or its default), matching the dict-path. Flatten typeddicts stream
-    // natively too: routed keys are loaded straight into the result dict as
-    // usual, while keys not in `format_routing` (i.e. destined for a flatten
-    // field) are materialized only as their individual values into an
-    // `unknowns` dict — never the whole object — which is then handed to each
-    // flatten field's existing `Field::load_value` (shared with the dict path)
-    // to resolve.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -1535,89 +1576,85 @@ impl Encoder for TypedDictEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        if self.has_flatten {
-            let _guard = ctx.enter_depth()?;
-            if parser.peek()? != Kind::Map {
-                return Err(wrong_type_at_cursor(parser, "dict", instance_path));
-            }
-            let dict = create_py_dict_known_size(py, self.fields.len())?;
-            let n = self.fields.len();
-            let mut seen = SeenSet::new(n);
-            let unknowns = PyDict::new(py);
-            let mut key = parser.enter_map_known()?;
-            while let Some(k) = key {
-                match self.format_routing.get(k) {
-                    Some(&idx) => {
-                        let field = &self.fields[idx];
-                        let field_path = instance_path.push(field.dict_key.bind(py).as_any());
-                        let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
-                        py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-                        seen.mark(idx);
-                    }
-                    None => {
-                        // Unknown key -> destined for a flatten field. Materialize
-                        // only this value (not the whole object) into `unknowns`.
-                        let py_key = PyString::new(py, k);
-                        let v = parse_any(py, parser, ctx)?;
-                        unknowns.set_item(py_key, v)?;
-                    }
-                }
-                key = parser.next_key()?;
-            }
-            for (idx, field) in self.fields.iter().enumerate() {
-                let val = if field.is_flattened {
-                    field.load_value(&unknowns, instance_path, ctx, &self.used_keys)?
-                } else if !seen.contains(idx) {
-                    field.get_default(py, instance_path)?
-                } else {
-                    continue; // already inserted from the stream
-                };
-                py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-            }
-            return Ok(dict.into_any());
-        }
-        let _guard = ctx.enter_depth()?;
-        if parser.peek()? != Kind::Map {
-            return Err(wrong_type_at_cursor(parser, "dict", instance_path));
-        }
-        let dict = create_py_dict_known_size(py, self.fields.len())?;
-        let n = self.fields.len();
-        // Insert values directly into the result dict as keys arrive (no
-        // per-load `Vec<Option<Bound>>` — a hot alloc/free on typeddict-heavy
-        // loads), tracking which fields were seen in an inline bitset that
-        // lives on the stack for the common case (<= 64 fields => one word)
-        // and spills to the heap only for very wide typeddicts. Defaults then
-        // fill unseen fields. Keys resolve to a Copy `Route` while borrowed,
-        // so they are never copied to owned Strings.
-        let mut seen = SeenSet::new(n);
-        let mut route = resolve_route(&self.format_routing, parser.enter_map_known()?);
-        loop {
-            match route {
-                Route::End => break,
-                Route::Field(idx) => {
-                    let field = &self.fields[idx];
-                    let field_path = instance_path.push(field.dict_key.bind(py).as_any());
-                    let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
-                    py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-                    seen.mark(idx);
-                }
-                Route::Skip => parser.skip_value()?,
-            }
-            route = resolve_route(&self.format_routing, parser.next_key()?);
-        }
-        for (idx, field) in self.fields.iter().enumerate() {
-            if !seen.contains(idx) {
-                // Missing field: same default / missing-required error as the
-                // dict-path (get_default pushes dict_key_rs onto the base path).
-                let val = field.get_default(py, instance_path)?;
-                py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-            }
-        }
-        Ok(dict.into_any())
+        load_object_streaming(self, py, parser, instance_path, ctx)
     }
 
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
+    }
+}
+
+impl StreamingObject for TypedDictEncoder {
+    const TYPE_NAME: &'static str = "dict";
+
+    #[inline(always)]
+    fn fields(&self) -> &[Field] {
+        &self.fields
+    }
+    #[inline(always)]
+    fn format_routing(&self) -> &FxHashMap<String, usize> {
+        &self.format_routing
+    }
+    #[inline(always)]
+    fn used_keys(&self) -> &Py<PySet> {
+        &self.used_keys
+    }
+    #[inline(always)]
+    fn has_flatten(&self) -> bool {
+        self.has_flatten
+    }
+    #[inline(always)]
+    fn omit_none(&self) -> bool {
+        self.omit_none
+    }
+
+    #[inline(always)]
+    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Bound<'py, PyAny>> {
+        Ok(create_py_dict_known_size(py, self.fields.len())?.into_any())
+    }
+    #[inline(always)]
+    fn set(
+        &self,
+        target: &Bound<'_, PyAny>,
+        field: &Field,
+        val: Bound<'_, PyAny>,
+    ) -> SerdeResult<()> {
+        // `target` was created here as a dict; the cast is an infallible type
+        // check (predicted, ~free) that recovers the concrete `PyDict`.
+        let dict = target.cast::<PyDict>().map_err(PyErr::from)?;
+        py_dict_set_item(dict, field.name.as_ptr(), val)?;
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn check_dump_source(&self, value: &Bound<'_, PyAny>) -> SerdeResult<()> {
+        match value.cast::<PyDict>() {
+            Ok(_) => Ok(()),
+            _ => Err(invalid_type_dump_err("dict", value)),
+        }
+    }
+    #[inline(always)]
+    fn fetch<'py>(
+        &self,
+        value: &Bound<'py, PyAny>,
+        field: &Field,
+    ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
+        // `check_dump_source` already verified `value` is a dict; recover it.
+        let dict = value.cast::<PyDict>().map_err(PyErr::from)?;
+        match dict.get_item(&field.name) {
+            Ok(Some(val)) => Ok(Some(val)),
+            _ => {
+                if field.required {
+                    Err(SerdeError::Py(ValidationError::new_err(format!(
+                        "data dictionary is missing required parameter {}",
+                        field.name
+                    ))))
+                } else {
+                    // Missing optional key: skip entirely (no key emitted).
+                    Ok(None)
+                }
+            }
+        }
     }
 }
 
