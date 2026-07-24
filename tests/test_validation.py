@@ -236,6 +236,22 @@ def test_typed_dict_validation__invalid_type():
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "dict"', instance_path='')]
 
 
+def test_typed_dict_validation__invalid_type_nested():
+    # A non-dict value for a nested TypedDict must report its instance_path
+    # (regression: the load guard used to emit a path-less dump-style error).
+    class Inner(TypedDict):
+        x: int
+
+    class Outer(TypedDict):
+        inner: Inner
+
+    s = Serializer(Outer)
+    with pytest.raises(SchemaValidationError) as e:
+        s.load({'inner': 'notadict'})
+
+    assert e.value.errors == [ErrorItem(message='"notadict" is not of type "dict"', instance_path='inner')]
+
+
 def test_typed_dict_validation__missing_field():
     class A(TypedDict):
         a: int

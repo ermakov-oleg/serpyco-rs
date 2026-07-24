@@ -1094,18 +1094,25 @@ trait StreamingObject: Encoder {
     fn has_flatten(&self) -> bool;
     fn omit_none(&self) -> bool;
 
-    // --- load sink (target type-erased to Bound<PyAny>; each impl re-narrows) ---
+    // --- load sink: the container is typed per encoder (class instance / dict) so
+    // `set` stores a field with no per-field re-cast; `finish` erases it back to
+    // `Bound<PyAny>` once at the end. ---
+    type Target<'py>
+    where
+        Self: 'py;
     /// Create the container: a class instance / a dict.
-    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Bound<'py, PyAny>>;
+    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Self::Target<'py>>;
     /// Store a loaded field value into the container.
-    fn set(
+    fn set<'py>(
         &self,
-        target: &Bound<'_, PyAny>,
+        target: &Self::Target<'py>,
         field: &Field,
-        val: Bound<'_, PyAny>,
+        val: Bound<'py, PyAny>,
     ) -> SerdeResult<()>;
+    /// Erase the finished container to `Bound<PyAny>` for the caller.
+    fn finish<'py>(target: Self::Target<'py>) -> Bound<'py, PyAny>;
 
-    // --- dump source ---
+    // --- dump source (type-erased; each impl narrows internally) ---
     /// Validate `value` is dumpable as this object before the field loop
     /// (TypedDict: it must be a dict; Entity: no-op — a missing attr errors per field).
     fn check_dump_source(&self, value: &Bound<'_, PyAny>) -> SerdeResult<()>;
@@ -1123,7 +1130,7 @@ trait StreamingObject: Encoder {
 /// skipped (no-flatten) or materialized only as their own values into `unknowns`
 /// for the flatten fields to resolve (shared with the dict path via
 /// `Field::load_value`). Missing fields fall back to `get_default`.
-fn load_object_streaming<'py, S: StreamingObject>(
+fn load_object_streaming<'py, S: StreamingObject + 'py>(
     enc: &S,
     py: Python<'py>,
     parser: &mut Parser<'_>,
@@ -1195,7 +1202,7 @@ fn load_object_streaming<'py, S: StreamingObject>(
             }
         }
     }
-    Ok(target)
+    Ok(S::finish(target))
 }
 
 /// Stream an object straight to the writer, avoiding the intermediate PyDict the
@@ -1230,6 +1237,28 @@ fn dump_object_streaming<S: StreamingObject>(
     }
     writer.end_map();
     Ok(())
+}
+
+/// The dict-path (non-codec) object load shared by Entity/TypedDict: cast the
+/// input to a dict, build the target, and fill each field via `Field::load_value`
+/// (which handles flatten / get_item / default). Only the sink differs — the
+/// same `StreamingObject` hooks the codec path uses.
+fn load_dict_path<'a, S: StreamingObject + 'a>(
+    enc: &S,
+    value: &Bound<'a, PyAny>,
+    instance_path: &InstancePath,
+    ctx: &Context,
+) -> SerdeResult<Bound<'a, PyAny>> {
+    let _guard = ctx.enter_depth()?;
+    let Ok(dict) = value.cast::<PyDict>() else {
+        return Err(invalid_type_err(S::TYPE_NAME, value, instance_path));
+    };
+    let target = enc.create(value.py())?;
+    for field in enc.fields() {
+        let val = field.load_value(dict, instance_path, ctx, enc.used_keys())?;
+        enc.set(&target, field, val)?;
+    }
+    Ok(S::finish(target))
 }
 
 #[derive(Debug, Clone)]
@@ -1348,18 +1377,7 @@ impl Encoder for EntityEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
-        let _guard = ctx.enter_depth()?;
-        let Ok(val) = value.cast::<PyDict>() else {
-            invalid_type!("object", value, instance_path)
-        };
-        let obj = create_instance(self.cls.bind(value.py()))?;
-
-        for field in &self.fields {
-            let val = field.load_value(val, instance_path, ctx, &self.used_keys)?;
-            self.set_field(&obj, field, val)?;
-        }
-
-        Ok(obj)
+        load_dict_path(self, value, instance_path, ctx)
     }
 
     // Streams the object directly to the writer, avoiding the intermediate
@@ -1391,6 +1409,7 @@ impl Encoder for EntityEncoder {
 }
 
 impl StreamingObject for EntityEncoder {
+    type Target<'py> = Bound<'py, PyAny>;
     const TYPE_NAME: &'static str = "object";
 
     #[inline(always)]
@@ -1415,17 +1434,21 @@ impl StreamingObject for EntityEncoder {
     }
 
     #[inline(always)]
-    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Bound<'py, PyAny>> {
+    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Self::Target<'py>> {
         Ok(create_instance(self.cls.bind(py))?)
     }
     #[inline(always)]
-    fn set(
+    fn set<'py>(
         &self,
-        target: &Bound<'_, PyAny>,
+        target: &Self::Target<'py>,
         field: &Field,
-        val: Bound<'_, PyAny>,
+        val: Bound<'py, PyAny>,
     ) -> SerdeResult<()> {
         self.set_field(target, field, val)
+    }
+    #[inline(always)]
+    fn finish<'py>(target: Self::Target<'py>) -> Bound<'py, PyAny> {
+        target
     }
 
     #[inline(always)]
@@ -1544,16 +1567,7 @@ impl Encoder for TypedDictEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
-        let _guard = ctx.enter_depth()?;
-        let Ok(value) = value.cast::<PyDict>() else {
-            invalid_type_dump!("dict", value);
-        };
-        let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
-        for field in &self.fields {
-            let val = field.load_value(value, instance_path, ctx, &self.used_keys)?;
-            py_dict_set_item(&dict, field.name.as_ptr(), val)?;
-        }
-        Ok(dict.into_any())
+        load_dict_path(self, value, instance_path, ctx)
     }
 
     // Streams the mapping directly to the writer, avoiding the intermediate
@@ -1585,6 +1599,7 @@ impl Encoder for TypedDictEncoder {
 }
 
 impl StreamingObject for TypedDictEncoder {
+    type Target<'py> = Bound<'py, PyDict>;
     const TYPE_NAME: &'static str = "dict";
 
     #[inline(always)]
@@ -1609,21 +1624,23 @@ impl StreamingObject for TypedDictEncoder {
     }
 
     #[inline(always)]
-    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Bound<'py, PyAny>> {
-        Ok(create_py_dict_known_size(py, self.fields.len())?.into_any())
+    fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Self::Target<'py>> {
+        Ok(create_py_dict_known_size(py, self.fields.len())?)
     }
     #[inline(always)]
-    fn set(
+    fn set<'py>(
         &self,
-        target: &Bound<'_, PyAny>,
+        target: &Self::Target<'py>,
         field: &Field,
-        val: Bound<'_, PyAny>,
+        val: Bound<'py, PyAny>,
     ) -> SerdeResult<()> {
-        // `target` was created here as a dict; the cast is an infallible type
-        // check (predicted, ~free) that recovers the concrete `PyDict`.
-        let dict = target.cast::<PyDict>().map_err(PyErr::from)?;
-        py_dict_set_item(dict, field.name.as_ptr(), val)?;
+        // `target` is already the concrete `PyDict` (typed GAT), so no re-cast.
+        py_dict_set_item(target, field.name.as_ptr(), val)?;
         Ok(())
+    }
+    #[inline(always)]
+    fn finish<'py>(target: Self::Target<'py>) -> Bound<'py, PyAny> {
+        target.into_any()
     }
 
     #[inline(always)]
