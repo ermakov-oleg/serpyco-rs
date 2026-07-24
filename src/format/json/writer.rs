@@ -17,28 +17,6 @@ pub(crate) struct Checkpoint {
     top_had_item: bool,
 }
 
-/// `\u00XX` marker in [`ESCAPE`] (distinct from any single-char escape value).
-const UU: u8 = 1;
-
-/// Per-byte JSON string-escape table: 0 = emit as-is; `UU` = `\u00XX`; any other
-/// value is the char `c` of a `\c` escape. Built once at compile time.
-static ESCAPE: [u8; 256] = {
-    let mut t = [0u8; 256];
-    let mut i = 0;
-    while i < 0x20 {
-        t[i] = UU;
-        i += 1;
-    }
-    t[0x08] = b'b';
-    t[0x09] = b't';
-    t[0x0A] = b'n';
-    t[0x0C] = b'f';
-    t[0x0D] = b'r';
-    t[b'"' as usize] = b'"';
-    t[b'\\' as usize] = b'\\';
-    t
-};
-
 impl JsonWriter {
     pub(crate) fn new() -> Self {
         JsonWriter {
@@ -131,37 +109,11 @@ impl JsonWriter {
     #[inline]
     pub(crate) fn write_str(&mut self, v: &str) {
         self.buf.push(b'"');
-        self.escape_into(v);
+        // SIMD JSON string escaping (AVX2/SSE2 on x86_64, NEON on aarch64; scalar
+        // fallback). Escapes exactly ", \, and control chars (<0x20) — byte-
+        // identical to json.dumps/serde_json (no `/` or U+2028/2029 escaping).
+        v_jsonescape::escape_bytes(v, &mut self.buf);
         self.buf.push(b'"');
-    }
-
-    /// Escaping: ", \, control (<0x20). Non-ASCII is written as-is (UTF-8).
-    ///
-    /// The clean-byte hot path is a single table lookup (`ESCAPE[b] == 0`) rather
-    /// than a multi-arm match: the byte-by-byte scan dominated dump on
-    /// string-heavy payloads. `ESCAPE[b]` is 0 (emit as-is), `UU` (control ->
-    /// `\u00XX`), or the escape char itself (`n`/`t`/`"`/`\`/...) for a `\c` pair.
-    fn escape_into(&mut self, v: &str) {
-        let bytes = v.as_bytes();
-        let mut start = 0;
-        for (i, &b) in bytes.iter().enumerate() {
-            let esc = ESCAPE[b as usize];
-            if esc == 0 {
-                continue;
-            }
-            self.buf.extend_from_slice(&bytes[start..i]);
-            if esc == UU {
-                const HEX: &[u8; 16] = b"0123456789abcdef";
-                self.buf.extend_from_slice(b"\\u00");
-                self.buf.push(HEX[(b >> 4) as usize]);
-                self.buf.push(HEX[(b & 0xF) as usize]);
-            } else {
-                self.buf.push(b'\\');
-                self.buf.push(esc);
-            }
-            start = i + 1;
-        }
-        self.buf.extend_from_slice(&bytes[start..]);
     }
 
     #[inline]

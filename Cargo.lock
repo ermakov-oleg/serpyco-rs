@@ -307,6 +307,7 @@ dependencies = [
  "smallvec",
  "speedate",
  "uuid",
+ "v_jsonescape",
 ]
 
 [[package]]
@@ -384,6 +385,21 @@ checksum = "bf3923a6f5c4c6382e0b653c4117f48d631ea17f38ed86e2a828e6f7412f5239"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "v_escape-base"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1212fce830b75af194b578e55b3db9049f2c8c45f58d397fb25602fdb50fb3d"
+
+[[package]]
+name = "v_jsonescape"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84cd6e591631bf251dc46aed57a3655c8e152017d58b019053cb65ba7a2336f2"
+dependencies = [
+ "v_escape-base",
 ]
 
 [[package]]
