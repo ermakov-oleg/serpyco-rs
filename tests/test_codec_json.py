@@ -997,3 +997,49 @@ def test_decode_error_corpus(bad):
     with pytest.raises(serpyco_rs.DecodeError) as e:
         s.load(bad)
     assert isinstance(e.value.position, int)
+
+
+def test_codec_literal_bool_roundtrip():
+    # bool-valued Literal: the codec must be able to decode its own dump output.
+    s = Serializer(Literal[True, False], codec=JSON)
+    sd = Serializer(Literal[True, False])
+    assert s.dump(True) == b'true'
+    assert s.dump(False) == b'false'
+    assert s.load(b'true') is True
+    assert s.load(b'false') is False
+    assert s.load(b'true') is sd.load(True)  # parity with dict path
+
+
+def test_codec_float_dump_rejects_bool():
+    # dict-path dump is lenient (orjson emits `true`); the codec dump validates
+    # types and must not silently reinterpret a bool as the integer 1.
+    s = Serializer(float, codec=JSON)
+    with pytest.raises(serpyco_rs.SchemaValidationError):
+        s.dump(True)
+    # a plain int is still accepted for a float field
+    assert s.dump(2) == b'2'
+    assert json.loads(s.dump(1.5)) == 1.5
+
+
+def test_codec_bytes_union_dump_skips_to_next_member():
+    # `bytes` before a serializable member must not abort union probing.
+    s = Serializer(Union[bytes, str], codec=JSON)
+    assert s.dump('x') == b'"x"'
+    assert s.load(s.dump('x')) == 'x'
+    # a genuine bytes value still errors clearly (no serializable member)
+    with pytest.raises(serpyco_rs.ValidationError):
+        s.dump(b'x')
+
+
+def test_codec_dict_omit_none_validates_key():
+    # under omit_none, a skipped None value must not mask key validation.
+    s = Serializer(dict[Color, Optional[int]], codec=JSON, omit_none=True)
+    sd = Serializer(dict[Color, Optional[int]], omit_none=True)
+    bad = {'not_a_color': None}
+    with pytest.raises(serpyco_rs.SchemaValidationError):
+        sd.dump(bad)  # dict path validates the key
+    with pytest.raises(serpyco_rs.SchemaValidationError):
+        s.dump(bad)   # codec must too (currently returns b'{}')
+    # valid case still omits None values and dumps present ones
+    assert s.dump({Color.RED: None}) == b'{}'
+    assert json.loads(s.dump({Color.RED: 5})) == {'red': 5}

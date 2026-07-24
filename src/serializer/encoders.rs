@@ -355,7 +355,10 @@ impl Encoder for FloatEncoder {
             write_py_float(writer, v)?;
             return Ok(());
         }
-        if let Ok(v) = value.cast::<PyInt>() {
+        // Exact int only: a bool (int subclass) must not be written as 1/0.
+        // The dict-path dump is lenient (orjson emits `true`/`false`); the codec
+        // dump validates types, so a bool on a float field is a "number" mismatch.
+        if let Ok(v) = value.cast_exact::<PyInt>() {
             write_py_int(writer, v)?;
             return Ok(());
         }
@@ -646,13 +649,21 @@ impl Encoder for BytesEncoder {
     // yields a non-bytes value and `load` returns the same "bytes" error.
     fn dump_format(
         &self,
-        _value: &Bound<'_, PyAny>,
+        value: &Bound<'_, PyAny>,
         _writer: &mut Writer,
         _ctx: &Context,
     ) -> SerdeResult<()> {
-        Err(SerdeError::Py(ValidationError::new_err(
-            "bytes values are not supported by this format".to_string(),
-        )))
+        // A genuine bytes value cannot be represented in this format: a clear Py
+        // error. A non-bytes value is a plain type mismatch -> a Schema error, so
+        // an enclosing untagged union can skip to the next member (parity with the
+        // dict path, where BytesEncoder::dump accepts the value and the union moves
+        // on to a serializable member).
+        if value.cast::<PyBytes>().is_ok() {
+            return Err(SerdeError::Py(ValidationError::new_err(
+                "bytes values are not supported by this format".to_string(),
+            )));
+        }
+        invalid_type_dump!("bytes", value)
     }
 }
 
@@ -758,6 +769,12 @@ fn load_enum_scalar<'py>(
                 load(&key, instance_path, ctx)
             }
         },
+        Kind::Bool => {
+            let key = PyBool::new(py, parser.take_bool_known()?)
+                .to_owned()
+                .into_any();
+            load(&key, instance_path, ctx)
+        }
         _ => Err(wrong_enum_at_cursor(parser, enum_items, instance_path)),
     }
 }
@@ -826,17 +843,17 @@ impl Encoder for DictionaryEncoder {
             writer.begin_map();
             for (k, v) in dict.iter() {
                 if self.omit_none {
-                    // omit_none needs to know whether the dumped value is None
-                    // before the key is written. Stream the value into a probe
-                    // via the concrete encoder: it writes exactly `null` iff the
-                    // dumped value is None, so the byte check is equivalent to
-                    // the dict-path `is_none()` without materializing via dump.
+                    // Parity with the dict-path dump: the key is always dumped (and
+                    // thus validated) even when an omitted None value is never
+                    // emitted. Then probe the value: it writes exactly `null` iff the
+                    // dumped value is None, so the byte check is equivalent to the
+                    // dict-path `is_none()` without materializing via dump.
+                    let key = self.key_encoder.dump(&k, ctx)?;
                     let mut probe = writer.new_probe();
                     self.value_encoder.dump_format(&v, &mut probe, ctx)?;
                     if writer.value_is_null(probe.as_bytes()) {
                         continue;
                     }
-                    let key = self.key_encoder.dump(&k, ctx)?;
                     write_map_key(&key, writer)?;
                     writer.write_raw_value(probe.as_bytes());
                 } else {
