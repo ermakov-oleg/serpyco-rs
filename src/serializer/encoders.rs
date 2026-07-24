@@ -678,11 +678,11 @@ fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()>
     Ok(())
 }
 
-/// omit_none for a fixed-key field: dump `value` via `encoder` into a probe and,
-/// unless it encodes the format's null, emit `key` followed by the value's
-/// bytes. Equivalent to the dict-path `is_none()` check without materializing
-/// the value via `dump` + `write_any`. Shared by `EntityEncoder` and
-/// `TypedDictEncoder` (their optional-field write is identical).
+/// omit_none for a fixed-key field: write `key` + `value` straight into the real
+/// writer, then drop both via a checkpoint rollback if the value encoded null.
+/// Equivalent to the dict-path `is_none()` check without a probe buffer or a
+/// value materialization. Shared by `EntityEncoder` and `TypedDictEncoder`
+/// (their optional-field write is identical).
 #[inline(always)]
 fn dump_field_unless_null(
     writer: &mut Writer,
@@ -691,11 +691,12 @@ fn dump_field_unless_null(
     value: &Bound<'_, PyAny>,
     ctx: &Context,
 ) -> SerdeResult<()> {
-    let mut probe = writer.new_probe();
-    encoder.dump_format(value, &mut probe, ctx)?;
-    if !writer.value_is_null(probe.as_bytes()) {
-        writer.map_key(key);
-        writer.write_raw_value(probe.as_bytes());
+    let cp = writer.checkpoint();
+    writer.map_key(key);
+    let value_start = writer.position();
+    encoder.dump_format(value, writer, ctx)?;
+    if writer.tail_is_null(value_start) {
+        writer.rollback(cp);
     }
     Ok(())
 }
@@ -845,17 +846,17 @@ impl Encoder for DictionaryEncoder {
                 if self.omit_none {
                     // Parity with the dict-path dump: the key is always dumped (and
                     // thus validated) even when an omitted None value is never
-                    // emitted. Then probe the value: it writes exactly `null` iff the
-                    // dumped value is None, so the byte check is equivalent to the
-                    // dict-path `is_none()` without materializing via dump.
+                    // emitted. Write key + value straight into the buffer, then drop
+                    // both via a checkpoint rollback if the value encoded null —
+                    // equivalent to the dict-path `is_none()` without a probe buffer.
                     let key = self.key_encoder.dump(&k, ctx)?;
-                    let mut probe = writer.new_probe();
-                    self.value_encoder.dump_format(&v, &mut probe, ctx)?;
-                    if writer.value_is_null(probe.as_bytes()) {
-                        continue;
-                    }
+                    let cp = writer.checkpoint();
                     write_map_key(&key, writer)?;
-                    writer.write_raw_value(probe.as_bytes());
+                    let value_start = writer.position();
+                    self.value_encoder.dump_format(&v, writer, ctx)?;
+                    if writer.tail_is_null(value_start) {
+                        writer.rollback(cp);
+                    }
                 } else {
                     let key = self.key_encoder.dump(&k, ctx)?;
                     write_map_key(&key, writer)?;
@@ -2146,15 +2147,16 @@ impl Encoder for UnionEncoder {
         ctx: &Context,
     ) -> SerdeResult<()> {
         for encoder in &self.encoders {
-            // A member that fails mid-write only corrupts its throwaway probe,
-            // never the real writer.
-            let mut probe = writer.new_probe();
-            match encoder.dump_format(value, &mut probe, ctx) {
-                Ok(()) => {
-                    writer.write_raw_value(probe.as_bytes());
-                    return Ok(());
+            // Write the member straight into the real writer. A member that fails
+            // mid-write only dirties the buffer past the checkpoint, which the
+            // rollback discards before the next member is tried.
+            let cp = writer.checkpoint();
+            match encoder.dump_format(value, writer, ctx) {
+                Ok(()) => return Ok(()),
+                Err(SerdeError::Schema(_)) => {
+                    writer.rollback(cp);
+                    continue;
                 }
-                Err(SerdeError::Schema(_)) => continue,
                 Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }

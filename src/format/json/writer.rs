@@ -7,6 +7,17 @@ pub(crate) struct JsonWriter {
     has_item: Vec<bool>,
 }
 
+/// A saved writer position for a speculative write that may be rolled back
+/// (union member probing, omit_none null-skip). Captures the output length and
+/// the current container's comma state so `rollback` fully undoes a partial or
+/// unwanted value without a separate probe buffer + splice.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Checkpoint {
+    buf_len: usize,
+    has_item_len: usize,
+    top_had_item: bool,
+}
+
 impl JsonWriter {
     pub(crate) fn new() -> Self {
         JsonWriter {
@@ -52,18 +63,39 @@ impl JsonWriter {
         self.buf.extend_from_slice(v.as_bytes());
     }
 
-    /// Append pre-formatted bytes that represent exactly one complete JSON value.
-    /// For JSON a value never touches the comma/has_item state, so this is a plain
-    /// buffer append.
-    #[inline]
-    pub(crate) fn write_raw_value(&mut self, raw: &[u8]) {
-        self.buf.extend_from_slice(raw);
+    /// Current output length — the start position of the next value written.
+    #[inline(always)]
+    pub(crate) fn position(&self) -> usize {
+        self.buf.len()
     }
 
-    /// A JSON value is null iff its bytes are exactly `null`.
+    /// Snapshot the writer state so a speculative value can be rolled back.
     #[inline(always)]
-    pub(crate) fn value_is_null(&self, bytes: &[u8]) -> bool {
-        bytes == b"null"
+    pub(crate) fn checkpoint(&self) -> Checkpoint {
+        Checkpoint {
+            buf_len: self.buf.len(),
+            has_item_len: self.has_item.len(),
+            top_had_item: self.has_item.last().copied().unwrap_or(false),
+        }
+    }
+
+    /// Undo everything written since `cp`: truncate the buffer and restore the
+    /// container-nesting/comma state (a failed union member may have left open
+    /// containers; an unwanted omit_none value plus its key are dropped).
+    #[inline(always)]
+    pub(crate) fn rollback(&mut self, cp: Checkpoint) {
+        self.buf.truncate(cp.buf_len);
+        self.has_item.truncate(cp.has_item_len);
+        if let Some(top) = self.has_item.last_mut() {
+            *top = cp.top_had_item;
+        }
+    }
+
+    /// Whether the value written since `from` is exactly the JSON null literal.
+    /// Lets omit_none decide null-ness on the value already in the buffer, no probe.
+    #[inline(always)]
+    pub(crate) fn tail_is_null(&self, from: usize) -> bool {
+        self.buf[from..] == *b"null"
     }
 
     #[inline]

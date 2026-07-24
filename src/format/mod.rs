@@ -5,7 +5,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::PyErr;
 
 use json::parser::{JsonParser, ParsedInt};
-use json::writer::JsonWriter;
+use json::writer::{Checkpoint as JsonCheckpoint, JsonWriter};
 
 use crate::serde_error::SerdeError;
 
@@ -29,6 +29,13 @@ pub(crate) enum Writer {
     Json(JsonWriter),
 }
 
+/// Opaque saved writer position (per-format), paired with `Writer::checkpoint` /
+/// `Writer::rollback`. A new format adds its own variant.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Checkpoint {
+    Json(JsonCheckpoint),
+}
+
 impl Writer {
     pub(crate) fn new(format: u8) -> Result<Self, PyErr> {
         match format {
@@ -46,33 +53,39 @@ impl Writer {
         }
     }
 
-    /// Fresh empty writer of the same format variant (union member probing).
-    /// Mirrors `Parser::sub_parser`'s same-format construction.
-    #[inline]
-    pub(crate) fn new_probe(&self) -> Writer {
-        match self {
-            Writer::Json(_) => Writer::Json(JsonWriter::new()),
-        }
-    }
-
-    /// Append pre-formatted bytes that MUST be a single well-formed value of this
-    /// format (used for union member probing: a member's bytes produced into a
-    /// probe writer are spliced into the real writer as one complete value).
-    #[inline]
-    pub(crate) fn write_raw_value(&mut self, raw: &[u8]) {
-        match self {
-            Writer::Json(w) => w.write_raw_value(raw),
-        }
-    }
-
-    /// Whether `bytes` — a single complete value produced by this format's
-    /// writer — encodes null. Lets omit_none decide format-agnostically whether
-    /// a probed value should be skipped, keeping each format's null
-    /// representation inside its own writer.
+    /// Snapshot the writer so a speculative value (union member probe, omit_none
+    /// value) can be rolled back in place — no separate probe buffer or splice.
     #[inline(always)]
-    pub(crate) fn value_is_null(&self, bytes: &[u8]) -> bool {
+    pub(crate) fn checkpoint(&self) -> Checkpoint {
         match self {
-            Writer::Json(w) => w.value_is_null(bytes),
+            Writer::Json(w) => Checkpoint::Json(w.checkpoint()),
+        }
+    }
+
+    /// Undo everything written since `cp` (drop a non-matching union member's
+    /// partial output, or an omitted None value together with its key).
+    #[inline(always)]
+    pub(crate) fn rollback(&mut self, cp: Checkpoint) {
+        match (self, cp) {
+            (Writer::Json(w), Checkpoint::Json(c)) => w.rollback(c),
+        }
+    }
+
+    /// Start position of the next value written — pair with `tail_is_null`.
+    #[inline(always)]
+    pub(crate) fn position(&self) -> usize {
+        match self {
+            Writer::Json(w) => w.position(),
+        }
+    }
+
+    /// Whether the value written since `from` encodes null. Lets omit_none decide
+    /// format-agnostically on the value already in the buffer, keeping each
+    /// format's null representation inside its own writer.
+    #[inline(always)]
+    pub(crate) fn tail_is_null(&self, from: usize) -> bool {
+        match self {
+            Writer::Json(w) => w.tail_is_null(from),
         }
     }
 
