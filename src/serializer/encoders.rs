@@ -175,7 +175,6 @@ pub struct NeverEncoder;
 impl Encoder for NeverEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>, _ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
-        // Never type should not have any values to dump
         invalid_type_dump!("Never", value)
     }
 
@@ -186,7 +185,6 @@ impl Encoder for NeverEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
-        // Never type cannot be loaded - any value is invalid
         invalid_type!("Never (no value allowed)", value, instance_path)
     }
 
@@ -197,7 +195,6 @@ impl Encoder for NeverEncoder {
         _writer: &mut Writer,
         _ctx: &Context,
     ) -> SerdeResult<()> {
-        // Never type should not have any values to dump
         invalid_type_dump!("Never", value)
     }
 
@@ -209,7 +206,7 @@ impl Encoder for NeverEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        // Never type cannot be loaded - error natively, no Python materialization.
+        // Native error, no Python materialization.
         Err(wrong_type_at_cursor(
             parser,
             "Never (no value allowed)",
@@ -264,11 +261,9 @@ impl Encoder for IntEncoder {
         invalid_type_dump!("integer", value)
     }
 
-    // Decodes the integer straight from jiter (`take_int_known`) instead of a
-    // text round-trip. jiter's `known_int` rejects a float-shaped token (e.g.
-    // `1.5`) WITHOUT advancing the cursor, so on that error we re-read the raw
-    // number text and defer to `load(float)` — producing the SchemaValidationError
-    // ("not of type integer") the dict-path gives, not a DecodeError.
+    // jiter rejects a float-shaped token without advancing the cursor; on that
+    // error re-read the raw number and defer to load(float) for the dict-path
+    // "integer" schema error (not a DecodeError).
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -283,21 +278,17 @@ impl Encoder for IntEncoder {
                     return Ok(v.into_bound_py_any(py)?);
                 }
                 Ok(ParsedInt::Big(big)) => {
-                    // Unbounded: accept arbitrary-precision integers as-is
-                    // (the i64 bounds-check in `load` would overflow on these).
+                    // Unbounded: accept as-is (the i64 bounds-check would overflow).
                     if self.type_info.min.is_none() && self.type_info.max.is_none() {
                         return Ok(big.into_bound_py_any(py)?);
                     }
-                    // Bounded: materialize and let `load` apply the standard
-                    // (overflowing) bounds check, identical to the bridge default.
+                    // Bounded: defer to `load` for the standard bounds check.
                     let materialized = big.into_bound_py_any(py)?;
                     return self.load(&materialized, instance_path, ctx);
                 }
                 Err(_) => {
-                    // Float-shaped (or malformed) token: the cursor is unmoved, so
-                    // re-read the raw number. A valid float defers to `load(float)`
-                    // for the same "integer" schema error; a genuinely malformed
-                    // number re-errors here as a DecodeError (same as before).
+                    // Cursor unmoved: re-read raw. Valid float -> load(float) for the
+                    // "integer" schema error; malformed -> DecodeError here.
                     let raw = parser.take_number_str_known()?;
                     let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
                     let materialized = PyFloat::new(py, v).into_any();
@@ -355,9 +346,8 @@ impl Encoder for FloatEncoder {
             write_py_float(writer, v)?;
             return Ok(());
         }
-        // Exact int only: a bool (int subclass) must not be written as 1/0.
-        // The dict-path dump is lenient (orjson emits `true`/`false`); the codec
-        // dump validates types, so a bool on a float field is a "number" mismatch.
+        // Exact int only: a bool (int subclass) on a float field is a "number"
+        // mismatch (the codec dump validates types; the dict path is lenient).
         if let Ok(v) = value.cast_exact::<PyInt>() {
             write_py_int(writer, v)?;
             return Ok(());
@@ -365,10 +355,8 @@ impl Encoder for FloatEncoder {
         invalid_type_dump!("number", value)
     }
 
-    // Integer-shaped tokens (no dot/exponent) are materialized as a Python int
-    // and deferred to `self.load`, so a float field returns an int for `b'1'`,
-    // exactly like the dict-path (`load(1)` returns `1`, not `1.0`). Float-shaped
-    // tokens keep the fast direct-parse path below.
+    // Integer-shaped tokens defer to `load`, so a float field returns an int (not
+    // 1.0) for `b'1'`, like the dict path; float-shaped tokens parse directly.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -386,9 +374,7 @@ impl Encoder for FloatEncoder {
                 check_bounds!(v, self.type_info, instance_path)?;
                 return Ok(PyFloat::new(py, v).into_any());
             }
-            // Unreachable in practice: jiter only hands us syntactically valid
-            // JSON number text, which always parses as f64. Kept as a safe,
-            // non-panicking fallback with the same error `parse_any` would give.
+            // Unreachable: jiter only yields valid JSON numbers. Safe fallback.
             return Err(invalid_number_err(raw));
         }
         Err(wrong_type_at_cursor(parser, "number", instance_path))
@@ -450,10 +436,8 @@ impl Encoder for DecimalEncoder {
         Ok(())
     }
 
-    // Builds the Decimal straight from the raw JSON text (not through an f64
-    // round-trip), so precision beyond what f64 can represent survives — e.g.
-    // `load(b'1.1')` gives `Decimal('1.1')` instead of a float-repr artifact.
-    // The f64 parse below is only used for the bounds check.
+    // Build Decimal from the raw JSON text (not an f64 round-trip) so precision
+    // survives; the f64 parse is only for the bounds check.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -469,8 +453,7 @@ impl Encoder for DecimalEncoder {
                         check_bounds!(v, self.type_info, instance_path)?;
                         Ok(self.decimal_cls.bind(py).call1((PyString::new(py, raw),))?)
                     }
-                    // Unreachable in practice: jiter only hands us syntactically
-                    // valid JSON number text, which always parses as f64.
+                    // Unreachable: jiter only yields valid JSON numbers.
                     Err(_) => Err(invalid_number_err(raw)),
                 }
             }
@@ -644,20 +627,16 @@ impl Encoder for BytesEncoder {
         }
     }
 
-    // JSON has no bytes; give a clear error instead of the generic bridge
-    // "not serializable" message. load_format uses the default: parse_any
-    // yields a non-bytes value and `load` returns the same "bytes" error.
+    // JSON has no bytes; give a clear error, not the bridge "not serializable".
+    // load_format uses the default (parse_any -> load gives the "bytes" error).
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
         _writer: &mut Writer,
         _ctx: &Context,
     ) -> SerdeResult<()> {
-        // A genuine bytes value cannot be represented in this format: a clear Py
-        // error. A non-bytes value is a plain type mismatch -> a Schema error, so
-        // an enclosing untagged union can skip to the next member (parity with the
-        // dict path, where BytesEncoder::dump accepts the value and the union moves
-        // on to a serializable member).
+        // Genuine bytes -> a Py error (unrepresentable). A non-bytes value is a
+        // Schema mismatch, so an enclosing untagged union skips to the next member.
         if value.cast::<PyBytes>().is_ok() {
             return Err(SerdeError::Py(ValidationError::new_err(
                 "bytes values are not supported by this format".to_string(),
@@ -667,8 +646,8 @@ impl Encoder for BytesEncoder {
     }
 }
 
-/// Write a dumped dict key as a map key, mirroring `bridge::write_any`'s key
-/// handling: string keys go straight through, everything else via `str()`.
+/// Write a dict key as a map key, mirroring `bridge::write_any`: strings direct,
+/// everything else via `str()`.
 #[inline]
 fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()> {
     match key.cast::<PyString>() {
@@ -678,11 +657,9 @@ fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()>
     Ok(())
 }
 
-/// omit_none for a fixed-key field: write `key` + `value` straight into the real
-/// writer, then drop both via a checkpoint rollback if the value encoded null.
-/// Equivalent to the dict-path `is_none()` check without a probe buffer or a
-/// value materialization. Shared by `EntityEncoder` and `TypedDictEncoder`
-/// (their optional-field write is identical).
+/// omit_none for a fixed-key field: write key+value, then roll back via a
+/// checkpoint if the value encoded null — dict-path `is_none()` with no probe
+/// buffer. Shared by `EntityEncoder`/`TypedDictEncoder`.
 #[inline(always)]
 fn dump_field_unless_null(
     writer: &mut Writer,
@@ -701,11 +678,9 @@ fn dump_field_unless_null(
     Ok(())
 }
 
-/// Write an already-resolved enum/literal serialized value by its concrete
-/// Python type. The common str/int members stream directly, keeping them off
-/// the generic `write_any` bridge; anything unusual (float, None, container
-/// literal member, ...) falls back to `write_any`, so the output is
-/// byte-identical to the bridge for every possible value.
+/// Stream an enum/literal value by its concrete Python type: str/int members go
+/// direct (off the `write_any` bridge); anything else falls back to `write_any`
+/// for byte-identical output.
 fn write_scalar_item(
     item: &Bound<'_, PyAny>,
     writer: &mut Writer,
@@ -732,11 +707,9 @@ fn write_scalar_item(
     write_any(item, writer, ctx)
 }
 
-/// Read a scalar enum/literal member directly from the parser for the common
-/// str/int members, then delegate the map lookup + error handling to `load` so
-/// the miss/error behavior stays byte-identical to the object path. Non-scalar
-/// (or float-shaped) tokens defer to `load` as well. Shared by `EnumEncoder`
-/// and `LiteralEncoder`, whose `load_format` bodies are otherwise identical.
+/// Read a scalar enum/literal member from the parser, then delegate the map
+/// lookup + error handling to `load` for object-path parity. Shared by
+/// `EnumEncoder`/`LiteralEncoder`.
 #[inline(always)]
 fn load_enum_scalar<'py>(
     py: Python<'py>,
@@ -760,9 +733,8 @@ fn load_enum_scalar<'py>(
                 let key = big.into_bound_py_any(py)?;
                 load(&key, instance_path, ctx)
             }
-            // Float-shaped token: the cursor is unmoved, so re-read the raw
-            // number and build a float, matching `parse_any` -> `load` which
-            // yields `invalid_enum_item` for a non-member.
+            // Cursor unmoved: re-read as float, matching parse_any -> load
+            // (invalid_enum_item for a non-member).
             Err(_) => {
                 let raw = parser.take_number_str_known()?;
                 let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
@@ -785,9 +757,8 @@ pub struct DictionaryEncoder {
     pub(crate) key_encoder: Box<TEncoder>,
     pub(crate) value_encoder: Box<TEncoder>,
     pub(crate) omit_none: bool,
-    /// True when the key type is a plain `str` (no min/max length, no custom
-    /// encoder): `key_encoder.load` would just re-validate and clone the same
-    /// string, so the streaming load path uses the parsed key directly.
+    /// Plain `str` key (no length bounds/custom encoder): the streaming load path
+    /// uses the parsed key directly instead of re-validating via `key_encoder`.
     pub(crate) key_is_plain_str: bool,
 }
 
@@ -844,11 +815,8 @@ impl Encoder for DictionaryEncoder {
             writer.begin_map();
             for (k, v) in dict.iter() {
                 if self.omit_none {
-                    // Parity with the dict-path dump: the key is always dumped (and
-                    // thus validated) even when an omitted None value is never
-                    // emitted. Write key + value straight into the buffer, then drop
-                    // both via a checkpoint rollback if the value encoded null —
-                    // equivalent to the dict-path `is_none()` without a probe buffer.
+                    // Key is always dumped (validated) even when the None value is
+                    // omitted; write key+value, then roll back if it encoded null.
                     let key = self.key_encoder.dump(&k, ctx)?;
                     let cp = writer.checkpoint();
                     write_map_key(&key, writer)?;
@@ -882,20 +850,16 @@ impl Encoder for DictionaryEncoder {
             return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
         let result_dict = PyDict::new(py);
-        // The key `&str` borrows the parser buffer. Materialize it into a
-        // `Bound<PyString>` immediately (PyString::new copies the bytes), which
-        // ends the borrow so the parser is free for the value's `load_format`.
-        // The owned PyString then serves both the instance_path (as a
-        // `PropertyValue` chunk — no `String` alloc) and the dict insert.
+        // The key `&str` borrows the parser buffer; materialize to `PyString`
+        // (copies bytes) to end the borrow before the value's `load_format`. The
+        // owned key serves both instance_path (no `String` alloc) and the insert.
         let mut key_opt = parser.enter_map_known()?;
         while let Some(k) = key_opt {
             let py_key = PyString::new(py, k);
             let key_any = py_key.as_any();
             let item_path = instance_path.push(key_any);
-            // Plain-str keys skip `key_encoder.load`: it would only re-check the
-            // (absent) length bounds and clone the same string we already hold.
-            // `validated_key` keeps the key object alive past the dict insert in
-            // the non-plain case (the fast case uses `py_key`, alive anyway).
+            // Plain-str keys skip `key_encoder.load` (it would only re-clone the
+            // string); `validated_key` keeps the non-plain key alive past insert.
             let validated_key;
             let key_ptr = if self.key_is_plain_str {
                 key_any.as_ptr()
@@ -1017,10 +981,8 @@ impl Encoder for ArrayEncoder {
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
             loop {
-                // Length bounds can only be checked after the closing bracket
-                // is seen, so an element-type error here surfaces before a
-                // would-be length error (unlike the dict path, which checks
-                // length against the raw input up front).
+                // Length is only known at the closing bracket, so an element-type
+                // error surfaces before a length error (dict path checks length up front).
                 let item_path = instance_path.push(items.len());
                 items.push(self.encoder.load_format(py, parser, &item_path, ctx)?);
                 if !parser.next_array_item()? {
@@ -1045,8 +1007,7 @@ impl Encoder for ArrayEncoder {
 }
 
 /// Routing decision for one streamed object key, computed while the borrowed
-/// `&str` key is still alive so the key never has to be copied to an owned
-/// `String`. `Copy`, so it outlives the parser borrow that produced it.
+/// `&str` is alive so the key is never copied to a `String`. `Copy`.
 #[derive(Clone, Copy)]
 enum Route {
     /// Key maps to `self.fields[idx]`.
@@ -1057,8 +1018,7 @@ enum Route {
     End,
 }
 
-/// Resolve a borrowed key to a `Route` (no allocation). `None` (end of object)
-/// -> `End`; a known key -> `Field(idx)`; anything else -> `Skip`.
+/// Resolve a borrowed key to a `Route` (no allocation).
 #[inline]
 fn resolve_route(routing: &FxHashMap<String, usize>, key: Option<&str>) -> Route {
     match key {
@@ -1070,12 +1030,8 @@ fn resolve_route(routing: &FxHashMap<String, usize>, key: Option<&str>) -> Route
     }
 }
 
-/// Per-object "field seen" bitset used by the streaming object-load paths: one
-/// bit per field, inline on the stack for the common case (<= 64 fields => one
-/// word) and spilling to the heap only for very wide objects — never the
-/// per-object `Vec<Option<_>>` alloc/free the value would otherwise cost. Ops
-/// are `#[inline(always)]`, so codegen matches open-coded shifts (cachegrind
-/// verified).
+/// Per-object "field seen" bitset: one bit per field, inline on the stack
+/// (<= 64 fields => one word), avoiding the per-object `Vec<Option<_>>` alloc.
 struct SeenSet(SmallVec<[u64; 1]>);
 
 impl SeenSet {
@@ -1095,13 +1051,10 @@ impl SeenSet {
     }
 }
 
-/// The streaming object codec shared by `EntityEncoder` (fields -> class
-/// instance) and `TypedDictEncoder` (fields -> dict). The load/dump *algorithm*
-/// (key routing, seen-bitset, flatten handling, omit_none) is identical; only
-/// the "sink" (how a field is stored / fetched and the container built) differs.
-/// The sink hooks are `#[inline(always)]`, so each `load_object_streaming` /
-/// `dump_object_streaming` monomorphization is as if hand-written per encoder
-/// (cachegrind-verified — no sink method survives as its own function).
+/// The streaming object codec shared by `EntityEncoder` (-> class instance) and
+/// `TypedDictEncoder` (-> dict): the load/dump algorithm is identical; only the
+/// "sink" (store/fetch a field, build the container) differs. Sink hooks are
+/// `#[inline(always)]`, so each monomorphization is as if hand-written.
 trait StreamingObject: Encoder {
     /// Schema type-mismatch label ("object" / "dict").
     const TYPE_NAME: &'static str;
@@ -1112,9 +1065,8 @@ trait StreamingObject: Encoder {
     fn has_flatten(&self) -> bool;
     fn omit_none(&self) -> bool;
 
-    // --- load sink: the container is typed per encoder (class instance / dict) so
-    // `set` stores a field with no per-field re-cast; `finish` erases it back to
-    // `Bound<PyAny>` once at the end. ---
+    // --- load sink: container typed per encoder, so `set` needs no re-cast;
+    // `finish` erases it to `Bound<PyAny>` once. ---
     type Target<'py>
     where
         Self: 'py;
@@ -1131,11 +1083,10 @@ trait StreamingObject: Encoder {
     fn finish<'py>(target: Self::Target<'py>) -> Bound<'py, PyAny>;
 
     // --- dump source (type-erased; each impl narrows internally) ---
-    /// Validate `value` is dumpable as this object before the field loop
-    /// (TypedDict: it must be a dict; Entity: no-op — a missing attr errors per field).
+    /// Validate `value` before the field loop (TypedDict: must be a dict; Entity:
+    /// no-op — missing attrs error per field).
     fn check_dump_source(&self, value: &Bound<'_, PyAny>) -> SerdeResult<()>;
-    /// Fetch a field's value for dumping. `Some(v)` -> dump it; `None` -> skip the
-    /// field (emit no key).
+    /// Fetch a field's value for dumping; `None` -> skip the field (no key).
     fn fetch<'py>(
         &self,
         value: &Bound<'py, PyAny>,
@@ -1143,11 +1094,9 @@ trait StreamingObject: Encoder {
     ) -> SerdeResult<Option<Bound<'py, PyAny>>>;
 }
 
-/// Stream an object straight into `S`'s target, avoiding the intermediate PyDict
-/// the dict-path parses first. Keys route via `format_routing`; unknown keys are
-/// skipped (no-flatten) or materialized only as their own values into `unknowns`
-/// for the flatten fields to resolve (shared with the dict path via
-/// `Field::load_value`). Missing fields fall back to `get_default`.
+/// Stream an object into `S`'s target, avoiding the dict-path's intermediate
+/// PyDict. Keys route via `format_routing`; unknown keys are skipped (or, with
+/// flatten, collected into `unknowns`). Missing fields fall back to `get_default`.
 fn load_object_streaming<'py, S: StreamingObject + 'py>(
     enc: &S,
     py: Python<'py>,
@@ -1161,9 +1110,8 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
     }
     let target = enc.create(py)?;
     let fields = enc.fields();
-    // Set values directly as keys arrive (no per-object `Vec<Option<Bound>>` — a
-    // hot alloc/free), tracking seen fields in an inline bitset; defaults then
-    // fill unseen fields. Keys resolve while borrowed, never copied to Strings.
+    // Set values as keys arrive (no per-object `Vec<Option<Bound>>` alloc), tracking
+    // seen fields in an inline bitset; defaults fill the rest. Keys stay borrowed.
     let mut seen = SeenSet::new(fields.len());
     if enc.has_flatten() {
         let unknowns = PyDict::new(py);
@@ -1178,8 +1126,7 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
                     seen.mark(idx);
                 }
                 None => {
-                    // Unknown key -> a flatten field's. Materialize only this
-                    // value (not the whole object) into `unknowns`.
+                    // Unknown key -> a flatten field's: materialize only this value.
                     let py_key = PyString::new(py, k);
                     let v = parse_any(py, parser, ctx)?;
                     unknowns.set_item(py_key, v)?;
@@ -1223,9 +1170,8 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
     Ok(S::finish(target))
 }
 
-/// Stream an object straight to the writer, avoiding the intermediate PyDict the
-/// dict-path (dump) builds. Flatten objects keep parity via the bridge
-/// (materialize + `write_any`).
+/// Stream an object to the writer, avoiding the dict-path's intermediate PyDict.
+/// Flatten objects keep parity via the bridge (materialize + `write_any`).
 fn dump_object_streaming<S: StreamingObject>(
     enc: &S,
     value: &Bound<'_, PyAny>,
@@ -1243,9 +1189,8 @@ fn dump_object_streaming<S: StreamingObject>(
         let Some(field_val) = enc.fetch(value, field)? else {
             continue;
         };
-        // Mirror the dict-path write condition
-        // (`field.required || !omit_none || !dump_result.is_none()`): only
-        // optional fields under omit_none need the dumped value first.
+        // Mirror the dict-path write condition: only optional fields under
+        // omit_none need the dumped value first.
         if !field.required && enc.omit_none() {
             dump_field_unless_null(writer, &field.dict_key_rs, &*field.encoder, &field_val, ctx)?;
         } else {
@@ -1257,10 +1202,9 @@ fn dump_object_streaming<S: StreamingObject>(
     Ok(())
 }
 
-/// The dict-path (non-codec) object load shared by Entity/TypedDict: cast the
-/// input to a dict, build the target, and fill each field via `Field::load_value`
-/// (which handles flatten / get_item / default). Only the sink differs — the
-/// same `StreamingObject` hooks the codec path uses.
+/// The dict-path (non-codec) object load shared by Entity/TypedDict: cast to a
+/// dict and fill each field via `Field::load_value`. Same `StreamingObject`
+/// sink hooks as the codec path.
 fn load_dict_path<'a, S: StreamingObject + 'a>(
     enc: &S,
     value: &Bound<'a, PyAny>,
@@ -1286,11 +1230,9 @@ pub struct EntityEncoder {
     pub(crate) is_frozen: bool,
     pub(crate) fields: Vec<Field>,
     pub(crate) used_keys: Py<PySet>,
-    /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
-    /// Empty is fine; used only by the streaming (no-flatten) load path.
+    /// JSON key -> field index (non-flatten only); used by the streaming load path.
     pub(crate) format_routing: FxHashMap<String, usize>,
-    /// Cached `fields.iter().any(|f| f.is_flattened)`, computed once at
-    /// construction so the format hot paths don't rescan on every call.
+    /// Cached `any(is_flattened)` so the format hot paths don't rescan per call.
     pub(crate) has_flatten: bool,
 }
 
@@ -1348,8 +1290,7 @@ impl Field {
 }
 
 impl EntityEncoder {
-    /// Set a loaded field value on the instance, honouring the frozen/mutable
-    /// distinction: frozen entities disallow the fast unchecked setattr.
+    /// Set a field on the instance; frozen entities disallow the fast unchecked setattr.
     #[inline(always)]
     fn set_field(
         &self,
@@ -1374,10 +1315,8 @@ impl Encoder for EntityEncoder {
         for field in &self.fields {
             let field_val = match value.getattr(&field.name) {
                 Ok(v) => v,
-                // A missing attribute means `value` isn't an instance of this
-                // entity's shape. Surface it as a Schema type-mismatch (not a raw
-                // AttributeError) so an enclosing untagged union skips to the next
-                // member instead of aborting. Mirrors the codec dump path.
+                // Missing attr means `value` isn't this entity's shape: surface a
+                // Schema mismatch (not AttributeError) so an untagged union skips on.
                 Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
                     let name = self.cls.bind(value.py()).name()?;
                     return Err(invalid_type_dump_err(&name.to_string(), value));
@@ -1409,10 +1348,7 @@ impl Encoder for EntityEncoder {
         load_dict_path(self, value, instance_path, ctx)
     }
 
-    // Streams the object directly to the writer, avoiding the intermediate
-    // PyDict the dict-path (dump) builds. Flatten entities keep full parity via
-    // the bridge (materialize + write_any) — streaming flatten is a future
-    // optimization.
+    // Streams to the writer; flatten entities fall back to the bridge (parity).
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -1491,10 +1427,8 @@ impl StreamingObject for EntityEncoder {
         value: &Bound<'py, PyAny>,
         field: &Field,
     ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
-        // A missing attribute means the value isn't an instance of this entity's
-        // shape. Surface it as a Schema type-mismatch (like the scalar/container
-        // dump guards) so an enclosing untagged union skips to the next member
-        // instead of aborting on a raw AttributeError.
+        // Missing attr means the value isn't this entity's shape: Schema mismatch
+        // (not a raw AttributeError) so an untagged union skips to the next member.
         match value.getattr(&field.name) {
             Ok(v) => Ok(Some(v)),
             Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
@@ -1544,11 +1478,9 @@ pub struct TypedDictEncoder {
     pub(crate) omit_none: bool,
     pub(crate) fields: Vec<Field>,
     pub(crate) used_keys: Py<PySet>,
-    /// Maps JSON key (dict_key_rs) -> field index. Non-flatten fields only.
-    /// Empty is fine; used only by the streaming (no-flatten) load path.
+    /// JSON key -> field index (non-flatten only); used by the streaming load path.
     pub(crate) format_routing: FxHashMap<String, usize>,
-    /// Cached `fields.iter().any(|f| f.is_flattened)`, computed once at
-    /// construction so the format hot paths don't rescan on every call.
+    /// Cached `any(is_flattened)` so the format hot paths don't rescan per call.
     pub(crate) has_flatten: bool,
 }
 
@@ -1599,10 +1531,8 @@ impl Encoder for TypedDictEncoder {
         load_dict_path(self, value, instance_path, ctx)
     }
 
-    // Streams the mapping directly to the writer, avoiding the intermediate
-    // PyDict the dict-path (dump) builds. Missing/optional/required handling
-    // mirrors the dict-path exactly: a missing required key errors, a missing
-    // optional key is skipped. Flatten typeddicts fall back to the bridge.
+    // Streams the mapping to the writer; missing required -> error, missing
+    // optional -> skipped (dict-path parity). Flatten falls back to the bridge.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -1763,8 +1693,7 @@ impl Encoder for UUIDEncoder {
                     return Ok(result);
                 }
             }
-            // Invalid UUID text (or the constructor rejected it) -> native error,
-            // no Python materialization.
+            // Invalid UUID -> native error, no Python materialization.
             return Err(wrong_type_err("uuid", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "uuid", instance_path))
@@ -1807,8 +1736,7 @@ impl Encoder for EnumEncoder {
         }
     }
 
-    // Same lookup as `dump`, but streams the resolved scalar value directly
-    // instead of returning it for the bridge to re-sniff via `write_any`.
+    // Same lookup as `dump`, but streams the resolved scalar directly.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -1875,8 +1803,7 @@ impl Encoder for LiteralEncoder {
         }
     }
 
-    // Same lookup as `dump`, but streams the resolved scalar value directly
-    // instead of returning it for the bridge to re-sniff via `write_any`.
+    // Same lookup as `dump`, but streams the resolved scalar directly.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -2066,10 +1993,8 @@ impl Encoder for TupleEncoder {
                     let item_path = instance_path.push(idx);
                     items.push(self.encoders[idx].load_format(py, parser, &item_path, ctx)?);
                 } else {
-                    // More items than expected encoders: consume them
-                    // generically so the final count still reflects what the
-                    // input actually contains, giving the same "has more
-                    // than N items" error check_sequence_size would raise.
+                    // Extra items: consume generically so the final count triggers
+                    // the same "has more than N items" error as check_sequence_size.
                     items.push(parse_any(py, parser, ctx)?);
                 }
                 if !parser.next_array_item()? {
@@ -2077,12 +2002,8 @@ impl Encoder for TupleEncoder {
                 }
             }
         }
-        // Length can only be known once the closing bracket is seen, so a
-        // type error on one of the first `encoders.len()` items surfaces
-        // before a would-be length error here (unlike the dict path, which
-        // checks length against the raw input up front). The list built from
-        // already-converted items is used for the length-error message
-        // (dict path shows the raw input instead).
+        // Length is only known at the closing bracket, so an item type error
+        // surfaces before a length error (dict path checks length up front).
         let list = PyList::new(py, items)?;
         let seq = list.cast::<PySequence>().map_err(PyErr::from)?;
         check_sequence_size(seq, list.len(), self.encoders.len(), Some(instance_path))?;
@@ -2134,12 +2055,9 @@ impl Encoder for UnionEncoder {
         Err(invalid_type_err(&self.repr, value, instance_path))
     }
 
-    // dump_format probes each member's *validating* dump_format into a throwaway
-    // writer of the same format; the first that succeeds is spliced into the real
-    // writer as one complete value. The bridge default is unusable here: it goes
-    // through self.dump, whose member loop calls each scalar encoder's dump, and
-    // those do NOT type-validate (they clone the value), so `int | Entity` would
-    // "succeed" on the int member and then fail in write_any.
+    // Probe each member's *validating* dump_format; the first that succeeds is
+    // kept. The bridge default is unusable: self.dump's scalar members don't
+    // type-validate (they clone), so `int | Entity` would wrongly take int.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -2147,9 +2065,8 @@ impl Encoder for UnionEncoder {
         ctx: &Context,
     ) -> SerdeResult<()> {
         for encoder in &self.encoders {
-            // Write the member straight into the real writer. A member that fails
-            // mid-write only dirties the buffer past the checkpoint, which the
-            // rollback discards before the next member is tried.
+            // Write into the real writer; a failed member only dirties past the
+            // checkpoint, which the rollback discards before the next attempt.
             let cp = writer.checkpoint();
             match encoder.dump_format(value, writer, ctx) {
                 Ok(()) => return Ok(()),
@@ -2170,9 +2087,8 @@ impl Encoder for UnionEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        // One mechanism for every kind: capture the raw span, try each member on a
-        // fresh sub-parser. A member that partially consumes then fails cannot
-        // corrupt the main cursor (take_raw_value already advanced it past the value).
+        // Capture the raw span, try each member on a fresh sub-parser: a partial
+        // consume can't corrupt the main cursor (take_raw_value already advanced it).
         let span = parser.take_raw_value()?;
         for encoder in &self.encoders {
             let mut sub = parser.sub_parser(span);
@@ -2191,9 +2107,8 @@ impl Encoder for UnionEncoder {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DiscriminatorKey(String);
 
-// Lets `HashMap<DiscriminatorKey, _>` be probed by a borrowed `&str`, so the
-// streaming load path looks up the parsed tag without allocating a throwaway
-// key. Hash/Eq derive from the inner `String`, which are `str`-consistent.
+// Lets `HashMap<DiscriminatorKey, _>` be probed by a borrowed `&str` (no
+// throwaway key alloc). Hash/Eq are `str`-consistent via the inner `String`.
 impl std::borrow::Borrow<str> for DiscriminatorKey {
     fn borrow(&self) -> &str {
         &self.0
@@ -2284,8 +2199,7 @@ impl Encoder for DiscriminatedUnionEncoder {
         }
     }
 
-    // dump_format stays on the bridge default: it materializes via self.dump
-    // (which selects the variant by discriminator) and writes the result.
+    // dump_format stays on the bridge default (self.dump selects the variant).
 
     fn load_format<'py>(
         &self,
@@ -2298,20 +2212,17 @@ impl Encoder for DiscriminatedUnionEncoder {
             return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
         let span = parser.take_raw_value()?;
-        // Scan forward on a throwaway sub-parser to find the discriminator value,
-        // regardless of key order.
+        // Scan a throwaway sub-parser for the discriminator, regardless of key order.
         let mut tag: Option<String> = None;
         {
             let mut scan = parser.sub_parser(span);
-            // Compare each key as a borrowed &str — no per-key String alloc. `k`'s
-            // borrow ends at the comparison (NLL), before the next `&mut scan` call,
-            // so enter_map/next_key need no `to_owned`.
+            // Compare each key as a borrowed &str (no per-key String alloc); the
+            // borrow ends at the comparison (NLL), before the next `&mut scan`.
             let mut key = scan.enter_map()?;
             while let Some(k) = key {
                 if k == self.load_discriminator_rs {
                     if scan.peek()? == Kind::Str {
-                        // `to_owned` required: the tag outlives this scan sub-parser
-                        // (used below to select the variant encoder).
+                        // `to_owned`: the tag outlives this scan sub-parser.
                         tag = Some(scan.take_str_known()?.to_owned());
                     }
                     break;
@@ -2321,14 +2232,12 @@ impl Encoder for DiscriminatedUnionEncoder {
             }
         }
         let Some(tag) = tag else {
-            // Missing/non-string discriminator: re-run the object path for the exact
-            // error (missing_required_property, or the non-string discriminator error).
+            // Missing/non-string discriminator: re-run the object path for the exact error.
             let mut sub = parser.sub_parser(span);
             let value = parse_any(py, &mut sub, ctx)?;
             return self.load(&value, instance_path, ctx);
         };
-        // Select the encoder by tag; unknown tag -> same Schema error (message and
-        // instance_path) as the object path.
+        // Select by tag; unknown tag -> same Schema error as the object path.
         match self.encoders.get(tag.as_str()) {
             Some(encoder) => {
                 let mut sub = parser.sub_parser(span);
@@ -2534,15 +2443,10 @@ impl Encoder for DateEncoder {
     }
 }
 
-/// Placeholder for a recursive encoder.
-///
-/// During `get_encoder` we eagerly build encoders for nested types; when a
-/// type references itself we hand out a `LazyEncoder` and back-fill the inner
-/// `Arc<dyn Encoder>` after the surrounding encoder is built. Dump/load is a
-/// single dynamic dispatch through the trait object, no per-variant match.
-/// `OnceLock` makes the back-fill thread-safe under free-threaded Python:
-/// the inner slot is written exactly once during `Serializer::new` and read
-/// concurrently from any number of threads afterwards.
+/// Placeholder for a recursive encoder: for a self-referential type we hand out
+/// a `LazyEncoder` and back-fill the inner `Arc` once the outer encoder is built.
+/// `OnceLock` makes the back-fill thread-safe under free-threaded Python (written
+/// once during `Serializer::new`, read concurrently after).
 #[derive(Debug, Clone)]
 pub struct LazyEncoder {
     pub(crate) inner: Arc<OnceLock<Arc<TEncoder>>>,
@@ -2645,9 +2549,8 @@ impl Encoder for CustomEncoder {
         }
     }
 
-    // With a user callback we must materialize (run the callback via dump/load,
-    // then bridge the plain object); without one, delegate straight to inner's
-    // format methods to keep any direct optimization intact.
+    // With a user callback, materialize (run it, then bridge); without one,
+    // delegate to inner's format methods to keep its direct optimization.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -2672,9 +2575,8 @@ impl Encoder for CustomEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         match self.load {
             Some(_) => {
-                // Inherent bridge: the user's custom `load` callable operates on a
-                // Python object, so the value must be materialized first. This is a
-                // deliberate exception to the native streaming path, not a gap.
+                // The user's `load` callable needs a Python object, so materialize
+                // first — a deliberate exception to the native streaming path.
                 let value = parse_any(py, parser, ctx)?;
                 self.load(&value, instance_path, ctx)
             }

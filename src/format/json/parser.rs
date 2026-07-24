@@ -12,27 +12,19 @@ pub(crate) enum ParsedInt {
     Big(BigInt),
 }
 
-/// Pull-parser over jiter. All jiter (syntax) errors map to DecodeError with
-/// a byte position; schema mismatches are NOT the parser's job — encoders
-/// decide via peek + take_*.
-///
-/// Two families of value readers:
-/// * `*_known` variants assume the caller has just called `peek()` (which eats
-///   leading whitespace, lands the cursor on the value byte, and caches the
-///   jiter `Peek`). They skip jiter's internal re-peek — the fast path used by
-///   every peek-then-take encoder. A `*_known` reader is ONLY valid immediately
-///   after a `peek()`; any cursor-moving call in between makes the cached peek
-///   stale.
-/// * `enter_map` (self-positioning) peeks internally, for the one caller that
-///   reads an object without a preceding `peek()` (discriminated-union scan).
+/// Pull-parser over jiter. Syntax errors map to DecodeError; schema mismatches
+/// are the encoders' job (peek + take_*). `*_known` readers reuse the preceding
+/// `peek()`, so each is valid ONLY immediately after a `peek()` — any
+/// cursor-moving call in between makes the cached peek stale. `enter_map`
+/// self-positions (peeks internally) for the one caller that reads an object
+/// without a preceding `peek()` (discriminated-union scan).
 #[derive(Debug)]
 pub(crate) struct JsonParser<'j> {
     jiter: Jiter<'j>,
     // Backing buffer for `take_raw_value` (union re-parse).
     data: &'j [u8],
-    // Peek cached by the most recent `peek()` — consumed by the `*_known`
-    // readers so they don't re-scan whitespace. Only meaningful right after
-    // a `peek()`; a cursor-moving call leaves it stale.
+    // Peek cached by the most recent `peek()`, consumed by the `*_known`
+    // readers; stale after any cursor-moving call.
     last_peek: Peek,
 }
 
@@ -155,12 +147,10 @@ impl<'j> JsonParser<'j> {
     }
 }
 
-/// Map a jiter syntax error to our `SerdeError`. Takes `JiterError` by value
-/// (a free function, not a `&self` method) so it never re-borrows `self` —
-/// several jiter methods return `&str`/`Option<&str>` tied to `&mut self.jiter`,
-/// and a closure like `|e| self.err(e)` would conflict with that live borrow.
-/// The byte offset comes straight from `JiterError::index`, which jiter
-/// records at the exact point of failure.
+/// Map a jiter syntax error to our `SerdeError`. A free function taking
+/// `JiterError` by value (not a `&self` method) so it never re-borrows `self`:
+/// jiter methods return `&str`/`Option<&str>` tied to `&mut self.jiter`, which a
+/// `|e| self.err(e)` closure's borrow would conflict with.
 #[inline]
 fn err(e: JiterError) -> SerdeError {
     SerdeError::Py(decode_err(&e))

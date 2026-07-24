@@ -7,11 +7,10 @@ use crate::format::{Kind, Parser, Writer};
 use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::{Context, InstancePath};
 
-/// Native schema type-mismatch for the streaming path — no Python materialization.
-/// `raw` is the offending value's raw JSON (caller supplies it, either from
-/// `parser.take_raw_value()` when the value is still unread, or the already-taken
-/// token). Value formatting may differ from the dict-path (raw JSON vs Python repr);
-/// the `expected` clause and instance_path match.
+/// Native schema type-mismatch for the streaming path (no Python materialization).
+/// `raw` is the offending value's raw JSON, supplied by the caller. Formatting may
+/// differ from the dict-path (raw JSON vs Python repr); the `expected` clause and
+/// instance_path match.
 pub(crate) fn wrong_type_err(expected: &str, raw: &str, path: &InstancePath) -> SerdeError {
     SchemaError::new(format!(r#"{raw} is not of type "{expected}""#), path).into()
 }
@@ -21,9 +20,8 @@ pub(crate) fn wrong_enum_err(items: &str, raw: &str, path: &InstancePath) -> Ser
     SchemaError::new(format!("{raw} is not one of {items}"), path).into()
 }
 
-/// Build a type-mismatch error for the value at the cursor: take its raw slice
-/// and render it into `wrong_type_err`. A parser/decode error while taking the
-/// value takes priority (as the bare `take_raw_value()?` did at each call site).
+/// Type-mismatch error for the value at the cursor: take its raw slice and render
+/// it via `wrong_type_err`. A parser/decode error taking the value takes priority.
 #[inline]
 pub(crate) fn wrong_type_at_cursor(
     parser: &mut Parser<'_>,
@@ -82,8 +80,7 @@ pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeRe
 }
 
 /// Stream a Python `float` to the writer, mapping the format's "cannot represent"
-/// signal (JSON: NaN/Infinity) to a `ValidationError`. The caller has already
-/// narrowed `value` to `PyFloat`.
+/// signal (JSON: NaN/Infinity) to a `ValidationError`. Caller has narrowed to `PyFloat`.
 #[inline(always)]
 pub(crate) fn write_py_float(writer: &mut Writer, v: &Bound<'_, PyFloat>) -> SerdeResult<()> {
     writer

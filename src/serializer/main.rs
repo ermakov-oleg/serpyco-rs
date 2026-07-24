@@ -110,12 +110,10 @@ impl Serializer {
                 parser.finish().map_err(SerdeError::into_py_err)?;
                 Ok(value)
             }
-            // On error, skip finish() and return it untouched. A raw Python error
-            // (parser DecodeError, KeyboardInterrupt, ...) is the primary failure;
-            // and a streaming encoder (Array/Tuple/Dict/Entity/TypedDict) can raise
-            // a schema error mid-structure, leaving the cursor mid-document — a
-            // SchemaValidationError is more informative than a spurious
-            // trailing-garbage DecodeError and must not be masked by finish().
+            // On error, skip finish() and return it untouched: a schema error
+            // raised mid-structure leaves the cursor mid-document, and that error
+            // is more informative than the spurious trailing-garbage DecodeError
+            // that finish() would otherwise produce (and must not be masked by it).
             Err(err) => Err(err.into_py_err()),
         }
     }
@@ -526,10 +524,9 @@ fn extract_custom_encoder(
     ))
 }
 
-/// Maps JSON key (`dict_key_rs`) -> field index for non-flatten fields only.
-/// Used by the streaming load path to route keys straight to their encoder;
-/// flatten fields are excluded because the streaming path is skipped entirely
-/// when any field is flattened (see `EntityEncoder`/`TypedDictEncoder`).
+/// Maps JSON key (`dict_key_rs`) -> field index for non-flatten fields only, so
+/// the streaming load path routes keys straight to their encoder. Flatten fields
+/// are excluded: the streaming path is skipped entirely when any field is flattened.
 fn build_format_routing(fields: &[Field]) -> rustc_hash::FxHashMap<String, usize> {
     fields
         .iter()

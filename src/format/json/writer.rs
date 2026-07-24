@@ -8,9 +8,8 @@ pub(crate) struct JsonWriter {
 }
 
 /// A saved writer position for a speculative write that may be rolled back
-/// (union member probing, omit_none null-skip). Captures the output length and
-/// the current container's comma state so `rollback` fully undoes a partial or
-/// unwanted value without a separate probe buffer + splice.
+/// (union member probing, omit_none null-skip). Captures buffer length and the
+/// container's comma state so `rollback` fully undoes it without a probe buffer + splice.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Checkpoint {
     buf_len: usize,
@@ -80,8 +79,7 @@ impl JsonWriter {
     }
 
     /// Undo everything written since `cp`: truncate the buffer and restore the
-    /// container-nesting/comma state (a failed union member may have left open
-    /// containers; an unwanted omit_none value plus its key are dropped).
+    /// container-nesting/comma state (dropping a failed member's or omit_none value's output).
     #[inline(always)]
     pub(crate) fn rollback(&mut self, cp: Checkpoint) {
         self.buf.truncate(cp.buf_len);

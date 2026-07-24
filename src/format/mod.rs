@@ -80,8 +80,7 @@ impl Writer {
     }
 
     /// Whether the value written since `from` encodes null. Lets omit_none decide
-    /// format-agnostically on the value already in the buffer, keeping each
-    /// format's null representation inside its own writer.
+    /// format-agnostically, keeping each format's null representation in its writer.
     #[inline(always)]
     pub(crate) fn tail_is_null(&self, from: usize) -> bool {
         match self {
@@ -177,8 +176,6 @@ impl Writer {
     }
 }
 
-/// Enum dispatch instead of dyn: closed set of formats;
-/// a new format is a new variant plus method implementations.
 #[derive(Debug)]
 pub(crate) enum Parser<'j> {
     Json(JsonParser<'j>),
