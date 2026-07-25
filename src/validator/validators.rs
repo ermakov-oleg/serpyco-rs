@@ -1,5 +1,4 @@
-use crate::python::fmt_py;
-use crate::serde_error::{SchemaError, SerdeError};
+use crate::serde_error::{Expected, Message, SchemaError, SerdeError};
 use crate::validator::InstancePath;
 
 use pyo3::prelude::PyAnyMethods;
@@ -7,6 +6,7 @@ use pyo3::types::{PyList, PySequence, PyString};
 use pyo3::{Bound, PyAny};
 use std::cmp::Ordering;
 use std::fmt::Display;
+use std::sync::Arc;
 
 pub fn check_lower_bound<T>(
     val: T,
@@ -214,13 +214,18 @@ where
     .into()
 }
 
+// The message is deferred (see `Message`): a union probes members by calling
+// them and discarding `Schema` errors, so most of these are never rendered.
 pub fn invalid_type_err(
-    type_: &str,
+    type_: impl Into<Expected>,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> SerdeError {
-    SchemaError::new(
-        format!(r#"{} is not of type "{}""#, fmt_py(value), type_),
+    SchemaError::deferred(
+        Message::NotOfType {
+            value: value.clone().unbind(),
+            expected: type_.into(),
+        },
         instance_path,
     )
     .into()
@@ -234,9 +239,12 @@ macro_rules! invalid_type {
     };
 }
 
-pub fn invalid_type_dump_err(type_: &str, value: &Bound<'_, PyAny>) -> SerdeError {
-    SchemaError::new(
-        format!(r#""{value}" is not of type "{type_}""#),
+pub fn invalid_type_dump_err(type_: impl Into<Expected>, value: &Bound<'_, PyAny>) -> SerdeError {
+    SchemaError::deferred(
+        Message::NotOfTypeDump {
+            value: value.clone().unbind(),
+            expected: type_.into(),
+        },
         &InstancePath::new(),
     )
     .into()
@@ -251,12 +259,15 @@ macro_rules! invalid_type_dump {
 }
 
 pub fn invalid_enum_item_err(
-    items: &str,
+    items: &Arc<str>,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> SerdeError {
-    SchemaError::new(
-        format!(r#"{} is not one of {}"#, fmt_py(value), items),
+    SchemaError::deferred(
+        Message::NotOneOf {
+            value: value.clone().unbind(),
+            items: Arc::clone(items),
+        },
         instance_path,
     )
     .into()

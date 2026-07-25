@@ -296,7 +296,7 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(LiteralEncoder {
-                enum_items: type_info.items_repr.clone(),
+                enum_items: type_info.items_repr.as_str().into(),
                 load_map: type_info.load_map.clone_ref(py),
                 dump_map: type_info.dump_map.clone_ref(py),
             }),
@@ -382,7 +382,7 @@ pub fn get_encoder(
 
             let encoder = UnionEncoder {
                 encoders,
-                repr: type_info.repr.clone(),
+                repr: type_info.repr.as_str().into(),
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -465,7 +465,7 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(EnumEncoder {
-                enum_items: type_info.items_repr.clone(),
+                enum_items: type_info.items_repr.as_str().into(),
                 load_map: type_info.load_map.clone_ref(py),
                 dump_map: type_info.dump_map.clone(),
             }),

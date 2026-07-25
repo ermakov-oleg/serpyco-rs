@@ -1320,8 +1320,8 @@ impl Encoder for EntityEncoder {
                 // Missing attr means `value` isn't this entity's shape: surface a
                 // Schema mismatch (not AttributeError) so an untagged union skips on.
                 Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                    let name = self.cls.bind(value.py()).name()?;
-                    return Err(invalid_type_dump_err(&name.to_string(), value));
+                    // `cls.__name__` is read only if this error is rendered.
+                    return Err(invalid_type_dump_err(self.cls.clone_ref(value.py()), value));
                 }
                 Err(e) => return Err(e.into()),
             };
@@ -1434,8 +1434,8 @@ impl StreamingObject for EntityEncoder {
         match value.getattr(&field.name) {
             Ok(v) => Ok(Some(v)),
             Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                let name = self.cls.bind(value.py()).name()?;
-                Err(invalid_type_dump_err(&name.to_string(), value))
+                // `cls.__name__` is read only if this error is rendered.
+                Err(invalid_type_dump_err(self.cls.clone_ref(value.py()), value))
             }
             Err(e) => Err(e.into()),
         }
@@ -1704,7 +1704,7 @@ impl Encoder for UUIDEncoder {
 
 #[derive(Debug, Clone)]
 pub struct EnumEncoder {
-    pub(crate) enum_items: String,
+    pub(crate) enum_items: Arc<str>,
     pub(crate) load_map: Py<PyDict>,
     pub(crate) dump_map: IntMap<usize, Py<PyAny>>,
 }
@@ -1772,7 +1772,7 @@ impl Encoder for EnumEncoder {
 
 #[derive(Debug, Clone)]
 pub struct LiteralEncoder {
-    pub(crate) enum_items: String,
+    pub(crate) enum_items: Arc<str>,
     pub(crate) load_map: Py<PyDict>,
     pub(crate) dump_map: Py<PyDict>,
 }
@@ -2024,7 +2024,7 @@ impl Encoder for TupleEncoder {
 #[derive(Debug, Clone)]
 pub struct UnionEncoder {
     pub(crate) encoders: Vec<Box<TEncoder>>,
-    pub(crate) repr: String,
+    pub(crate) repr: Arc<str>,
 }
 
 impl Encoder for UnionEncoder {
@@ -2037,7 +2037,7 @@ impl Encoder for UnionEncoder {
                 Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }
-        Err(invalid_type_dump_err(&self.repr, value))
+        Err(invalid_type_dump_err(Arc::clone(&self.repr), value))
     }
 
     #[inline]
@@ -2054,7 +2054,11 @@ impl Encoder for UnionEncoder {
                 Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }
-        Err(invalid_type_err(&self.repr, value, instance_path))
+        Err(invalid_type_err(
+            Arc::clone(&self.repr),
+            value,
+            instance_path,
+        ))
     }
 
     // Probe each member's *validating* dump_format; the first that succeeds is
@@ -2079,7 +2083,7 @@ impl Encoder for UnionEncoder {
                 Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }
-        Err(invalid_type_dump_err(&self.repr, value))
+        Err(invalid_type_dump_err(Arc::clone(&self.repr), value))
     }
 
     fn load_format<'py>(
