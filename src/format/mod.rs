@@ -188,10 +188,11 @@ impl Writer {
     }
 
     /// Call before EACH array element (JSON: commas).
+    /// Call after each array element and after each map value.
     #[inline]
-    pub(crate) fn array_item(&mut self) {
+    pub(crate) fn item_end(&mut self) {
         match self {
-            Writer::Json(w) => w.array_item(),
+            Writer::Json(w) => w.item_end(),
         }
     }
 

@@ -674,6 +674,8 @@ fn dump_field_unless_null(
     encoder.dump_format(value, writer, ctx)?;
     if writer.tail_is_null(value_start) {
         writer.rollback(cp);
+    } else {
+        writer.item_end();
     }
     Ok(())
 }
@@ -824,11 +826,14 @@ impl Encoder for DictionaryEncoder {
                     self.value_encoder.dump_format(&v, writer, ctx)?;
                     if writer.tail_is_null(value_start) {
                         writer.rollback(cp);
+                    } else {
+                        writer.item_end();
                     }
                 } else {
                     let key = self.key_encoder.dump(&k, ctx)?;
                     write_map_key(&key, writer)?;
                     self.value_encoder.dump_format(&v, writer, ctx)?;
+                    writer.item_end();
                 }
             }
             writer.end_map();
@@ -956,9 +961,9 @@ impl Encoder for ArrayEncoder {
         if let Ok(list) = value.cast::<PyList>() {
             writer.begin_array();
             for index in 0..list.len() {
-                writer.array_item();
                 let item = py_list_get_item(list, index)?;
                 self.encoder.dump_format(&item, writer, ctx)?;
+                writer.item_end();
             }
             writer.end_array();
             Ok(())
@@ -1196,6 +1201,7 @@ fn dump_object_streaming<S: StreamingObject>(
         } else {
             writer.map_key_encoded(&field.dump_key);
             field.encoder.dump_format(&field_val, writer, ctx)?;
+            writer.item_end();
         }
     }
     writer.end_map();
@@ -1965,9 +1971,9 @@ impl Encoder for TupleEncoder {
             check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
             writer.begin_array();
             for index in 0..seq_len {
-                writer.array_item();
                 let item = seq.get_item(index)?;
                 self.encoders[index].dump_format(&item, writer, ctx)?;
+                writer.item_end();
             }
             writer.end_array();
             Ok(())

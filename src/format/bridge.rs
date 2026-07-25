@@ -176,8 +176,8 @@ pub(crate) fn write_any(
     if let Ok(list) = value.cast::<PyList>() {
         writer.begin_array();
         for item in list.iter() {
-            writer.array_item();
             write_any(&item, writer, ctx)?;
+            writer.item_end();
         }
         writer.end_array();
         return Ok(());
@@ -185,8 +185,8 @@ pub(crate) fn write_any(
     if let Ok(tup) = value.cast::<PyTuple>() {
         writer.begin_array();
         for item in tup.iter() {
-            writer.array_item();
             write_any(&item, writer, ctx)?;
+            writer.item_end();
         }
         writer.end_array();
         return Ok(());
@@ -199,6 +199,7 @@ pub(crate) fn write_any(
                 Err(_) => writer.map_key(k.str()?.to_str()?),
             }
             write_any(&v, writer, ctx)?;
+            writer.item_end();
         }
         writer.end_map();
         return Ok(());

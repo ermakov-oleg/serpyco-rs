@@ -1,20 +1,24 @@
-/// Streaming JSON writer: writes into Vec<u8> and manages commas itself.
-/// Call contract: map_key before each map value, array_item before each array element.
+/// Streaming JSON writer over a `Vec<u8>`.
+///
+/// Separators are trailing: every element is followed by `item_end`, and the
+/// container's closer drops the one comma left over. That keeps the per-element
+/// path branch-free (an unconditional push) and needs no open-container stack —
+/// the alternative, deciding "is this the first element?" per item, costs a
+/// branch and a stack slot on the hottest path in the writer.
+///
+/// Call contract: `map_key`/`map_key_encoded` before each map value, then
+/// `item_end` after each map value and after each array element.
 #[derive(Debug)]
 pub(crate) struct JsonWriter {
     buf: Vec<u8>,
-    /// true = the current container already has an element (comma needed).
-    has_item: Vec<bool>,
 }
 
 /// A saved writer position for a speculative write that may be rolled back
-/// (union member probing, omit_none null-skip). Captures buffer length and the
-/// container's comma state so `rollback` fully undoes it without a probe buffer + splice.
+/// (union member probing, omit_none null-skip). The buffer length alone captures
+/// the whole writer state, so rollback is a truncate.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Checkpoint {
     buf_len: usize,
-    has_item_len: usize,
-    top_had_item: bool,
 }
 
 /// Length below which the inline scan beats the SIMD escape call (one AVX2 block).
@@ -41,7 +45,6 @@ impl JsonWriter {
     pub(crate) fn with_capacity(capacity: usize) -> Self {
         JsonWriter {
             buf: Vec::with_capacity(capacity),
-            has_item: Vec::with_capacity(8),
         }
     }
 
@@ -50,14 +53,22 @@ impl JsonWriter {
         &self.buf
     }
 
+    /// Terminate the element just written. The closer strips the trailing comma,
+    /// so this stays an unconditional push.
     #[inline]
-    fn comma(&mut self) {
-        if let Some(last) = self.has_item.last_mut() {
-            if *last {
-                self.buf.push(b',');
-            }
-            *last = true;
+    pub(crate) fn item_end(&mut self) {
+        self.buf.push(b',');
+    }
+
+    /// Close a container: drop the comma left by the last element, if any.
+    /// Only this writer's own separator can be the final byte — a nested value
+    /// always ends in `"`, a digit, `e`, `l` (null/true), `}` or `]`.
+    #[inline]
+    fn close(&mut self, terminator: u8) {
+        if self.buf.last() == Some(&b',') {
+            self.buf.pop();
         }
+        self.buf.push(terminator);
     }
 
     #[inline]
@@ -93,20 +104,14 @@ impl JsonWriter {
     pub(crate) fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
             buf_len: self.buf.len(),
-            has_item_len: self.has_item.len(),
-            top_had_item: self.has_item.last().copied().unwrap_or(false),
         }
     }
 
-    /// Undo everything written since `cp`: truncate the buffer and restore the
-    /// container-nesting/comma state (dropping a failed member's or omit_none value's output).
+    /// Undo everything written since `cp` (a failed union member, an omit_none
+    /// value that turned out null).
     #[inline(always)]
     pub(crate) fn rollback(&mut self, cp: Checkpoint) {
         self.buf.truncate(cp.buf_len);
-        self.has_item.truncate(cp.has_item_len);
-        if let Some(top) = self.has_item.last_mut() {
-            *top = cp.top_had_item;
-        }
     }
 
     /// Whether the value written since `from` is exactly the JSON null literal.
@@ -128,8 +133,10 @@ impl JsonWriter {
 
     #[inline]
     pub(crate) fn write_str(&mut self, v: &str) {
-        self.buf.push(b'"');
         let bytes = v.as_bytes();
+        // One growth check for the whole string instead of one per push/extend.
+        self.buf.reserve(bytes.len() + 2);
+        self.buf.push(b'"');
         // Real payloads are dominated by short, escape-free strings (ids, enum
         // members, names). `escape_bytes` is a `#[target_feature(avx2)]` call on
         // x86_64, so it can never inline into this function and pays call + vector
@@ -148,12 +155,10 @@ impl JsonWriter {
     #[inline]
     pub(crate) fn begin_map(&mut self) {
         self.buf.push(b'{');
-        self.has_item.push(false);
     }
 
     #[inline]
     pub(crate) fn map_key(&mut self, key: &str) {
-        self.comma();
         self.write_str(key);
         self.buf.push(b':');
     }
@@ -162,30 +167,21 @@ impl JsonWriter {
     /// the `:` included) — the escape pass is skipped entirely.
     #[inline]
     pub(crate) fn map_key_encoded(&mut self, encoded: &[u8]) {
-        self.comma();
         self.buf.extend_from_slice(encoded);
     }
 
     #[inline]
     pub(crate) fn end_map(&mut self) {
-        self.has_item.pop();
-        self.buf.push(b'}');
+        self.close(b'}');
     }
 
     #[inline]
     pub(crate) fn begin_array(&mut self) {
         self.buf.push(b'[');
-        self.has_item.push(false);
-    }
-
-    #[inline]
-    pub(crate) fn array_item(&mut self) {
-        self.comma();
     }
 
     #[inline]
     pub(crate) fn end_array(&mut self) {
-        self.has_item.pop();
-        self.buf.push(b']');
+        self.close(b']');
     }
 }
