@@ -21,13 +21,93 @@ pub(crate) struct Checkpoint {
     buf_len: usize,
 }
 
-/// Length below which the inline scan beats the SIMD escape call (one AVX2 block).
-const SHORT_STR: usize = 32;
-
 /// The exact set JSON requires escaping: `"`, `\` and control chars.
 #[inline(always)]
 fn needs_escape(b: u8) -> bool {
     b < 0x20 || b == b'"' || b == b'\\'
+}
+
+const LANE: u64 = 0x0101_0101_0101_0101;
+const HIGH: u64 = 0x8080_8080_8080_8080;
+
+/// Per-byte SWAR predicate: high bit set in every lane holding a byte that needs
+/// escaping. Bytes >= 0x80 (UTF-8 continuations) never match — `!word` clears
+/// their lane — so multi-byte sequences pass through untouched.
+///
+/// SWAR rather than a SIMD crate on purpose: the vector escape ships as a
+/// `#[target_feature(avx2)]` function, which cannot be inlined into a caller
+/// without that feature, so on x86_64 every string paid a call whose own
+/// intrinsics stayed un-inlined too. This compiles to plain 64-bit ALU ops that
+/// inline everywhere.
+#[inline(always)]
+fn escape_lanes(word: u64) -> u64 {
+    let below_0x20 = word.wrapping_sub(0x20 * LANE) & !word;
+    let quote = word ^ (0x22 * LANE);
+    let quote = quote.wrapping_sub(LANE) & !quote;
+    let backslash = word ^ (0x5C * LANE);
+    let backslash = backslash.wrapping_sub(LANE) & !backslash;
+    (below_0x20 | quote | backslash) & HIGH
+}
+
+/// Write one byte in its JSON-escaped form. Matches `json.dumps`/serde_json:
+/// short forms for `\b\t\n\f\r`, lowercase `\u00XX` for the other controls.
+#[cold]
+#[inline(never)]
+fn write_escaped_byte(buf: &mut Vec<u8>, b: u8) {
+    match b {
+        b'"' => buf.extend_from_slice(br#"\""#),
+        b'\\' => buf.extend_from_slice(br"\\"),
+        0x08 => buf.extend_from_slice(br"\b"),
+        0x09 => buf.extend_from_slice(br"\t"),
+        0x0A => buf.extend_from_slice(br"\n"),
+        0x0C => buf.extend_from_slice(br"\f"),
+        0x0D => buf.extend_from_slice(br"\r"),
+        _ => {
+            const HEX: &[u8; 16] = b"0123456789abcdef";
+            buf.extend_from_slice(&[
+                b'\\',
+                b'u',
+                b'0',
+                b'0',
+                HEX[(b >> 4) as usize],
+                HEX[(b & 0x0F) as usize],
+            ]);
+        }
+    }
+}
+
+/// Append `s` JSON-escaped (without the surrounding quotes), copying clean runs
+/// in bulk and escaping byte by byte only where needed.
+fn escape_into(buf: &mut Vec<u8>, s: &str) {
+    let bytes = s.as_bytes();
+    let mut clean_from = 0;
+    let mut i = 0;
+
+    while i + 8 <= bytes.len() {
+        let word = u64::from_le_bytes(bytes[i..i + 8].try_into().expect("8-byte chunk"));
+        let lanes = escape_lanes(word);
+        if lanes == 0 {
+            i += 8;
+            continue;
+        }
+        // Lowest set lane = first byte in this word that needs escaping.
+        let at = i + (lanes.trailing_zeros() / 8) as usize;
+        buf.extend_from_slice(&bytes[clean_from..at]);
+        write_escaped_byte(buf, bytes[at]);
+        i = at + 1;
+        clean_from = i;
+    }
+
+    while i < bytes.len() {
+        let b = bytes[i];
+        if needs_escape(b) {
+            buf.extend_from_slice(&bytes[clean_from..i]);
+            write_escaped_byte(buf, b);
+            clean_from = i + 1;
+        }
+        i += 1;
+    }
+    buf.extend_from_slice(&bytes[clean_from..]);
 }
 
 /// Render `"key":` once for a map key fixed at encoder-construction time.
@@ -36,7 +116,7 @@ fn needs_escape(b: u8) -> bool {
 pub(crate) fn encode_map_key(key: &str) -> Box<[u8]> {
     let mut buf = Vec::with_capacity(key.len() + 3);
     buf.push(b'"');
-    v_jsonescape::escape_bytes(key, &mut buf);
+    escape_into(&mut buf, key);
     buf.extend_from_slice(b"\":");
     buf.into_boxed_slice()
 }
@@ -133,22 +213,10 @@ impl JsonWriter {
 
     #[inline]
     pub(crate) fn write_str(&mut self, v: &str) {
-        let bytes = v.as_bytes();
         // One growth check for the whole string instead of one per push/extend.
-        self.buf.reserve(bytes.len() + 2);
+        self.buf.reserve(v.len() + 2);
         self.buf.push(b'"');
-        // Real payloads are dominated by short, escape-free strings (ids, enum
-        // members, names). `escape_bytes` is a `#[target_feature(avx2)]` call on
-        // x86_64, so it can never inline into this function and pays call + vector
-        // setup per string; this scan compiles to inlined baseline SIMD and copies
-        // verbatim. Longer strings amortize the call, so they go to the SIMD path.
-        if bytes.len() <= SHORT_STR && !bytes.iter().any(|&b| needs_escape(b)) {
-            self.buf.extend_from_slice(bytes);
-        } else {
-            // Escapes exactly ", \, and control chars (<0x20) — byte-identical to
-            // json.dumps/serde_json (no `/` or U+2028/2029 escaping).
-            v_jsonescape::escape_bytes(v, &mut self.buf);
-        }
+        escape_into(&mut self.buf, v);
         self.buf.push(b'"');
     }
 
