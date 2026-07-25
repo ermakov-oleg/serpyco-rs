@@ -1098,3 +1098,28 @@ def test_union_kind_narrowing_keeps_optional_and_nested_members():
     assert s.load(b'null') is None
     assert s.load(b'{"foo": 1}') == P(foo=1)
     assert s.load(b'"s"') == 's'
+
+
+def test_entity_load_key_order_independent():
+    # The streaming load path guesses that keys arrive in schema order; a shuffled,
+    # duplicated or unknown-key-interleaved document must load identically.
+    @dataclass
+    class M:
+        a: int
+        b: str
+        c: bool
+        d: Optional[int] = None
+
+    s = Serializer(M, codec=JSON)
+    sd = Serializer(M)
+    for raw in (
+        b'{"a": 1, "b": "x", "c": true, "d": 2}',  # schema order
+        b'{"d": 2, "c": true, "b": "x", "a": 1}',  # reversed
+        b'{"b": "x", "a": 1, "d": 2, "c": true}',  # shuffled
+        b'{"a": 1, "zzz": [1, {"k": 2}], "b": "x", "c": true, "d": 2}',  # unknown key between
+        b'{"a": 9, "b": "x", "c": true, "a": 1, "d": 2}',  # duplicate key: last wins
+    ):
+        assert s.load(raw) == sd.load(json.loads(raw)) == M(a=1, b='x', c=True, d=2)
+
+    # missing trailing field falls back to its default
+    assert s.load(b'{"a": 1, "b": "x", "c": false}') == M(a=1, b='x', c=False, d=None)

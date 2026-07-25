@@ -1038,6 +1038,9 @@ impl Encoder for ArrayEncoder {
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
+            // Non-empty array: one allocation instead of the 1->2->4->8 regrowth
+            // ladder. Empty arrays never reach here and stay allocation-free.
+            items.reserve(8);
             loop {
                 // Length is only known at the closing bracket, so an element-type
                 // error surfaces before a length error (dict path checks length up front).
@@ -1082,13 +1085,30 @@ enum Route {
 }
 
 /// Resolve a borrowed key to a `Route` (no allocation).
+///
+/// `expect` is the field that follows the one just filled. Documents overwhelmingly
+/// list keys in schema order (they were produced from the same schema), so this
+/// turns the common case into one string compare instead of a hash lookup; a miss
+/// just falls through to the map.
 #[inline]
-fn resolve_route(routing: &FxHashMap<String, usize>, key: Option<&str>) -> Route {
+fn resolve_route(
+    fields: &[Field],
+    routing: &FxHashMap<String, usize>,
+    key: Option<&str>,
+    expect: usize,
+) -> Route {
     match key {
-        Some(k) => match routing.get(k) {
-            Some(&idx) => Route::Field(idx),
-            None => Route::Skip,
-        },
+        Some(k) => {
+            if let Some(field) = fields.get(expect) {
+                if field.dict_key_rs == k {
+                    return Route::Field(expect);
+                }
+            }
+            match routing.get(k) {
+                Some(&idx) => Route::Field(idx),
+                None => Route::Skip,
+            }
+        }
         None => Route::End,
     }
 }
@@ -1208,7 +1228,13 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
             enc.set(&target, field, val)?;
         }
     } else {
-        let mut route = resolve_route(enc.format_routing(), parser.enter_map_known()?);
+        let mut expect = 0;
+        let mut route = resolve_route(
+            fields,
+            enc.format_routing(),
+            parser.enter_map_known()?,
+            expect,
+        );
         loop {
             match route {
                 Route::End => break,
@@ -1218,10 +1244,11 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
                     let val = field.encoder.load_format(py, parser, &field_path, ctx)?;
                     enc.set(&target, field, val)?;
                     seen.mark(idx);
+                    expect = idx + 1;
                 }
                 Route::Skip => parser.skip_value()?,
             }
-            route = resolve_route(enc.format_routing(), parser.next_key()?);
+            route = resolve_route(fields, enc.format_routing(), parser.next_key()?, expect);
         }
         for (idx, field) in fields.iter().enumerate() {
             if !seen.contains(idx) {
@@ -2081,7 +2108,8 @@ impl Encoder for TupleEncoder {
         if parser.peek()? != Kind::Array {
             return Err(wrong_type_at_cursor(parser, "sequence", instance_path));
         }
-        let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
+        // The schema fixes the arity, so size the buffer exactly once.
+        let mut items: Vec<Bound<'py, PyAny>> = Vec::with_capacity(self.encoders.len());
         if parser.enter_array_known()? {
             loop {
                 let idx = items.len();
