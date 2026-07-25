@@ -23,7 +23,7 @@ use crate::format::bridge::{
     wrong_enum_at_cursor, wrong_type_at_cursor, wrong_type_err,
 };
 use crate::format::json::parser::ParsedInt;
-use crate::format::{Kind, Parser, Writer};
+use crate::format::{EncodedKey, Kind, Parser, Writer};
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_tuple, dump_date,
     dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
@@ -663,13 +663,13 @@ fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()>
 #[inline(always)]
 fn dump_field_unless_null(
     writer: &mut Writer,
-    key: &str,
+    key: &EncodedKey,
     encoder: &TEncoder,
     value: &Bound<'_, PyAny>,
     ctx: &Context,
 ) -> SerdeResult<()> {
     let cp = writer.checkpoint();
-    writer.map_key(key);
+    writer.map_key_encoded(key);
     let value_start = writer.position();
     encoder.dump_format(value, writer, ctx)?;
     if writer.tail_is_null(value_start) {
@@ -1192,9 +1192,9 @@ fn dump_object_streaming<S: StreamingObject>(
         // Mirror the dict-path write condition: only optional fields under
         // omit_none need the dumped value first.
         if !field.required && enc.omit_none() {
-            dump_field_unless_null(writer, &field.dict_key_rs, &*field.encoder, &field_val, ctx)?;
+            dump_field_unless_null(writer, &field.dump_key, &*field.encoder, &field_val, ctx)?;
         } else {
-            writer.map_key(&field.dict_key_rs);
+            writer.map_key_encoded(&field.dump_key);
             field.encoder.dump_format(&field_val, writer, ctx)?;
         }
     }
@@ -1241,6 +1241,8 @@ pub struct Field {
     pub(crate) name: Py<PyString>,
     pub(crate) dict_key: Py<PyString>,
     pub(crate) dict_key_rs: String,
+    /// `dict_key_rs` pre-rendered for the streaming dump path (escaped once).
+    pub(crate) dump_key: EncodedKey,
     pub(crate) encoder: Box<TEncoder>,
     pub(crate) required: bool,
     pub(crate) default: Option<Py<PyAny>>,

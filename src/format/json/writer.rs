@@ -17,6 +17,17 @@ pub(crate) struct Checkpoint {
     top_had_item: bool,
 }
 
+/// Render `"key":` once for a map key fixed at encoder-construction time.
+/// Escaping still runs here — a JSON key can come from an `Alias`, not just a
+/// Python identifier — but it runs once per encoder instead of once per dump.
+pub(crate) fn encode_map_key(key: &str) -> Box<[u8]> {
+    let mut buf = Vec::with_capacity(key.len() + 3);
+    buf.push(b'"');
+    v_jsonescape::escape_bytes(key, &mut buf);
+    buf.extend_from_slice(b"\":");
+    buf.into_boxed_slice()
+}
+
 impl JsonWriter {
     pub(crate) fn new() -> Self {
         JsonWriter {
@@ -127,6 +138,14 @@ impl JsonWriter {
         self.comma();
         self.write_str(key);
         self.buf.push(b':');
+    }
+
+    /// Append a key already rendered by [`encode_map_key`] (quotes, escaping and
+    /// the `:` included) — the escape pass is skipped entirely.
+    #[inline]
+    pub(crate) fn map_key_encoded(&mut self, encoded: &[u8]) {
+        self.comma();
+        self.buf.extend_from_slice(encoded);
     }
 
     #[inline]

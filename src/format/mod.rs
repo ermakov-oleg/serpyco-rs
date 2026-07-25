@@ -36,6 +36,23 @@ pub(crate) enum Checkpoint {
     Json(JsonCheckpoint),
 }
 
+/// A map key rendered per format once, at encoder-construction time. Entity and
+/// TypedDict keys are fixed by the type, so escaping them on every dump is pure
+/// waste; the hot path copies these bytes verbatim. A new format adds its own
+/// pre-rendered field here.
+#[derive(Debug, Clone)]
+pub(crate) struct EncodedKey {
+    json: Box<[u8]>,
+}
+
+impl EncodedKey {
+    pub(crate) fn new(key: &str) -> Self {
+        EncodedKey {
+            json: json::writer::encode_map_key(key),
+        }
+    }
+}
+
 impl Writer {
     pub(crate) fn new(format: u8) -> Result<Self, PyErr> {
         match format {
@@ -143,6 +160,14 @@ impl Writer {
     pub(crate) fn map_key(&mut self, key: &str) {
         match self {
             Writer::Json(w) => w.map_key(key),
+        }
+    }
+
+    /// Write a key pre-rendered by [`EncodedKey`] — no escaping, one copy.
+    #[inline]
+    pub(crate) fn map_key_encoded(&mut self, key: &EncodedKey) {
+        match self {
+            Writer::Json(w) => w.map_key_encoded(&key.json),
         }
     }
 

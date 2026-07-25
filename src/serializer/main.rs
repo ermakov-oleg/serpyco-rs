@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyByteArray, PyBytes, PyDict, PyList, PyMapping, PyMemoryView, PyString};
 use pyo3::{intern, PyAny, PyResult};
 
-use crate::format::{Parser, Writer};
+use crate::format::{EncodedKey, Parser, Writer};
 use crate::python::{get_object_type, BaseTypeInfo, EntityFieldInfo, Type};
 use crate::serde_error::SerdeError;
 use crate::serializer::encoders::{
@@ -548,10 +548,12 @@ fn iterate_on_fields(
         let dict_key = field.dict_key.cast_bound::<PyString>(py)?;
         let f_type = get_object_type(field.field_type.bind(py))?;
 
+        let dict_key_rs: String = dict_key.to_string_lossy().into();
         let fld = Field {
             name: f_name.clone().unbind(),
             dict_key: dict_key.clone().unbind(),
-            dict_key_rs: dict_key.to_string_lossy().into(),
+            dump_key: EncodedKey::new(&dict_key_rs),
+            dict_key_rs,
             encoder: get_encoder(py, f_type, encoder_state, naive_datetime_to_utc)?,
             required: field.required,
             default: field.default.as_ref().map(|value| value.clone_ref(py)),
