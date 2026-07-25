@@ -57,8 +57,9 @@ bench = [
     "tabulate",
 ]
 pgo = [
-    { include-group = "bench" },
-    "mashumaro",
+    # The PGO profile run includes the codec bytes benchmarks, which import the
+    # comparison libs (orjson/msgspec) at module level.
+    { include-group = "bench-compare" },
 ]
 codspeed = [
     { include-group = "bench-compare" },

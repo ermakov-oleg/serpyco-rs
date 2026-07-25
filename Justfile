@@ -131,9 +131,18 @@ test-rc-leaks target="bench": build (_sync "bench-compare") (_run-test-rc-leaks 
 
 ci-test-rc-leaks target="bench": (_sync-ci "bench-compare") (_install-wheel "wheels") (_run-test-rc-leaks target)
 
-# CI PGO: install PGO-instrumented wheel + bench deps, run targeted benches to gather profile data
+# CI PGO: install PGO-instrumented wheel + bench deps, run targeted benches to gather profile data.
+# The codec (bytes) benches must be here too: code left out of the profile is
+# compiled as cold — measured at -21%..-35% on the codec path when it is missing.
+# Competitor benches are deselected; only serpyco-rs code belongs in the profile.
 ci-pgo-collect wheel_dir="pgo-wheel": (_sync-ci "pgo") (_install-wheel wheel_dir)
-    {{uv}} run --no-sync pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
+    {{uv}} run --no-sync pytest \
+        bench/test_encoders.py bench/test_codec_encoders.py \
+        bench/test_flatten.py bench/test_full.py \
+        bench/compare/test_github_issue.py bench/compare/test_github_issue_bytes.py \
+        bench/compare/test_benchmarks_bytes.py \
+        -k "not mashumaro and not msgspec" \
+        --benchmark-min-time=0.2 --benchmark-max-time=0.4
 
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
 _bench-codespeed-setup: (_sync "codspeed")
