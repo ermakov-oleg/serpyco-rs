@@ -54,9 +54,11 @@ impl EncodedKey {
 }
 
 impl Writer {
-    pub(crate) fn new(format: u8) -> Result<Self, PyErr> {
+    /// `capacity` is a size hint from the previous dump of the same serializer;
+    /// it only affects how often the buffer grows.
+    pub(crate) fn with_capacity(format: u8, capacity: usize) -> Result<Self, PyErr> {
         match format {
-            FORMAT_JSON => Ok(Writer::Json(JsonWriter::new())),
+            FORMAT_JSON => Ok(Writer::Json(JsonWriter::with_capacity(capacity))),
             _ => Err(PyValueError::new_err(format!(
                 "unknown format id: {format}"
             ))),

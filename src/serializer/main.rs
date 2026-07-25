@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use pyo3::buffer::PyBuffer;
@@ -33,7 +34,15 @@ type CustomEncoderFns = (Option<Py<PyAny>>, Option<Py<PyAny>>);
 pub struct Serializer {
     pub(crate) encoder: Box<TEncoder>,
     pub(crate) max_recursion_depth: usize,
+    /// Byte length of the last `dump_bytes` output, used to pre-size the next
+    /// one's buffer: a fixed 1 KiB start re-grows a large payload every call.
+    /// Relaxed — a stale value from a concurrent dump only costs a re-grow.
+    last_dump_len: AtomicUsize,
 }
+
+/// Floor for the dump buffer, and the slack added on top of the size hint so a
+/// payload that grew slightly since the last dump still fits without a re-grow.
+const DUMP_BUF_MIN: usize = 1024;
 
 #[pymethods]
 impl Serializer {
@@ -54,6 +63,7 @@ impl Serializer {
                 naive_datetime_to_utc,
             )?,
             max_recursion_depth,
+            last_dump_len: AtomicUsize::new(0),
         };
         Ok(serializer)
     }
@@ -83,11 +93,14 @@ impl Serializer {
         format: u8,
     ) -> PyResult<Bound<'py, PyBytes>> {
         let ctx = Context::new(false, self.max_recursion_depth);
-        let mut writer = Writer::new(format)?;
+        let hint = self.last_dump_len.load(Ordering::Relaxed);
+        let mut writer = Writer::with_capacity(format, hint.max(DUMP_BUF_MIN) + hint / 8)?;
         self.encoder
             .dump_format(value, &mut writer, &ctx)
             .map_err(SerdeError::into_py_err)?;
-        Ok(PyBytes::new(py, writer.as_bytes()))
+        let out = writer.as_bytes();
+        self.last_dump_len.store(out.len(), Ordering::Relaxed);
+        Ok(PyBytes::new(py, out))
     }
 
     #[inline]

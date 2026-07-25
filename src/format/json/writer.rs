@@ -17,6 +17,15 @@ pub(crate) struct Checkpoint {
     top_had_item: bool,
 }
 
+/// Length below which the inline scan beats the SIMD escape call (one AVX2 block).
+const SHORT_STR: usize = 32;
+
+/// The exact set JSON requires escaping: `"`, `\` and control chars.
+#[inline(always)]
+fn needs_escape(b: u8) -> bool {
+    b < 0x20 || b == b'"' || b == b'\\'
+}
+
 /// Render `"key":` once for a map key fixed at encoder-construction time.
 /// Escaping still runs here — a JSON key can come from an `Alias`, not just a
 /// Python identifier — but it runs once per encoder instead of once per dump.
@@ -29,9 +38,9 @@ pub(crate) fn encode_map_key(key: &str) -> Box<[u8]> {
 }
 
 impl JsonWriter {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
         JsonWriter {
-            buf: Vec::with_capacity(1024),
+            buf: Vec::with_capacity(capacity),
             has_item: Vec::with_capacity(8),
         }
     }
@@ -120,10 +129,19 @@ impl JsonWriter {
     #[inline]
     pub(crate) fn write_str(&mut self, v: &str) {
         self.buf.push(b'"');
-        // SIMD JSON string escaping (AVX2/SSE2 on x86_64, NEON on aarch64; scalar
-        // fallback). Escapes exactly ", \, and control chars (<0x20) — byte-
-        // identical to json.dumps/serde_json (no `/` or U+2028/2029 escaping).
-        v_jsonescape::escape_bytes(v, &mut self.buf);
+        let bytes = v.as_bytes();
+        // Real payloads are dominated by short, escape-free strings (ids, enum
+        // members, names). `escape_bytes` is a `#[target_feature(avx2)]` call on
+        // x86_64, so it can never inline into this function and pays call + vector
+        // setup per string; this scan compiles to inlined baseline SIMD and copies
+        // verbatim. Longer strings amortize the call, so they go to the SIMD path.
+        if bytes.len() <= SHORT_STR && !bytes.iter().any(|&b| needs_escape(b)) {
+            self.buf.extend_from_slice(bytes);
+        } else {
+            // Escapes exactly ", \, and control chars (<0x20) — byte-identical to
+            // json.dumps/serde_json (no `/` or U+2028/2029 escaping).
+            v_jsonescape::escape_bytes(v, &mut self.buf);
+        }
         self.buf.push(b'"');
     }
 
