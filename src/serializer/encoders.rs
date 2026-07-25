@@ -73,6 +73,18 @@ pub(crate) trait Encoder: DynClone + Debug {
         self.load(&value, instance_path, ctx)
     }
 
+    /// Whether `load_format` can accept a value of this kind. Unions use it to
+    /// drop members that cannot match before touching the input, so the common
+    /// case — exactly one member fits the kind — is read straight off the cursor
+    /// instead of being skipped over, captured as a span and re-parsed.
+    ///
+    /// Must stay conservative: returning `false` for a kind the encoder would
+    /// have accepted turns a valid document into an error. The default accepts
+    /// everything, which is always correct (just not faster).
+    fn accepts_kind(&self, _kind: Kind) -> bool {
+        true
+    }
+
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         None
     }
@@ -167,6 +179,11 @@ impl Encoder for NoneEncoder {
         }
         Err(wrong_type_at_cursor(parser, "None", instance_path))
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Null)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +229,12 @@ impl Encoder for NeverEncoder {
             "Never (no value allowed)",
             instance_path,
         ))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        let _ = kind;
+        false
     }
 }
 
@@ -298,6 +321,11 @@ impl Encoder for IntEncoder {
         }
         Err(wrong_type_at_cursor(parser, "integer", instance_path))
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Num)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -378,6 +406,11 @@ impl Encoder for FloatEncoder {
             return Err(invalid_number_err(raw));
         }
         Err(wrong_type_at_cursor(parser, "number", instance_path))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Num)
     }
 }
 
@@ -474,6 +507,11 @@ impl Encoder for DecimalEncoder {
             _ => Err(wrong_type_at_cursor(parser, "decimal", instance_path)),
         }
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Num | Kind::Str)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -542,6 +580,11 @@ impl Encoder for StringEncoder {
         }
         Err(wrong_type_at_cursor(parser, "string", instance_path))
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -601,6 +644,11 @@ impl Encoder for BooleanEncoder {
             return Ok(PyBool::new(py, b).to_owned().into_any());
         }
         Err(wrong_type_at_cursor(parser, "boolean", instance_path))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Bool)
     }
 }
 
@@ -881,6 +929,11 @@ impl Encoder for DictionaryEncoder {
         Ok(result_dict.into_any())
     }
 
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Map)
+    }
+
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
     }
@@ -1004,6 +1057,11 @@ impl Encoder for ArrayEncoder {
             Some(instance_path),
         )?;
         Ok(list.into_any())
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Array)
     }
 
     fn is_sequence(&self) -> bool {
@@ -1376,6 +1434,11 @@ impl Encoder for EntityEncoder {
         load_object_streaming(self, py, parser, instance_path, ctx)
     }
 
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Map)
+    }
+
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
     }
@@ -1560,6 +1623,11 @@ impl Encoder for TypedDictEncoder {
         load_object_streaming(self, py, parser, instance_path, ctx)
     }
 
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Map)
+    }
+
     fn as_container_encoder(&self) -> Option<&dyn ContainerEncoder> {
         Some(self)
     }
@@ -1706,6 +1774,11 @@ impl Encoder for UUIDEncoder {
         }
         Err(wrong_type_at_cursor(parser, "uuid", instance_path))
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1774,6 +1847,11 @@ impl Encoder for EnumEncoder {
             |v, p, c| self.load(v, p, c),
         )
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str | Kind::Num | Kind::Bool)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1840,6 +1918,11 @@ impl Encoder for LiteralEncoder {
             |v, p, c| self.load(v, p, c),
         )
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str | Kind::Num | Kind::Bool)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1900,6 +1983,11 @@ impl Encoder for OptionalEncoder {
         } else {
             self.encoder.load_format(py, parser, instance_path, ctx)
         }
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Null) || self.encoder.accepts_kind(kind)
     }
 
     fn is_sequence(&self) -> bool {
@@ -2022,6 +2110,11 @@ impl Encoder for TupleEncoder {
         Ok(result.into_any())
     }
 
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Array)
+    }
+
     fn is_sequence(&self) -> bool {
         true
     }
@@ -2099,10 +2192,37 @@ impl Encoder for UnionEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
+        // When the value's kind narrows the union to a single member, read it
+        // straight off the cursor: no skip-to-find-the-span pass, no re-parse.
+        // Untagged unions in practice mix distinct JSON kinds (object | string),
+        // so this is the common case.
+        let kind = parser.peek()?;
+        let mut only: Option<&Box<TEncoder>> = None;
+        let mut viable = 0usize;
+        for encoder in &self.encoders {
+            if encoder.accepts_kind(kind) {
+                viable += 1;
+                if viable > 1 {
+                    break;
+                }
+                only = Some(encoder);
+            }
+        }
+        if viable == 1 {
+            let encoder = only.expect("viable == 1");
+            // A Schema error here is the union's own failure: nothing else could
+            // have matched this kind. It surfaces with the member's message and
+            // instance_path, which is strictly more specific than the union's.
+            return encoder.load_format(py, parser, instance_path, ctx);
+        }
+
         // Capture the raw span, try each member on a fresh sub-parser: a partial
         // consume can't corrupt the main cursor (take_raw_value already advanced it).
         let span = parser.take_raw_value()?;
         for encoder in &self.encoders {
+            if !encoder.accepts_kind(kind) {
+                continue;
+            }
             let mut sub = parser.sub_parser(span);
             match encoder.load_format(py, &mut sub, instance_path, ctx) {
                 Ok(v) => return Ok(v),
@@ -2113,6 +2233,11 @@ impl Encoder for UnionEncoder {
         // No member matched: native Schema error, no materialization.
         let raw = String::from_utf8_lossy(span);
         Err(wrong_type_err(&self.repr, &raw, instance_path))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        self.encoders.iter().any(|e| e.accepts_kind(kind))
     }
 }
 
@@ -2265,6 +2390,11 @@ impl Encoder for DiscriminatedUnionEncoder {
             }
         }
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Map)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2326,6 +2456,11 @@ impl Encoder for TimeEncoder {
             return Err(wrong_type_err("time", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "time", instance_path))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str)
     }
 }
 
@@ -2391,6 +2526,11 @@ impl Encoder for DateTimeEncoder {
         }
         Err(wrong_type_at_cursor(parser, "datetime", instance_path))
     }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -2452,6 +2592,11 @@ impl Encoder for DateEncoder {
             return Err(wrong_type_err("date", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "date", instance_path))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Str)
     }
 }
 

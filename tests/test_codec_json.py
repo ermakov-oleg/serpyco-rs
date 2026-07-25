@@ -1043,3 +1043,58 @@ def test_codec_dict_omit_none_validates_key():
     # valid case still omits None values and dumps present ones
     assert s.dump({Color.RED: None}) == b'{}'
     assert json.loads(s.dump({Color.RED: 5})) == {'red': 5}
+
+
+def test_union_kind_narrowing_reads_off_the_cursor():
+    # A union whose members occupy distinct JSON kinds is resolved by the kind
+    # alone: the sole viable member reads straight off the cursor (no skip pass,
+    # no re-parse), and every member still round-trips.
+    @dataclass
+    class P:
+        name: str
+        score: float
+
+    s = Serializer(Union[P, str], codec=JSON)
+    assert s.load(b'{"name": "n", "score": 1.5}') == P(name='n', score=1.5)
+    assert s.load(b'"plain"') == 'plain'
+
+    # Ambiguous kinds (both members accept a number) keep the probing path.
+    si = Serializer(Union[int, float], codec=JSON)
+    assert si.load(b'7') == 7
+    assert si.load(b'1.5') == 1.5
+
+
+def test_union_kind_narrowing_error_is_the_member_error():
+    # With one viable member, its error surfaces as-is: the path points at the
+    # offending field instead of the union root. This is a deliberate divergence
+    # from the dict path, which reports "nothing matched" at the root.
+    @dataclass
+    class P:
+        foo: int
+
+    sc = Serializer(Union[int, P], codec=JSON)
+    with pytest.raises(serpyco_rs.SchemaValidationError) as c:
+        sc.load(b'{"foo": "not-an-int"}')
+    (err,) = c.value.errors
+    assert err.instance_path == 'foo'
+    assert 'is not of type "integer"' in err.message
+
+    # No member accepts the kind -> the union's own error at the root.
+    with pytest.raises(serpyco_rs.SchemaValidationError) as c:
+        sc.load(b'[1]')
+    (err,) = c.value.errors
+    assert err.instance_path == ''
+    assert 'is not of type' in err.message
+
+
+def test_union_kind_narrowing_keeps_optional_and_nested_members():
+    # Optional accepts null on top of whatever it wraps, so `None` stays viable
+    # next to a same-kind member instead of being narrowed away.
+    @dataclass
+    class P:
+        foo: int
+
+    s = Serializer(Union[Optional[P], str], codec=JSON)
+    assert s.load(b'null') is None
+    assert s.load(b'{"foo": 1}') == P(foo=1)
+    assert s.load(b'"s"') == 's'
