@@ -56,10 +56,12 @@ bench = [
     "pytest-benchmark[histogram]",
     "tabulate",
 ]
+# Installed in every build-matrix job (3.10 … 3.14t), so it must stay light:
+# comparison libs like orjson have no wheels for some of those interpreters and
+# would have to build from source. The profile run selects serpyco-rs only.
 pgo = [
-    # The PGO profile run includes the codec bytes benchmarks, which import the
-    # comparison libs (orjson/msgspec) at module level.
-    { include-group = "bench-compare" },
+    { include-group = "bench" },
+    "mashumaro",
 ]
 codspeed = [
     { include-group = "bench-compare" },

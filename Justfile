@@ -140,8 +140,7 @@ ci-pgo-collect wheel_dir="pgo-wheel": (_sync-ci "pgo") (_install-wheel wheel_dir
         bench/test_encoders.py bench/test_codec_encoders.py \
         bench/test_flatten.py bench/test_full.py \
         bench/compare/test_github_issue.py bench/compare/test_github_issue_bytes.py \
-        bench/compare/test_benchmarks_bytes.py \
-        -k "not mashumaro and not msgspec" \
+        -k "not mashumaro and not msgspec and not orjson" \
         --benchmark-min-time=0.2 --benchmark-max-time=0.4
 
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
