@@ -145,13 +145,23 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
     .into()
 }
 
+/// Just the length comparison, no `PySequence` required. Lets a caller that
+/// doesn't have (or doesn't want to allocate) a sequence object yet — e.g.
+/// building a tuple straight from a `Vec` during codec load — cheaply detect
+/// an arity mismatch before paying for anything just to report the same
+/// error `check_sequence_size` would produce.
+#[inline]
+pub fn sequence_size_ordering(seq_len: usize, size: usize) -> Ordering {
+    seq_len.cmp(&size)
+}
+
 pub fn check_sequence_size(
     val: &Bound<'_, PySequence>,
     seq_len: usize,
     size: usize,
     instance_path: Option<&InstancePath>,
 ) -> Result<(), SerdeError> {
-    match seq_len.cmp(&size) {
+    match sequence_size_ordering(seq_len, size) {
         Ordering::Equal => Ok(()),
         Ordering::Less => {
             let path = instance_path.cloned().unwrap_or_else(InstancePath::new);

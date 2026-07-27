@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use rustc_hash::FxHashMap;
 use smallvec::{smallvec, SmallVec};
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Debug;
 use std::sync::{Arc, OnceLock};
@@ -34,7 +35,8 @@ use crate::serde_error::{SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
     invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_dump_err_with_cause,
-    invalid_type_err, missing_required_property, no_encoder_for_discriminator, str_as_bool,
+    invalid_type_err, missing_required_property, no_encoder_for_discriminator,
+    sequence_size_ordering, str_as_bool,
 };
 use crate::validator::{Context, InstancePath};
 
@@ -2140,11 +2142,21 @@ impl Encoder for TupleEncoder {
         }
         // Length is only known at the closing bracket, so an item type error
         // surfaces before a length error (dict path checks length up front).
-        let list = PyList::new(py, items)?;
-        let seq = list.cast::<PySequence>().map_err(PyErr::from)?;
-        check_sequence_size(seq, list.len(), self.encoders.len(), Some(instance_path))?;
-        let result = create_py_tuple(py, list.len())?;
-        for (index, item) in list.iter().enumerate() {
+        if sequence_size_ordering(items.len(), self.encoders.len()) != Ordering::Equal {
+            // Arity mismatch is the cold path: a `PyList` is built only now,
+            // solely so `check_sequence_size` can reuse its existing message
+            // (which embeds the sequence's `str()`) instead of duplicating
+            // that formatting here.
+            let list = PyList::new(py, items)?;
+            let seq = list.cast::<PySequence>().map_err(PyErr::from)?;
+            check_sequence_size(seq, list.len(), self.encoders.len(), Some(instance_path))?;
+            unreachable!("check_sequence_size always errors on a length mismatch");
+        }
+        // Common case: sizes match, so build the tuple directly from the
+        // Vec, moving each already-owned reference straight in — no
+        // intermediate PyList/PySequence allocation.
+        let result = create_py_tuple(py, items.len())?;
+        for (index, item) in items.into_iter().enumerate() {
             py_tuple_set_item(&result, index, item);
         }
         Ok(result.into_any())
