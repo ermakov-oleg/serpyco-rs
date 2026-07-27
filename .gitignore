@@ -81,3 +81,7 @@ docs/_build/
 # CI wheel artifacts (just install-wheel / ci-*)
 wheels/
 pgo-wheel/
+
+# Local scratch / design docs, not part of repo history
+docs/
+perf_targets.py
