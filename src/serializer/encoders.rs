@@ -35,7 +35,7 @@ use crate::serde_error::{SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
     invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_dump_err_with_cause,
-    invalid_type_err, missing_required_property, no_encoder_for_discriminator,
+    invalid_type_err, missing_required_property, no_encoder_for_discriminator, sequence_size_err,
     sequence_size_ordering, str_as_bool,
 };
 use crate::validator::{Context, InstancePath};
@@ -53,8 +53,10 @@ pub(crate) trait Encoder: DynClone + Debug {
 
     /// Streaming serialization to a format. Default goes through the generic
     /// bridge: identical semantics to dump(); direct impls are an optimization,
-    /// kept for encoders with no dedicated per-field streaming path (a pass-through
-    /// or a runtime-chosen redirect).
+    /// kept for encoders with no dedicated per-field streaming path — a
+    /// pass-through, a runtime-chosen redirect, or a type with no wire
+    /// representation at all, where the bridge's own mismatch error is
+    /// already the right one.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -66,8 +68,10 @@ pub(crate) trait Encoder: DynClone + Debug {
     }
 
     /// Streaming deserialization from a format. Default goes through the bridge,
-    /// kept for encoders with no dedicated per-field streaming path (a pass-through
-    /// or a runtime-chosen redirect).
+    /// kept for encoders with no dedicated per-field streaming path — a
+    /// pass-through, a runtime-chosen redirect, or a type with no wire
+    /// representation at all, where the bridge's own mismatch error is
+    /// already the right one.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -841,7 +845,7 @@ pub struct DictionaryEncoder {
     pub(crate) omit_none: bool,
     /// Plain `str` key (no length bounds/custom encoder): the streaming load path
     /// uses the parsed key directly instead of re-validating via `key_encoder`.
-    /// Measured: removing this costs +2.96% Ir loading a 3-key `dict[str, int]` (500k iterations).
+    /// Measured: removing this costs ~3% Ir loading a 3-key `dict[str, int]` (500k iterations); see PR #272.
     pub(crate) key_is_plain_str: bool,
 }
 
@@ -1067,7 +1071,7 @@ impl Encoder for ArrayEncoder {
         if parser.peek()? != Kind::Array {
             return Err(wrong_type_at_cursor(parser, "list", instance_path));
         }
-        // Measured: `PyList::empty` + `append` instead of this Vec is +6.85% Ir on a 1000-element `list[int]` load.
+        // Measured: `PyList::empty` + `append` instead of this Vec costs ~7% Ir on a 1000-element `list[int]` load; see PR #272.
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
             // One allocation instead of the regrowth ladder; empty arrays never
@@ -2161,13 +2165,16 @@ impl Encoder for TupleEncoder {
         // surfaces before a length error (dict path checks length up front).
         if sequence_size_ordering(items.len(), self.encoders.len()) != Ordering::Equal {
             // Arity mismatch is the cold path: a `PyList` is built only now,
-            // solely so `check_sequence_size` can reuse its existing message
-            // (which embeds the sequence's `str()`) instead of duplicating
-            // that formatting here.
+            // solely so the error message can reuse the sequence's `str()`
+            // instead of duplicating that formatting here.
             let list = PyList::new(py, items)?;
             let seq = list.cast::<PySequence>().map_err(PyErr::from)?;
-            check_sequence_size(seq, list.len(), self.encoders.len(), Some(instance_path))?;
-            unreachable!("check_sequence_size always errors on a length mismatch");
+            return Err(sequence_size_err(
+                seq,
+                list.len(),
+                self.encoders.len(),
+                Some(instance_path),
+            ));
         }
         // Common case: sizes match, so build the tuple directly from the
         // Vec, moving each already-owned reference straight in — no

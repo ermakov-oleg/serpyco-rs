@@ -150,7 +150,7 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
 /// building a tuple straight from a `Vec` during codec load — cheaply detect
 /// an arity mismatch before paying for anything just to report the same
 /// error `check_sequence_size` would produce.
-#[inline]
+#[inline(always)]
 pub fn sequence_size_ordering(seq_len: usize, size: usize) -> Ordering {
     seq_len.cmp(&size)
 }
@@ -163,14 +163,28 @@ pub fn check_sequence_size(
 ) -> Result<(), SerdeError> {
     match sequence_size_ordering(seq_len, size) {
         Ordering::Equal => Ok(()),
-        Ordering::Less => {
-            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
-            Err(SchemaError::new(format!(r#"{val} has less than {size} items"#), &path).into())
-        }
-        Ordering::Greater => {
-            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
-            Err(SchemaError::new(format!(r#"{val} has more than {size} items"#), &path).into())
-        }
+        _ => Err(sequence_size_err(val, seq_len, size, instance_path)),
+    }
+}
+
+/// The `Err` half of `check_sequence_size`'s message, factored out for a caller
+/// that already knows (via `sequence_size_ordering`) the sizes differ — e.g.
+/// `TupleEncoder::load_format`'s arity check, which used to reach this only by
+/// calling `check_sequence_size` and then `unreachable!()`-ing on the `Ok` arm
+/// it knew could never happen. Both functions share this one implementation of
+/// the message.
+#[cold]
+pub fn sequence_size_err(
+    val: &Bound<'_, PySequence>,
+    seq_len: usize,
+    size: usize,
+    instance_path: Option<&InstancePath>,
+) -> SerdeError {
+    let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
+    if seq_len < size {
+        SchemaError::new(format!(r#"{val} has less than {size} items"#), &path).into()
+    } else {
+        SchemaError::new(format!(r#"{val} has more than {size} items"#), &path).into()
     }
 }
 
