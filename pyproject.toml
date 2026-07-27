@@ -56,9 +56,8 @@ bench = [
     "pytest-benchmark[histogram]",
     "tabulate",
 ]
-# Installed in every build-matrix job (3.10 … 3.14t), so it must stay light:
-# comparison libs like orjson have no wheels for some of those interpreters and
-# would have to build from source. The profile run selects serpyco-rs only.
+# Installed in every build-matrix job (3.10 … 3.14t), so it must stay light: libs
+# like orjson lack wheels for some of those interpreters and would build from source.
 pgo = [
     { include-group = "bench" },
     "mashumaro",

@@ -59,12 +59,10 @@ def test_concurrent_dump_load_recursive_type() -> None:
 
 
 def test_concurrent_codec_dump_load_recursive_type() -> None:
-    """Hammer a shared codec Serializer (streaming dump_format/load_format).
+    """Hammer a shared codec Serializer from many threads at once.
 
-    Exercises the byte codec path — JSON writer, jiter pull-parser, per-key
-    routing and the recursive ``LazyEncoder`` — from many threads at once. The
-    dict path is covered above; this guards the streaming format methods against
-    shared mutable state under a free-threaded build.
+    The dict path is covered above; this guards the streaming format methods
+    against shared mutable state under a free-threaded build.
     """
     serializer = Serializer(Node, codec=JSON)
     tree = _build_tree(depth=4, fanout=3, counter=[0])

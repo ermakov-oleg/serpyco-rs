@@ -22,24 +22,21 @@ pub(crate) enum Kind {
 
 pub(crate) const FORMAT_JSON: u8 = 0;
 
-/// Enum dispatch instead of dyn: closed set of formats;
-/// a new format is a new variant plus method implementations.
+/// Enum dispatch instead of dyn: the set of formats is closed.
 #[derive(Debug)]
 pub(crate) enum Writer {
     Json(JsonWriter),
 }
 
-/// Opaque saved writer position (per-format), paired with `Writer::checkpoint` /
-/// `Writer::rollback`. A new format adds its own variant.
+/// Opaque saved writer position, paired with `checkpoint` / `rollback`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Checkpoint {
     Json(JsonCheckpoint),
 }
 
-/// A map key rendered per format once, at encoder-construction time. Entity and
-/// TypedDict keys are fixed by the type, so escaping them on every dump is pure
-/// waste; the hot path copies these bytes verbatim. A new format adds its own
-/// pre-rendered field here.
+/// A map key rendered once at encoder-construction time. Entity and TypedDict
+/// keys are fixed by the type, so the hot path copies these bytes verbatim
+/// instead of re-escaping per dump.
 #[derive(Debug, Clone)]
 pub(crate) struct EncodedKey {
     json: Box<[u8]>,
@@ -73,7 +70,7 @@ impl Writer {
     }
 
     /// Snapshot the writer so a speculative value (union member probe, omit_none
-    /// value) can be rolled back in place — no separate probe buffer or splice.
+    /// value) can be rolled back in place.
     #[inline(always)]
     pub(crate) fn checkpoint(&self) -> Checkpoint {
         match self {
@@ -81,8 +78,6 @@ impl Writer {
         }
     }
 
-    /// Undo everything written since `cp` (drop a non-matching union member's
-    /// partial output, or an omitted None value together with its key).
     #[inline(always)]
     pub(crate) fn rollback(&mut self, cp: Checkpoint) {
         match (self, cp) {
@@ -99,7 +94,7 @@ impl Writer {
     }
 
     /// Whether the value written since `from` encodes null. Lets omit_none decide
-    /// format-agnostically, keeping each format's null representation in its writer.
+    /// format-agnostically, each format keeping its own null representation.
     #[inline(always)]
     pub(crate) fn tail_is_null(&self, from: usize) -> bool {
         match self {
@@ -128,7 +123,7 @@ impl Writer {
         }
     }
 
-    /// Integer beyond i64 — decimal string (str(int) on the Python side).
+    /// Integer beyond i64 — decimal string (`str(int)` on the Python side).
     #[inline]
     pub(crate) fn write_big_int(&mut self, v: &str) {
         match self {
@@ -187,7 +182,6 @@ impl Writer {
         }
     }
 
-    /// Call before EACH array element (JSON: commas).
     /// Call after each array element and after each map value.
     #[inline]
     pub(crate) fn item_end(&mut self) {
@@ -204,6 +198,9 @@ impl Writer {
     }
 }
 
+/// Pull-parser over the input. The `*_known` readers consume the `peek()` that
+/// must immediately precede them; any cursor-moving call in between makes that
+/// cached peek stale. `enter_map` peeks internally instead.
 #[derive(Debug)]
 pub(crate) enum Parser<'j> {
     Json(JsonParser<'j>),
@@ -233,7 +230,6 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Take `null`, already positioned by a preceding `peek()`.
     #[inline]
     pub(crate) fn take_null_known(&mut self) -> Result<(), SerdeError> {
         match self {
@@ -241,7 +237,6 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Take a bool, already positioned + peeked by a preceding `peek()`.
     #[inline]
     pub(crate) fn take_bool_known(&mut self) -> Result<bool, SerdeError> {
         match self {
@@ -249,7 +244,6 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Take an integer, already positioned + peeked by a preceding `peek()`.
     #[inline]
     pub(crate) fn take_int_known(&mut self) -> Result<ParsedInt, SerdeError> {
         match self {
@@ -257,7 +251,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Raw text of a number, already positioned + peeked by a preceding `peek()`.
+    /// Raw text of a number (Decimal, manual int-vs-float split).
     #[inline]
     pub(crate) fn take_number_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
@@ -265,7 +259,6 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Take a string, already positioned by a preceding `peek()`.
     #[inline]
     pub(crate) fn take_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
@@ -273,7 +266,6 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Enter an object, already positioned + peeked by a preceding `peek()`.
     /// None — empty object; Some(key) — first key.
     #[inline]
     pub(crate) fn enter_map_known(&mut self) -> Result<Option<&str>, SerdeError> {
@@ -282,7 +274,6 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Enter an array, already positioned + peeked by a preceding `peek()`.
     /// true — has a first element; false — empty array.
     #[inline]
     pub(crate) fn enter_array_known(&mut self) -> Result<bool, SerdeError> {
@@ -291,9 +282,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Enter an object, self-positioning (peeks internally). For a caller that
-    /// reads an object without a preceding `peek()` (discriminated-union scan).
-    /// None — the object is empty; Some(key) — the first key.
+    /// Enter an object without a preceding `peek()` (discriminated-union scan).
     #[inline]
     pub(crate) fn enter_map(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {

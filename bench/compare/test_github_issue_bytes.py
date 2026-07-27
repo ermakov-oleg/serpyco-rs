@@ -1,16 +1,7 @@
 """End-to-end ``bytes -> object -> bytes`` benchmarks on the github-issue payload.
 
-The companion of ``test_github_issue.py`` (the dict-oriented path): these
-benchmarks measure the honest wire scenario -- decode straight from the raw
-``data.json`` bytes and encode straight back to ``bytes`` -- on serpyco-rs's real
-"github issue" model. Four contenders are compared:
-
-* ``serpyco_rs_codec`` -- the codec path (``Serializer(Issue, codec=JSON)``),
-  which encodes/decodes without materializing an intermediate ``dict``.
-* ``serpyco_rs+orjson`` -- the classic path: serpyco-rs to/from a ``dict`` plus
-  ``orjson`` for the JSON bytes layer.
-* ``msgspec`` -- msgspec's native JSON bytes API.
-* ``mashumaro+orjson`` -- mashumaro to/from a ``dict`` plus ``orjson``.
+The companion of ``test_github_issue.py`` (the dict-oriented path): decode straight
+from the raw ``data.json`` bytes and encode straight back. See ``LIBS``.
 """
 
 from pathlib import Path
@@ -38,10 +29,8 @@ def _contender(lib: str) -> dict:
         return {
             'dump': lambda o: orjson.dumps(serpyco_rs.dump(o)),
             'load': lambda b: serpyco_rs.load(orjson.loads(b)),
-            # orjson keeps an internal key cache whose entries shift
-            # sys.gettotalrefcount across a gc.collect(); that is orjson's behavior,
-            # not a leak in this project (the serpyco_rs_codec contender is the one
-            # whose refcounts we actually guard).
+            # orjson's internal key cache shifts sys.gettotalrefcount across a
+            # gc.collect() — orjson's behavior, not a leak here.
             'skip_refcount': True,
         }
 

@@ -7,10 +7,8 @@ use crate::format::{Kind, Parser, Writer};
 use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::{Context, InstancePath};
 
-/// Native schema type-mismatch for the streaming path (no Python materialization).
-/// `raw` is the offending value's raw JSON, supplied by the caller. Formatting may
-/// differ from the dict-path (raw JSON vs Python repr); the `expected` clause and
-/// instance_path match.
+/// Schema type-mismatch straight from the stream. The rendered value differs from
+/// the dict path (raw JSON vs Python repr); `expected` and instance_path match.
 pub(crate) fn wrong_type_err(expected: &str, raw: &str, path: &InstancePath) -> SerdeError {
     SchemaError::new(format!(r#"{raw} is not of type "{expected}""#), path).into()
 }
@@ -54,9 +52,8 @@ pub(crate) fn invalid_number_err(raw: &str) -> SerdeError {
     SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
 }
 
-/// Parse integer-shaped number text (no dot/exponent) into a Python `int`,
-/// falling back to a Python big int beyond i64. Shared by `parse_any` and the
-/// scalar encoders that materialize an integer token.
+/// Integer-shaped number text (no dot/exponent) -> Python `int`, widening to a
+/// big int beyond i64.
 #[inline(always)]
 pub(crate) fn parse_int_text<'py>(py: Python<'py>, raw: &str) -> SerdeResult<Bound<'py, PyAny>> {
     match raw.parse::<i64>() {
@@ -129,9 +126,8 @@ pub(crate) fn parse_any<'py>(
         }
         Kind::Map => {
             let dict = PyDict::new(py);
-            // The key `&str` borrows the parser buffer. Materialize it into a
-            // `PyString` immediately (PyString::new copies the bytes), ending the
-            // borrow so the parser is free for the recursive value parse.
+            // Materializing the key ends its borrow of the parser buffer, freeing
+            // the parser for the recursive value parse.
             let mut key = parser.enter_map_known()?;
             while let Some(k) = key {
                 let py_key = PyString::new(py, k);

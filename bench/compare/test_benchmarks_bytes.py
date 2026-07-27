@@ -1,16 +1,8 @@
 """End-to-end ``bytes -> object -> bytes`` benchmarks.
 
-Unlike ``test_benchmarks.py`` (which measures the dict-oriented path, i.e. an
-object to/from builtin Python types), these benchmarks measure the honest wire
-scenario: serialize straight to ``bytes`` and deserialize straight from
-``bytes``. Three contenders are compared:
-
-* ``serpyco_rs_codec`` -- the new codec path (``Serializer(T, codec=JSON)``),
-  which encodes/decodes without materializing an intermediate ``dict``.
-* ``serpyco_rs+orjson`` -- the classic path: serpyco-rs to/from a ``dict`` plus
-  ``orjson`` for the JSON bytes layer.
-* ``msgspec`` -- msgspec's native JSON bytes API (``msgspec.json.encode`` /
-  ``msgspec.json.decode``), for context.
+``test_benchmarks.py`` measures the dict-oriented path (object to/from builtin
+Python types); these measure the wire scenario, serializing straight to ``bytes``
+and back. See ``CONTENDERS`` for what is compared.
 """
 
 import msgspec
@@ -40,10 +32,8 @@ CONTENDERS = {
         'dump': lambda o: orjson.dumps(serpyco_rs.dump(o)),
         'load': lambda b: serpyco_rs.load(orjson.loads(b)),
         'obj': serpyco_rs.test_object,
-        # orjson keeps an internal key cache whose entries shift
-        # sys.gettotalrefcount across a gc.collect(); that is orjson's behavior,
-        # not a leak in this project (the serpyco_rs_codec contender is the one
-        # whose refcounts we actually guard).
+        # orjson's internal key cache shifts sys.gettotalrefcount across a
+        # gc.collect() — orjson's behavior, not a leak here.
         'skip_refcount': True,
     },
     'msgspec': {

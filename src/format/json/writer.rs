@@ -2,9 +2,7 @@
 ///
 /// Separators are trailing: every element is followed by `item_end`, and the
 /// container's closer drops the one comma left over. That keeps the per-element
-/// path branch-free (an unconditional push) and needs no open-container stack —
-/// the alternative, deciding "is this the first element?" per item, costs a
-/// branch and a stack slot on the hottest path in the writer.
+/// path an unconditional push and needs no open-container stack.
 ///
 /// Call contract: `map_key`/`map_key_encoded` before each map value, then
 /// `item_end` after each map value and after each array element.
@@ -15,7 +13,7 @@ pub(crate) struct JsonWriter {
 
 /// A saved writer position for a speculative write that may be rolled back
 /// (union member probing, omit_none null-skip). The buffer length alone captures
-/// the whole writer state, so rollback is a truncate.
+/// the whole state, so rollback is a truncate.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Checkpoint {
     buf_len: usize,
@@ -34,11 +32,13 @@ const HIGH: u64 = 0x8080_8080_8080_8080;
 /// escaping. Bytes >= 0x80 (UTF-8 continuations) never match — `!word` clears
 /// their lane — so multi-byte sequences pass through untouched.
 ///
-/// SWAR rather than a SIMD crate on purpose: the vector escape ships as a
-/// `#[target_feature(avx2)]` function, which cannot be inlined into a caller
-/// without that feature, so on x86_64 every string paid a call whose own
-/// intrinsics stayed un-inlined too. This compiles to plain 64-bit ALU ops that
-/// inline everywhere.
+/// SWAR rather than a SIMD crate: a `#[target_feature(avx2)]` escape cannot be
+/// inlined into callers that lack the feature, so every string paid a call.
+///
+/// ONLY THE LOWEST SET LANE IS TRUSTWORTHY: a borrow out of lane k can spuriously
+/// set lane k+1, and such a borrow happens exactly when lane k itself matches, so
+/// false positives always sit *above* a true one. Hence the caller must take one
+/// byte per word and recompute.
 #[inline(always)]
 fn escape_lanes(word: u64) -> u64 {
     let below_0x20 = word.wrapping_sub(0x20 * LANE) & !word;
@@ -90,7 +90,6 @@ fn escape_into(buf: &mut Vec<u8>, s: &str) {
             i += 8;
             continue;
         }
-        // Lowest set lane = first byte in this word that needs escaping.
         let at = i + (lanes.trailing_zeros() / 8) as usize;
         buf.extend_from_slice(&bytes[clean_from..at]);
         write_escaped_byte(buf, bytes[at]);
@@ -110,9 +109,8 @@ fn escape_into(buf: &mut Vec<u8>, s: &str) {
     buf.extend_from_slice(&bytes[clean_from..]);
 }
 
-/// Render `"key":` once for a map key fixed at encoder-construction time.
-/// Escaping still runs here — a JSON key can come from an `Alias`, not just a
-/// Python identifier — but it runs once per encoder instead of once per dump.
+/// Render `"key":` once, at encoder-construction time. Escaping still runs:
+/// a JSON key can come from an `Alias`, not just a Python identifier.
 pub(crate) fn encode_map_key(key: &str) -> Box<[u8]> {
     let mut buf = Vec::with_capacity(key.len() + 3);
     buf.push(b'"');
@@ -133,8 +131,6 @@ impl JsonWriter {
         &self.buf
     }
 
-    /// Terminate the element just written. The closer strips the trailing comma,
-    /// so this stays an unconditional push.
     #[inline]
     pub(crate) fn item_end(&mut self) {
         self.buf.push(b',');
@@ -173,13 +169,11 @@ impl JsonWriter {
         self.buf.extend_from_slice(v.as_bytes());
     }
 
-    /// Current output length — the start position of the next value written.
     #[inline(always)]
     pub(crate) fn position(&self) -> usize {
         self.buf.len()
     }
 
-    /// Snapshot the writer state so a speculative value can be rolled back.
     #[inline(always)]
     pub(crate) fn checkpoint(&self) -> Checkpoint {
         Checkpoint {
@@ -187,15 +181,11 @@ impl JsonWriter {
         }
     }
 
-    /// Undo everything written since `cp` (a failed union member, an omit_none
-    /// value that turned out null).
     #[inline(always)]
     pub(crate) fn rollback(&mut self, cp: Checkpoint) {
         self.buf.truncate(cp.buf_len);
     }
 
-    /// Whether the value written since `from` is exactly the JSON null literal.
-    /// Lets omit_none decide null-ness on the value already in the buffer, no probe.
     #[inline(always)]
     pub(crate) fn tail_is_null(&self, from: usize) -> bool {
         self.buf[from..] == *b"null"
@@ -232,7 +222,7 @@ impl JsonWriter {
     }
 
     /// Append a key already rendered by [`encode_map_key`] (quotes, escaping and
-    /// the `:` included) — the escape pass is skipped entirely.
+    /// the `:` included).
     #[inline]
     pub(crate) fn map_key_encoded(&mut self, encoded: &[u8]) {
         self.buf.extend_from_slice(encoded);
