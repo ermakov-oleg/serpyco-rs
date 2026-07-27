@@ -977,6 +977,9 @@ def test_error_parity(typ, bad):
         b'{"a"}',
         b'{,}',
         b'[,]',
+        b'x',  # bare token: not a digit/'-' lead byte -> parser.peek() must reject it explicitly
+        b'Infinity',  # jiter recognizes this lead byte but we never enable allow_inf_nan
+        b'NaN',
     ],
 )
 def test_decode_error_corpus(bad):

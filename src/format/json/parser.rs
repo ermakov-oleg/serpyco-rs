@@ -1,4 +1,4 @@
-use jiter::{Jiter, JiterError, NumberInt, Peek};
+use jiter::{Jiter, JiterError, JiterErrorType, JsonErrorType, NumberInt, Peek};
 use num_bigint::BigInt;
 use pyo3::PyErr;
 
@@ -35,17 +35,26 @@ impl<'j> JsonParser<'j> {
         }
     }
 
+    // `jiter::Peek` is a newtype over the token's raw lead byte (not an enum), so a
+    // `match` on it can't be exhaustive at the compiler level. Match the byte itself
+    // (`peek.into_inner()`) instead of `Peek`'s associated consts: it lets the digit
+    // run be a proper range pattern and keeps this a plain byte switch (same jump
+    // table as before) rather than adding a guard clause on the hot path. Anything
+    // that isn't one of JSON's token-lead bytes is a decode error, not a silent
+    // "it's a number" — so a future jiter version that adds a new `Peek` kind fails
+    // loudly here instead of being fed to the number reader.
     #[inline]
     pub(crate) fn peek(&mut self) -> Result<Kind, SerdeError> {
         let peek = self.jiter.peek().map_err(err)?;
         self.last_peek = peek;
-        Ok(match peek {
-            Peek::Null => Kind::Null,
-            Peek::True | Peek::False => Kind::Bool,
-            Peek::String => Kind::Str,
-            Peek::Array => Kind::Array,
-            Peek::Object => Kind::Map,
-            _ => Kind::Num, // digits and '-'
+        Ok(match peek.into_inner() {
+            b'n' => Kind::Null,
+            b't' | b'f' => Kind::Bool,
+            b'"' => Kind::Str,
+            b'[' => Kind::Array,
+            b'{' => Kind::Map,
+            b'0'..=b'9' | b'-' => Kind::Num,
+            _ => return Err(unexpected_token_err(self.jiter.current_index())),
         })
     }
 
@@ -145,6 +154,18 @@ impl<'j> JsonParser<'j> {
 #[inline]
 fn err(e: JiterError) -> SerdeError {
     SerdeError::Py(decode_err(&e))
+}
+
+/// `peek()`'s byte matched none of JSON's token-lead bytes. Same `ExpectedSomeValue`
+/// jiter itself reports for a bad lead byte (see jiter's `Jiter::wrong_type` /
+/// `take_value_skip`), so the message and position are consistent with every other
+/// syntax error from this parser.
+#[inline]
+fn unexpected_token_err(index: usize) -> SerdeError {
+    err(JiterError {
+        error_type: JiterErrorType::JsonError(JsonErrorType::ExpectedSomeValue),
+        index,
+    })
 }
 
 // Built from `error_type` alone, not `JiterError`'s Display: that already appends
