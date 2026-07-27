@@ -332,6 +332,17 @@ impl Encoder for IntEncoder {
                 Err(_) => {
                     // Cursor unmoved: re-read raw. Valid float -> load(float) for the
                     // "integer" schema error; malformed -> DecodeError here.
+                    //
+                    // `load(float)` never *accepts* the value here (verified: a float
+                    // fails the `PyInt` cast, and the only other accepting branch needs
+                    // a `PyString` and `ctx.try_cast_from_string`, which is always false
+                    // on this call path) — this is purely about matching the dict path's
+                    // error text. The `PyFloat` materialization is required for that: the
+                    // message renders the *parsed* value (`fmt_py`, i.e. Python's
+                    // `str(float)`), not the wire text, and those differ (`1e3` on the
+                    // wire renders as `1000.0`, matching what the dict path would print
+                    // for the equivalent Python float) — so the raw JSON text can't be
+                    // spliced into the message directly.
                     let raw = parser.take_number_str_known()?;
                     let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
                     let materialized = PyFloat::new(py, v).into_any();

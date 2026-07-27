@@ -935,6 +935,10 @@ ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
     (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),  # nested field error path
     (Annotated[int, Min(10), Max(100)], 1),  # below Min
     (Annotated[int, Min(10), Max(100)], 101),  # above Max
+    (int, 1.5),  # float-shaped token for an int field
+    (int, 1.0),  # whole-valued float still rejected
+    (int, -0.0),
+    (Annotated[int, Min(10), Max(100)], 1.5),  # bounded int: same "integer" rejection, not a bounds error
     (Annotated[str, MinLength(6), MaxLength(8)], 'hi'),  # below MinLength
     (Annotated[str, MinLength(6), MaxLength(8)], 'hello world'),  # above MaxLength
     (Color, 'blue'),  # enum invalid value
@@ -953,6 +957,34 @@ def test_error_parity(typ, bad):
         s.load(bad)
     with pytest.raises(SchemaValidationError) as codec_err:
         sc.load(json.dumps(bad))
+    assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
+        (e.message, e.instance_path) for e in dict_err.value.errors
+    ]
+
+
+# IntEncoder::load_format's float branch never accepts a float for an int field;
+# it re-parses the raw number purely to render the same "... is not of type
+# "integer"" message as the dict path (see the comment on that branch). These
+# cases use raw wire bytes rather than `json.dumps(python_value)` because that
+# round-trip would normalize the exponent/precision away (e.g. `json.dumps(1e3)`
+# emits `"1000.0"`, not `"1e3"`) and stop testing the wire form entirely.
+@pytest.mark.parametrize(
+    ('raw', 'equivalent_value'),
+    [
+        (b'1e3', 1e3),  # exponent notation on the wire, not just a plain decimal
+        (b'1e400', float('inf')),  # overflows to +inf, same as Python's own float parse
+        (b'-1e400', float('-inf')),
+        (b'1e-400', 0.0),  # underflows to 0.0
+        (b'1.' + b'1' * 400, float('1.' + '1' * 400)),  # very long mantissa
+    ],
+)
+def test_int_rejects_float_wire_forms(raw, equivalent_value):
+    s = Serializer(int)
+    sc = Serializer(int, codec=JSON)
+    with pytest.raises(SchemaValidationError) as dict_err:
+        s.load(equivalent_value)
+    with pytest.raises(SchemaValidationError) as codec_err:
+        sc.load(raw)
     assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
         (e.message, e.instance_path) for e in dict_err.value.errors
     ]
