@@ -1,9 +1,3 @@
-"""End-to-end ``bytes -> object -> bytes`` benchmarks on the github-issue payload.
-
-The companion of ``test_github_issue.py`` (the dict-oriented path): decode straight
-from the raw ``data.json`` bytes and encode straight back. See ``LIBS``.
-"""
-
 from pathlib import Path
 
 import pytest
@@ -35,8 +29,7 @@ def _contender(lib: str) -> dict:
         }
 
     if lib == 'msgspec':
-        # The sibling module is literally named ``msgspec``; alias it so it never
-        # shadows the top-level ``msgspec`` package.
+        # Aliased so the sibling module named ``msgspec`` never shadows the package.
         from .github_issue import msgspec as msgspec_issue
 
         return {'dump': msgspec_issue.dump, 'load': msgspec_issue.load, 'skip_refcount': True}

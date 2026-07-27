@@ -1,10 +1,3 @@
-"""End-to-end ``bytes -> object -> bytes`` benchmarks.
-
-``test_benchmarks.py`` measures the dict-oriented path (object to/from builtin
-Python types); these measure the wire scenario, serializing straight to ``bytes``
-and back. See ``CONTENDERS`` for what is compared.
-"""
-
 import msgspec
 import orjson
 import pytest
@@ -20,7 +13,6 @@ def _msgspec_load(data):
     return msgspec.json.decode(data, type=msgspec_struct.Dataclass)
 
 
-# Each contender dumps/loads its own equivalently-shaped test object.
 CONTENDERS = {
     'serpyco_rs_codec': {
         'dump': serpyco_rs_codec.dump,

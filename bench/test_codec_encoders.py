@@ -1,10 +1,3 @@
-"""Per-encoder benchmarks for the JSON codec path (bytes in/out).
-
-Mirrors ``bench/test_encoders.py`` but binds each ``Serializer`` to the ``JSON``
-codec, so ``dump`` produces bytes and ``load`` consumes bytes instead of
-JSON-like Python objects.
-"""
-
 import enum
 import uuid
 from dataclasses import dataclass

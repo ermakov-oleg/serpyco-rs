@@ -1,10 +1,3 @@
-"""msgspec model mirroring ``github_issue/serpyco_rs.py``'s ``Issue`` hierarchy.
-
-This module is named ``msgspec`` on purpose so the contender lines up with the
-other github-issue models; ``import msgspec`` below resolves to the top-level
-msgspec package (absolute imports), never to this module itself.
-"""
-
 import datetime
 import enum
 from typing import Optional, Union
