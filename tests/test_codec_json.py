@@ -236,8 +236,9 @@ ROUNDTRIP_ONLY_CASES: list[tuple[Any, Any]] = [
 # Each case fails validation on the dict path; the codec path must produce the
 # identical (message, instance_path) list. Single-invalid-field cases only, so
 # wire order vs field order never matters. Excluded: union all-fail (message
-# carries a naming counter, see test_union_all_fail_parity) and
-# big-int-for-plain-int (a deliberate divergence).
+# carries a naming counter, see test_union_all_fail_parity), big-int-for-plain-int
+# (a deliberate divergence), and float-for-int (deliberate divergence, parity
+# waived by reviewer — see test_int_rejects_float_for_int_message_divergence).
 ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
     (int, '1'),  # wrong scalar type
     (str, 1),
@@ -247,10 +248,6 @@ ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
     (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),  # nested field error path
     (Annotated[int, Min(10), Max(100)], 1),  # below Min
     (Annotated[int, Min(10), Max(100)], 101),  # above Max
-    (int, 1.5),  # float-shaped token for an int field
-    (int, 1.0),  # whole-valued float still rejected
-    (int, -0.0),
-    (Annotated[int, Min(10), Max(100)], 1.5),  # bounded int: same "integer" rejection, not a bounds error
     (Annotated[str, MinLength(6), MaxLength(8)], 'hi'),  # below MinLength
     (Annotated[str, MinLength(6), MaxLength(8)], 'hello world'),  # above MaxLength
     (Color, 'blue'),  # enum invalid value
@@ -1358,34 +1355,81 @@ def test_load_json_accepts_str():
     assert s.load(raw.decode()) == Inner(name='x', score=1.0)
 
 
-# IntEncoder::load_format's float branch never accepts a float for an int field;
-# it re-parses the raw number purely to render the same "... is not of type
-# "integer"" message as the dict path (see the comment on that branch). These
-# cases use raw wire bytes rather than `json.dumps(python_value)` (or the
-# `_dump_any` helper, which goes through the same dump-side float writer) because
-# that round-trip would normalize the exponent/precision away (e.g. `1e3` becomes
-# `1000.0`) or reject the value outright (`1e400` overflows to an Infinity dump
-# can't produce), stopping this from testing the wire form at all.
+# IntEncoder::load_format's float branch never accepts a float for an int field:
+# `Err(_)` on `take_int_known` re-reads the same token as raw text and builds the
+# SchemaValidationError natively from that text (see the comment on that branch,
+# and src/format/bridge.rs::wrong_type_err) — no PyFloat materialization, no
+# delegation to `load()`. The dict path instead renders Python's `str()` of the
+# *parsed* float value (`fmt_py`). The two texts happen to agree for a plain
+# decimal wire form (`1.5`, `1.0`, `-0.0` all equal their own `str()`), but
+# diverge whenever JSON's number grammar disagrees with Python's float repr:
+# exponent notation, an extreme exponent that overflows/underflows, or a long
+# low-precision mantissa Python reprs more compactly. These cases use raw wire
+# bytes rather than `json.dumps(python_value)` (or `_dump_any`, which goes
+# through the same dump-side float writer) because that round-trip would
+# normalize the exponent/precision away before it ever reached the wire.
+#
+# The reviewer explicitly waived error-message parity for this whole case (crit
+# round 2, task 10: "не надо нам такой парити по ошибкам поддерживать") — this
+# test pins the actual current behavior of BOTH paths, match or not; it is not
+# asserting they *should* match, and a change in either direction here is not
+# something to "fix" back to enforce equality.
 @pytest.mark.parametrize(
-    ('raw', 'equivalent_value'),
+    ('raw', 'equivalent_value', 'messages_match'),
     [
-        (b'1e3', 1e3),  # exponent notation on the wire, not just a plain decimal
-        (b'1e400', float('inf')),  # overflows to +inf, same as Python's own float parse
-        (b'-1e400', float('-inf')),
-        (b'1e-400', 0.0),  # underflows to 0.0
-        (b'1.' + b'1' * 400, float('1.' + '1' * 400)),  # very long mantissa
+        (b'1.5', 1.5, True),  # plain decimal: wire text coincides with str(1.5)
+        (b'1.0', 1.0, True),
+        (b'-0.0', -0.0, True),
+        (b'1e3', 1e3, False),  # exponent notation on the wire, not just a plain decimal
+        (b'1e400', float('inf'), False),  # overflows to +inf, same as Python's own float parse
+        (b'-1e400', float('-inf'), False),
+        (b'1e-400', 0.0, False),  # underflows to 0.0
+        (b'1.' + b'1' * 400, float('1.' + '1' * 400), False),  # very long mantissa
     ],
 )
-def test_int_rejects_float_wire_forms(raw, equivalent_value):
+def test_int_rejects_float_for_int_message_divergence(raw, equivalent_value, messages_match):
     s = Serializer(int)
     sc = Serializer(int, codec=JSON)
     with pytest.raises(SchemaValidationError) as dict_err:
         s.load(equivalent_value)
     with pytest.raises(SchemaValidationError) as codec_err:
         sc.load(raw)
-    assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
-        (e.message, e.instance_path) for e in dict_err.value.errors
-    ]
+    dict_result = [(e.message, e.instance_path) for e in dict_err.value.errors]
+    codec_result = [(e.message, e.instance_path) for e in codec_err.value.errors]
+    # codec message always splices in the raw wire text verbatim, never a
+    # materialized-and-reformatted float.
+    assert codec_result == [(f'{raw.decode()} is not of type "integer"', '')]
+    assert (codec_result == dict_result) is messages_match
+
+
+def test_int_bounded_rejects_float_message_divergence():
+    # Same divergence as above, but on a bounded int: the "integer" type
+    # rejection fires before the Min/Max bounds check is ever reached (a float
+    # never passes the `PyInt` cast bounds-check gates on), so the message is
+    # the plain "not of type \"integer\"" text, not a bounds error, on both
+    # paths — same coincidental match as the unbounded `1.5` case above.
+    typ = Annotated[int, Min(10), Max(100)]
+    s = Serializer(typ)
+    sc = Serializer(typ, codec=JSON)
+    with pytest.raises(SchemaValidationError) as dict_err:
+        s.load(1.5)
+    with pytest.raises(SchemaValidationError) as codec_err:
+        sc.load(b'1.5')
+    dict_result = [(e.message, e.instance_path) for e in dict_err.value.errors]
+    codec_result = [(e.message, e.instance_path) for e in codec_err.value.errors]
+    assert codec_result == [('1.5 is not of type "integer"', '')]
+    assert codec_result == dict_result
+
+
+def test_int_malformed_float_text_raises_decode_error():
+    # Same `Err(_)` arm as above, but the re-read of the raw text itself fails
+    # (genuinely malformed number, not just float-shaped) -> DecodeError, never
+    # a SchemaValidationError. Confirms the error-class split survives the
+    # simplification: `take_number_str_known` propagates its own failure via
+    # `?` for this input instead of reaching `wrong_type_err`.
+    sc = Serializer(int, codec=JSON)
+    with pytest.raises(serpyco_rs.DecodeError):
+        sc.load(b'1e')
 
 
 def test_union_all_fail_message_json_specific():

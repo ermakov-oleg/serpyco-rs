@@ -309,8 +309,8 @@ impl Encoder for IntEncoder {
     }
 
     // jiter rejects a float-shaped token without advancing the cursor; on that
-    // error re-read the raw number and defer to load(float) for the dict-path
-    // "integer" schema error (not a DecodeError).
+    // error re-read the raw number natively (no PyFloat materialization) to
+    // classify DecodeError (malformed) vs SchemaValidationError (float-shaped).
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -334,23 +334,20 @@ impl Encoder for IntEncoder {
                     return self.load(&materialized, instance_path, ctx);
                 }
                 Err(_) => {
-                    // Cursor unmoved: re-read raw. Valid float -> load(float) for the
-                    // "integer" schema error; malformed -> DecodeError here.
+                    // Cursor unmoved: re-read the same token as raw text. `take_int_known`
+                    // bails at the first `.`/`e`/`E` without checking what follows; the
+                    // retry validates the whole grammar, so its own success/failure
+                    // decides DecodeError vs SchemaValidationError below.
                     //
-                    // `load(float)` never *accepts* the value here (verified: a float
-                    // fails the `PyInt` cast, and the only other accepting branch needs
-                    // a `PyString` and `ctx.try_cast_from_string`, which is always false
-                    // on this call path) — this is purely about matching the dict path's
-                    // error text. The `PyFloat` materialization is required for that: the
-                    // message renders the *parsed* value (`fmt_py`, i.e. Python's
-                    // `str(float)`), not the wire text, and those differ (`1e3` on the
-                    // wire renders as `1000.0`, matching what the dict path would print
-                    // for the equivalent Python float) — so the raw JSON text can't be
-                    // spliced into the message directly.
+                    // The message renders the raw wire text, not Python's
+                    // `str()` of the parsed value, so it deliberately diverges
+                    // from the dict path whenever JSON's number grammar doesn't
+                    // match Python's float repr (`1e3` on the wire vs `1000.0`
+                    // dict-side; `1e400` vs `inf`). Reviewer waived parity for
+                    // this case (crit round 2, task 10) — do not "fix" this
+                    // back to match the dict path.
                     let raw = parser.take_number_str_known()?;
-                    let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
-                    let materialized = PyFloat::new(py, v).into_any();
-                    return self.load(&materialized, instance_path, ctx);
+                    return Err(wrong_type_err("integer", raw, instance_path));
                 }
             }
         }
