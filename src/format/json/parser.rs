@@ -38,8 +38,8 @@ impl<'j> JsonParser<'j> {
     // `jiter::Peek` is a newtype over the token's raw lead byte (not an enum), so a
     // `match` on it can't be exhaustive at the compiler level. Match the byte itself
     // (`peek.into_inner()`) instead of `Peek`'s associated consts: it lets the digit
-    // run be a proper range pattern and keeps this a plain byte switch (same jump
-    // table as before) rather than adding a guard clause on the hot path. Anything
+    // run be a proper range pattern. That arm comes first because a number is JSON's
+    // most frequent token, so it should cost the fewest comparisons to reach. Anything
     // that isn't one of JSON's token-lead bytes is a decode error, not a silent
     // "it's a number" — so a future jiter version that adds a new `Peek` kind fails
     // loudly here instead of being fed to the number reader.
@@ -48,12 +48,12 @@ impl<'j> JsonParser<'j> {
         let peek = self.jiter.peek().map_err(err)?;
         self.last_peek = peek;
         Ok(match peek.into_inner() {
+            b'0'..=b'9' | b'-' => Kind::Num,
             b'n' => Kind::Null,
             b't' | b'f' => Kind::Bool,
             b'"' => Kind::Str,
             b'[' => Kind::Array,
             b'{' => Kind::Map,
-            b'0'..=b'9' | b'-' => Kind::Num,
             _ => return Err(unexpected_token_err(self.jiter.current_index())),
         })
     }
