@@ -56,17 +56,6 @@ obj = serializer.load(raw)
 - Malformed input raises `DecodeError`; schema violations raise `SchemaValidationError` — the same validation as the dict-based path.
 - Only `JSON` ships today. The format layer is abstracted, and a `msgpack` codec is planned.
 
-### Benchmarks (end-to-end bytes)
-
-Round-tripping the [benchmark model](bench/compare/libs/base.py) straight to/from `bytes` (macOS, Apple M4 Max, Python 3.14), median latency:
-
-| Direction | serpyco-rs codec | serpyco-rs + orjson | msgspec |
-|-----------|------------------|---------------------|---------|
-| dump (object → bytes) | **0.028 ms** | 0.059 ms | 0.013 ms |
-| load (bytes → object) | **0.069 ms** | 0.088 ms | 0.042 ms |
-
-Both directions are faster than going through `orjson` and an intermediate `dict`: encoding ~2.1x (no `dict` is built) and decoding ~1.3x (streams straight into typed objects without materializing a `dict` first). `msgspec`'s native bytes path is shown for reference.
-
 ## Installation
 Use pip to install:
 
