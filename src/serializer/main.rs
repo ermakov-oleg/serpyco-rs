@@ -36,6 +36,9 @@ pub struct Serializer {
     pub(crate) max_recursion_depth: usize,
     /// Byte length of the last `dump_bytes` output, used to pre-size the next
     /// one's buffer. Relaxed: a stale value only costs a re-grow.
+    /// Measured: dropping this in favor of a fixed `DUMP_BUF_MIN` start costs
+    /// +0.57% Ir dumping an 8.5KB github-issue payload repeatedly (x86 cachegrind,
+    /// averaged over 2 runs; run-to-run noise on this workload is ~0.25%).
     last_dump_len: AtomicUsize,
 }
 
