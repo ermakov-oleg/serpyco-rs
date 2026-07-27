@@ -52,7 +52,9 @@ pub(crate) trait Encoder: DynClone + Debug {
     ) -> SerdeResult<Bound<'a, PyAny>>;
 
     /// Streaming serialization to a format. Default goes through the generic
-    /// bridge: identical semantics to dump(); direct impls are an optimization.
+    /// bridge: identical semantics to dump(); direct impls are an optimization,
+    /// kept for encoders with no dedicated per-field streaming path (a pass-through
+    /// or a runtime-chosen redirect).
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -63,7 +65,9 @@ pub(crate) trait Encoder: DynClone + Debug {
         write_any(&dumped, writer, ctx)
     }
 
-    /// Streaming deserialization from a format. Default goes through the bridge.
+    /// Streaming deserialization from a format. Default goes through the bridge,
+    /// kept for encoders with no dedicated per-field streaming path (a pass-through
+    /// or a runtime-chosen redirect).
     fn load_format<'py>(
         &self,
         py: Python<'py>,
