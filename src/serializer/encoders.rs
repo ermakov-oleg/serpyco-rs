@@ -841,8 +841,7 @@ pub struct DictionaryEncoder {
     pub(crate) omit_none: bool,
     /// Plain `str` key (no length bounds/custom encoder): the streaming load path
     /// uses the parsed key directly instead of re-validating via `key_encoder`.
-    /// Measured: removing this costs +4.2% Ir loading a 300-key `dict[str, int]`
-    /// (x86 cachegrind); a non-plain-key control was flat (-0.36%, noise).
+    /// Measured: removing this costs +2.96% Ir loading a 3-key `dict[str, int]` (500k iterations).
     pub(crate) key_is_plain_str: bool,
 }
 
@@ -1068,12 +1067,7 @@ impl Encoder for ArrayEncoder {
         if parser.peek()? != Kind::Array {
             return Err(wrong_type_at_cursor(parser, "list", instance_path));
         }
-        // Collecting into a Vec and bulk-transferring via `PyList::new` beats writing
-        // straight into a `PyList::empty` + `append` per item: measured +6.85% Ir
-        // loading a 1000-element `list[int]` with `append` (x86 cachegrind); the
-        // per-call PyList C-API overhead of `append` outweighs the Vec's own
-        // allocation. On `list[<dataclass>]` the difference was negligible (+0.04%),
-        // swamped by the nested entity decode.
+        // Measured: `PyList::empty` + `append` instead of this Vec is +6.85% Ir on a 1000-element `list[int]` load.
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
             // One allocation instead of the regrowth ladder; empty arrays never
