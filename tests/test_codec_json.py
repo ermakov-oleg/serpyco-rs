@@ -677,6 +677,34 @@ def test_flatten_extra_unknown_keys_parity_codec(codec):
 
 
 @parametrize_codec
+def test_flatten_nested_dict_catchall_key_overlap_divergence_codec(codec):
+    # Pre-existing (not introduced by the codec work) divergence between the two
+    # load paths on VALID input, when a nested Flatten struct itself has a dict
+    # catch-all: the dict path re-passes the *entire* raw mapping down into
+    # `Inner.load`, so a key already claimed by `Outer.a` is also visible to (and
+    # lands in) `Inner`'s own catch-all. The streaming codec path routes each wire
+    # key to exactly one destination, so `a` is consumed once by `Outer` and never
+    # reaches `Inner.rest`. This pins BOTH current behaviors; it does not assert
+    # they agree, and is not something to fix here.
+    @dataclass
+    class Inner:
+        x: int
+        rest: Annotated[dict[str, Any], Flatten]
+
+    @dataclass
+    class Outer:
+        a: int
+        inner: Annotated[Inner, Flatten]
+
+    s = Serializer(Outer)
+    sc = Serializer(Outer, codec=codec)
+    raw_dict = {'a': 1, 'x': 2, 'zzz': 3}
+    raw = _dump_any(codec, raw_dict)
+    assert s.load(raw_dict) == Outer(a=1, inner=Inner(x=2, rest={'a': 1, 'zzz': 3}))
+    assert sc.load(raw) == Outer(a=1, inner=Inner(x=2, rest={'zzz': 3}))
+
+
+@parametrize_codec
 def test_flatten_struct_only_extra_key_dropped_parity_codec(codec):
     # With no dict-flatten catch-all, a truly unrecognized key is silently
     # dropped (same as the dict path: Address.load never looks it up).
@@ -1358,6 +1386,30 @@ def test_int_rejects_float_wire_forms(raw, equivalent_value):
     assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
         (e.message, e.instance_path) for e in dict_err.value.errors
     ]
+
+
+def test_union_all_fail_message_json_specific():
+    # test_union_all_fail_parity (codec-agnostic section) strips the offending
+    # value's rendering before comparing, because the two paths render a
+    # container differently: raw wire text on the codec path, Python repr() on
+    # the dict path. Pin both renderings literally here — this is the actual
+    # observed divergence, not the intended contract, so it is not fixed. The
+    # trailing digit `strip_counter` removes is the same pre-existing
+    # per-Serializer union-naming-counter artifact test_union_all_fail_parity
+    # already strips (a second `Serializer(int | str, ...)` built anywhere in
+    # the process gets "int | str1", "int | str2", ... to disambiguate).
+    def strip_counter(msg):
+        return re.sub(r'\d*"$', '"', msg)
+
+    s = Serializer(int | str)
+    sc = Serializer(int | str, codec=JSON)
+    bad = [1, 2, 3]
+    with pytest.raises(serpyco_rs.SchemaValidationError) as d:
+        s.load(bad)
+    with pytest.raises(serpyco_rs.SchemaValidationError) as c:
+        sc.load(_dump_any(JSON, bad))
+    assert strip_counter(d.value.errors[0].message) == '[1, 2, 3] is not of type "int | str"'
+    assert strip_counter(c.value.errors[0].message) == '[1,2,3] is not of type "int | str"'
 
 
 # --- malformed-input (DecodeError) corpus -------------------------------------
