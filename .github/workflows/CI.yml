@@ -123,7 +123,9 @@ jobs:
 
   linux-cross:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    # Tags and the default branch only: a cross-compile break must not wait for
+    # release, but PR runs skip it (nothing here is target-specific).
+    if: github.event_name != 'pull_request'
     strategy:
       matrix:
         platform:
