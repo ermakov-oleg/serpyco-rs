@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, IntEnum
 from ipaddress import IPv4Address
 from typing import Annotated, Any, Generic, Literal, Optional, TypeVar, Union
 
@@ -113,10 +113,9 @@ class Outer:
     inner: Inner
 
 
-# A custom-encoded scalar: CustomType needs a custom_type_resolver (a Serializer
-# kwarg), which the parametrized signature cannot pass, so the sweep exercises the
-# custom serialization path through CustomEncoder on a known base type instead.
-# The real CustomType path is covered by test_custom_type_resolver_parity.
+# CustomType needs a custom_type_resolver kwarg the parametrized signature cannot
+# pass, so the sweep goes through CustomEncoder on a known base type instead.
+# test_custom_type_resolver_parity covers the real CustomType path.
 UpperStr = Annotated[str, CustomEncoder(serialize=str.upper, deserialize=str.lower)]
 
 
@@ -631,11 +630,8 @@ def test_flatten_wrong_type_error_parity_codec():
         s.load([1, 2, 3])
     with pytest.raises(SchemaValidationError) as c:
         sc.load(b'[1,2,3]')
-    # instance_path parity is the invariant that matters here; the message text
-    # itself embeds the raw wire bytes on the codec path vs a Python repr() on
-    # the dict path (`[1,2,3]` vs `[1, 2, 3]`) -- a pre-existing wrong_type_err
-    # formatting quirk shared by every entity (flatten or not), out of scope
-    # for this native-flatten-streaming change.
+    # Only instance_path is compared: the message embeds raw wire bytes on the
+    # codec path vs a Python repr() on the dict path (`[1,2,3]` vs `[1, 2, 3]`).
     assert [e.instance_path for e in c.value.errors] == [e.instance_path for e in d.value.errors]
     assert 'not of type "object"' in c.value.errors[0].message
     assert 'not of type "object"' in d.value.errors[0].message
@@ -737,11 +733,9 @@ def test_union_codec():
 
 def test_union_all_fail_parity():
     def norm(errs):
-        # serpyco appends a disambiguation counter to the union's type name on the
-        # second Serializer built for the same type (repr "int | str" vs "int | str1").
-        # That counter is a global-naming artifact: the streaming and dict paths of one
-        # Serializer share self.repr, so strip the trailing counter to make the
-        # cross-serializer message comparison meaningful.
+        # The second Serializer built for one type gets a disambiguation counter in
+        # the union's name ("int | str" vs "int | str1"); strip it so the
+        # cross-serializer comparison is meaningful.
         return [(re.sub(r'\d*"$', '"', e.message), e.instance_path) for e in errs]
 
     s = Serializer(int | str)
@@ -813,14 +807,11 @@ def test_untagged_union_dump_roundtrip_both_orders():
     assert s.load(s.dump(B(b='x'))) == B(b='x')
 
 
-# --- Task 10: parity sweeps ---------------------------------------------------
+# --- parity sweeps ------------------------------------------------------------
 #
-# Prove the JSON codec path matches the dict path across the type system. Each
-# case is dumped through both paths (comparing the decoded codec JSON against the
-# dict-path dump) and round-tripped through the codec. KNOWN INTENTIONAL
-# DIVERGENCES are deliberately excluded here (see ROUNDTRIP_ONLY_CASES for unions
-# and the comments below): big int in a PLAIN int field, untagged-union dump, and
-# dump-side type coercion.
+# Every case is dumped through both paths (decoded codec JSON vs dict-path dump)
+# and round-tripped through the codec. Intentional divergences are excluded: big
+# int in a plain int field, untagged-union dump, dump-side type coercion.
 
 PARITY_CASES: list[tuple[Any, Any]] = [
     # scalars
@@ -927,15 +918,13 @@ def test_custom_type_resolver_parity():
     assert sc.load(sc.dump(val)) == val
 
 
-# --- Task 10: error-parity sweep ----------------------------------------------
+# --- error-parity sweep -------------------------------------------------------
 #
-# Each case is a Python value that FAILS validation on the dict path; the codec
-# path (fed the JSON-encoded value) must produce the identical (message,
-# instance_path) list. Only SINGLE-invalid-field cases are used so wire-order vs
-# field-order multi-error reporting never matters and exact equality holds.
-# Union all-fail is excluded because it carries a global-naming counter artifact
-# in the message that needs normalization (covered by test_union_all_fail_parity).
-# Big-int-for-plain-int is excluded (a deliberate divergence, not a bug).
+# Each case fails validation on the dict path; the codec path must produce the
+# identical (message, instance_path) list. Single-invalid-field cases only, so
+# wire order vs field order never matters. Excluded: union all-fail (message
+# carries a naming counter, see test_union_all_fail_parity) and
+# big-int-for-plain-int (a deliberate divergence).
 
 ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
     (int, '1'),  # wrong scalar type
@@ -969,11 +958,9 @@ def test_error_parity(typ, bad):
     ]
 
 
-# --- Task 10: malformed-input (DecodeError) corpus ----------------------------
+# --- malformed-input (DecodeError) corpus -------------------------------------
 #
-# Genuine JSON syntax errors, loaded through a permissive `Any` type so ONLY the
-# syntax (not the schema) can fail. Each must raise DecodeError with an int
-# position.
+# Loaded through a permissive `Any` type so only the syntax can fail.
 
 
 @pytest.mark.parametrize(
@@ -1019,6 +1006,101 @@ def test_codec_float_dump_rejects_bool():
     # a plain int is still accepted for a float field
     assert s.dump(2) == b'2'
     assert json.loads(s.dump(1.5)) == 1.5
+
+
+def test_load_rejects_unsupported_input_type():
+    # A wrong argument type is a TypeError, not a RuntimeError, so callers can
+    # write `except TypeError` around the boundary.
+    s = Serializer(int, codec=JSON)
+    for bad in (123, None, {'a': 1}, [1]):
+        with pytest.raises(TypeError):
+            s.load(bad)
+
+
+def test_codec_is_not_an_extension_point():
+    # Format ids live in the Rust core, so a user-defined Codec can never work;
+    # fail at class definition with a clear message instead of AttributeError
+    # (or `ValueError: unknown format id`) at the first dump.
+    with pytest.raises(TypeError, match='not an extension point'):
+
+        class MyCodec(serpyco_rs.Codec):
+            pass
+
+
+def test_bound_codec_cannot_be_disabled_per_call():
+    # A per-call codec selects a format, it does not switch the dict path back on:
+    # `codec=None` is indistinguishable from "argument omitted". Keeping both modes
+    # is done by NOT binding a codec and passing it per call (checked below).
+    @dataclass
+    class M:
+        a: int
+
+    bound = Serializer(M, codec=JSON)
+    assert bound.dump(M(a=1), codec=None) == b'{"a":1}'
+    assert bound.load(b'{"a":1}', codec=None) == M(a=1)
+
+    # documented way to keep both modes on one serializer
+    unbound = Serializer(M)
+    assert unbound.dump(M(a=1)) == {'a': 1}
+    assert unbound.dump(M(a=1), codec=JSON) == b'{"a":1}'
+    assert unbound.load({'a': 1}) == M(a=1)
+    assert unbound.load(b'{"a":1}', codec=JSON) == M(a=1)
+
+
+def test_codec_entity_dump_attribute_error_is_chained():
+    # Same as the dict path: a broken property must not be silently reinterpreted
+    # as "wrong shape" — the original AttributeError stays reachable as __cause__.
+    @dataclass
+    class Bar:
+        a: int
+        b: str = ''
+
+    class BadBar:
+        a = 1
+
+        @property
+        def b(self) -> str:
+            raise AttributeError('internal bug in my property')
+
+        def __repr__(self) -> str:
+            return 'BadBar()'
+
+    s = Serializer(Bar, codec=JSON)
+    with pytest.raises(serpyco_rs.SchemaValidationError) as e:
+        s.dump(BadBar())
+
+    assert isinstance(e.value.__cause__, AttributeError)
+    assert 'internal bug in my property' in str(e.value.__cause__)
+
+
+def test_codec_int_dump_accepts_int_subclass():
+    # An `int` subclass (IntEnum/IntFlag) on an `int` field must dump like the
+    # dict path does; only `bool` stays rejected. Mirrors StringEncoder, which
+    # already accepts `str` subclasses (StrEnum).
+    class Level(IntEnum):
+        LOW = 1
+
+    s = Serializer(int, codec=JSON)
+    assert s.dump(Level.LOW) == b'1'
+    with pytest.raises(serpyco_rs.SchemaValidationError):
+        s.dump(True)
+
+
+def test_codec_float_dump_accepts_int_subclass():
+    class Level(IntEnum):
+        LOW = 1
+
+    s = Serializer(float, codec=JSON)
+    assert s.dump(Level.LOW) == b'1'
+
+
+def test_codec_str_dump_accepts_str_subclass():
+    # The reference behaviour the int side is being aligned with.
+    class Name(str):
+        pass
+
+    s = Serializer(str, codec=JSON)
+    assert s.dump(Name('x')) == b'"x"'
 
 
 def test_codec_bytes_union_dump_skips_to_next_member():

@@ -33,10 +33,23 @@ class _MultiMapping(Protocol[_T, _D]):
 
 
 class Codec:
-    """Marker for a byte-oriented serialization format."""
+    """Marker for a byte-oriented serialization format.
+
+    Not an extension point: format ids are resolved by the Rust core, so only the
+    codecs shipped here can work. Subclassing from outside is rejected at class
+    definition rather than failing later at the first `dump`.
+    """
 
     _format_id: int
     _name: str
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        if cls.__module__ != __name__:
+            raise TypeError(
+                f'Codec is not an extension point: {cls.__qualname__} cannot subclass it. '
+                f'Formats are defined by the Rust core; use one of the provided codecs (e.g. JSON).'
+            )
+        super().__init_subclass__(**kwargs)
 
     def __repr__(self) -> str:
         return f'<Codec {self._name}>'
@@ -80,7 +93,10 @@ class Serializer(Generic[_T, _CodecT]):
             if the user-defined type is supported, or None otherwise.
         :param codec: An optional byte-oriented format (e.g. `JSON`) that binds this serializer to
             `dump`/`load` directly to/from bytes. When set, `dump` returns `bytes` and `load` accepts
-            `bytes`/`bytearray`/`memoryview`/`str`. A per-call `codec=` argument overrides this default.
+            `bytes`/`bytearray`/`memoryview`/`str`. A per-call `codec=` argument then selects a
+            different format, but cannot switch the dict-based path back on (`codec=None` is
+            indistinguishable from an omitted argument). To keep both modes on one serializer, leave
+            this unset and pass `codec=` per call instead.
         :param max_recursion_depth: Maximum number of nested encoder calls before `dump`/`load` raise
             `RecursionError`. Guards against stack overflow on cyclic graphs and pathologically deep input.
             Lower this on platforms with a small thread stack (e.g. Windows defaults to ~1 MiB); raise it
@@ -111,7 +127,8 @@ class Serializer(Generic[_T, _CodecT]):
         is bound (constructor or argument), directly to bytes.
 
         :param value: The value to serialize.
-        :param codec: Optional per-call format override (e.g. `JSON`).
+        :param codec: Optional per-call format (e.g. `JSON`). Selects the format when the serializer
+            has none bound, or a different one when it has; it cannot restore the dict-based path.
         """
         active = codec if codec is not None else self._codec
         if active is None:
@@ -132,7 +149,8 @@ class Serializer(Generic[_T, _CodecT]):
         (constructor or argument), directly from bytes.
 
         :param data: The data to deserialize.
-        :param codec: Optional per-call format override (e.g. `JSON`).
+        :param codec: Optional per-call format (e.g. `JSON`). Selects the format when the serializer
+            has none bound, or a different one when it has; it cannot restore the dict-based path.
         """
         active = codec if codec is not None else self._codec
         if active is None:

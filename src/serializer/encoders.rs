@@ -33,8 +33,8 @@ use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeI
 use crate::serde_error::{SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
-    invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_err,
-    missing_required_property, no_encoder_for_discriminator, str_as_bool,
+    invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_dump_err_with_cause,
+    invalid_type_err, missing_required_property, no_encoder_for_discriminator, str_as_bool,
 };
 use crate::validator::{Context, InstancePath};
 
@@ -74,9 +74,7 @@ pub(crate) trait Encoder: DynClone + Debug {
     }
 
     /// Whether `load_format` can accept a value of this kind. Unions use it to
-    /// drop members that cannot match before touching the input, so the common
-    /// case — exactly one member fits the kind — is read straight off the cursor
-    /// instead of being skipped over, captured as a span and re-parsed.
+    /// drop members that cannot match before touching the input.
     ///
     /// Must stay conservative: returning `false` for a kind the encoder would
     /// have accepted turns a valid document into an error. The default accepts
@@ -223,7 +221,6 @@ impl Encoder for NeverEncoder {
         instance_path: &InstancePath,
         _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        // Native error, no Python materialization.
         Err(wrong_type_at_cursor(
             parser,
             "Never (no value allowed)",
@@ -232,10 +229,23 @@ impl Encoder for NeverEncoder {
     }
 
     #[inline]
-    fn accepts_kind(&self, kind: Kind) -> bool {
-        let _ = kind;
+    fn accepts_kind(&self, _kind: Kind) -> bool {
         false
     }
+}
+
+/// Narrow to an `int` subclass that is not `bool`. `IntEnum`/`IntFlag` values
+/// dump as plain ints on the dict path (it hands them to the JSON layer as-is),
+/// so the codec accepts them too; `bool` stays a mismatch on a numeric field.
+///
+/// Cold path: callers try `cast_exact::<PyInt>` first, so a plain `int` never
+/// pays for the extra `bool` check.
+#[inline]
+fn cast_int_subclass<'a, 'py>(value: &'a Bound<'py, PyAny>) -> Option<&'a Bound<'py, PyInt>> {
+    if value.is_instance_of::<PyBool>() {
+        return None;
+    }
+    value.cast::<PyInt>().ok()
 }
 
 #[derive(Debug, Clone)]
@@ -278,6 +288,10 @@ impl Encoder for IntEncoder {
         _ctx: &Context,
     ) -> SerdeResult<()> {
         if let Ok(v) = value.cast_exact::<PyInt>() {
+            write_py_int(writer, v)?;
+            return Ok(());
+        }
+        if let Some(v) = cast_int_subclass(value) {
             write_py_int(writer, v)?;
             return Ok(());
         }
@@ -374,9 +388,13 @@ impl Encoder for FloatEncoder {
             write_py_float(writer, v)?;
             return Ok(());
         }
-        // Exact int only: a bool (int subclass) on a float field is a "number"
-        // mismatch (the codec dump validates types; the dict path is lenient).
         if let Ok(v) = value.cast_exact::<PyInt>() {
+            write_py_int(writer, v)?;
+            return Ok(());
+        }
+        // Every int but `bool`: a bool on a float field is a "number" mismatch
+        // (the codec dump validates types; the dict path is lenient).
+        if let Some(v) = cast_int_subclass(value) {
             write_py_int(writer, v)?;
             return Ok(());
         }
@@ -676,15 +694,14 @@ impl Encoder for BytesEncoder {
     }
 
     // JSON has no bytes; give a clear error, not the bridge "not serializable".
-    // load_format uses the default (parse_any -> load gives the "bytes" error).
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
         _writer: &mut Writer,
         _ctx: &Context,
     ) -> SerdeResult<()> {
-        // Genuine bytes -> a Py error (unrepresentable). A non-bytes value is a
-        // Schema mismatch, so an enclosing untagged union skips to the next member.
+        // Genuine bytes -> Py error (unrepresentable); anything else is a Schema
+        // mismatch, so an enclosing untagged union skips to the next member.
         if value.cast::<PyBytes>().is_ok() {
             return Err(SerdeError::Py(ValidationError::new_err(
                 "bytes values are not supported by this format".to_string(),
@@ -705,9 +722,8 @@ fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()>
     Ok(())
 }
 
-/// omit_none for a fixed-key field: write key+value, then roll back via a
-/// checkpoint if the value encoded null — dict-path `is_none()` with no probe
-/// buffer. Shared by `EntityEncoder`/`TypedDictEncoder`.
+/// omit_none for a fixed-key field: write key+value, then roll back if the value
+/// encoded null — the streaming equivalent of the dict path's `is_none()`.
 #[inline(always)]
 fn dump_field_unless_null(
     writer: &mut Writer,
@@ -757,9 +773,8 @@ fn write_scalar_item(
     write_any(item, writer, ctx)
 }
 
-/// Read a scalar enum/literal member from the parser, then delegate the map
-/// lookup + error handling to `load` for object-path parity. Shared by
-/// `EnumEncoder`/`LiteralEncoder`.
+/// Read a scalar enum/literal member, then delegate the map lookup and error
+/// handling to `load` for dict-path parity.
 #[inline(always)]
 fn load_enum_scalar<'py>(
     py: Python<'py>,
@@ -903,16 +918,14 @@ impl Encoder for DictionaryEncoder {
             return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
         let result_dict = PyDict::new(py);
-        // The key `&str` borrows the parser buffer; materialize to `PyString`
-        // (copies bytes) to end the borrow before the value's `load_format`. The
-        // owned key serves both instance_path (no `String` alloc) and the insert.
+        // Materializing the key ends its borrow of the parser buffer and then
+        // serves both instance_path and the insert.
         let mut key_opt = parser.enter_map_known()?;
         while let Some(k) = key_opt {
             let py_key = PyString::new(py, k);
             let key_any = py_key.as_any();
             let item_path = instance_path.push(key_any);
-            // Plain-str keys skip `key_encoder.load` (it would only re-clone the
-            // string); `validated_key` keeps the non-plain key alive past insert.
+            // `validated_key` keeps a non-plain key alive past the insert.
             let validated_key;
             let key_ptr = if self.key_is_plain_str {
                 key_any.as_ptr()
@@ -1038,8 +1051,8 @@ impl Encoder for ArrayEncoder {
         }
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
-            // Non-empty array: one allocation instead of the 1->2->4->8 regrowth
-            // ladder. Empty arrays never reach here and stay allocation-free.
+            // One allocation instead of the regrowth ladder; empty arrays never
+            // reach here and stay allocation-free.
             items.reserve(8);
             loop {
                 // Length is only known at the closing bracket, so an element-type
@@ -1073,7 +1086,7 @@ impl Encoder for ArrayEncoder {
 }
 
 /// Routing decision for one streamed object key, computed while the borrowed
-/// `&str` is alive so the key is never copied to a `String`. `Copy`.
+/// `&str` is alive so the key is never copied to a `String`.
 #[derive(Clone, Copy)]
 enum Route {
     /// Key maps to `self.fields[idx]`.
@@ -1086,10 +1099,9 @@ enum Route {
 
 /// Resolve a borrowed key to a `Route` (no allocation).
 ///
-/// `expect` is the field that follows the one just filled. Documents overwhelmingly
-/// list keys in schema order (they were produced from the same schema), so this
-/// turns the common case into one string compare instead of a hash lookup; a miss
-/// just falls through to the map.
+/// `expect` is the field following the one just filled. Documents usually list keys
+/// in schema order, so the common case is one string compare instead of a hash
+/// lookup; a miss falls through to the map.
 #[inline]
 fn resolve_route(
     fields: &[Field],
@@ -1113,8 +1125,7 @@ fn resolve_route(
     }
 }
 
-/// Per-object "field seen" bitset: one bit per field, inline on the stack
-/// (<= 64 fields => one word), avoiding the per-object `Vec<Option<_>>` alloc.
+/// Per-object "field seen" bitset, inline on the stack (<= 64 fields => one word).
 struct SeenSet(SmallVec<[u64; 1]>);
 
 impl SeenSet {
@@ -1153,16 +1164,13 @@ trait StreamingObject: Encoder {
     type Target<'py>
     where
         Self: 'py;
-    /// Create the container: a class instance / a dict.
     fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Self::Target<'py>>;
-    /// Store a loaded field value into the container.
     fn set<'py>(
         &self,
         target: &Self::Target<'py>,
         field: &Field,
         val: Bound<'py, PyAny>,
     ) -> SerdeResult<()>;
-    /// Erase the finished container to `Bound<PyAny>` for the caller.
     fn finish<'py>(target: Self::Target<'py>) -> Bound<'py, PyAny>;
 
     // --- dump source (type-erased; each impl narrows internally) ---
@@ -1193,8 +1201,6 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
     }
     let target = enc.create(py)?;
     let fields = enc.fields();
-    // Set values as keys arrive (no per-object `Vec<Option<Bound>>` alloc), tracking
-    // seen fields in an inline bitset; defaults fill the rest. Keys stay borrowed.
     let mut seen = SeenSet::new(fields.len());
     if enc.has_flatten() {
         let unknowns = PyDict::new(py);
@@ -1293,9 +1299,7 @@ fn dump_object_streaming<S: StreamingObject>(
     Ok(())
 }
 
-/// The dict-path (non-codec) object load shared by Entity/TypedDict: cast to a
-/// dict and fill each field via `Field::load_value`. Same `StreamingObject`
-/// sink hooks as the codec path.
+/// The dict-path (non-codec) object load, reusing the same `StreamingObject` sinks.
 fn load_dict_path<'a, S: StreamingObject + 'a>(
     enc: &S,
     value: &Bound<'a, PyAny>,
@@ -1410,9 +1414,15 @@ impl Encoder for EntityEncoder {
                 Ok(v) => v,
                 // Missing attr means `value` isn't this entity's shape: surface a
                 // Schema mismatch (not AttributeError) so an untagged union skips on.
+                // The original is kept as `cause` — the same AttributeError can also
+                // come from inside a user property, and that must stay diagnosable.
                 Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
                     // `cls.__name__` is read only if this error is rendered.
-                    return Err(invalid_type_dump_err(self.cls.clone_ref(value.py()), value));
+                    return Err(invalid_type_dump_err_with_cause(
+                        self.cls.clone_ref(value.py()),
+                        value,
+                        e,
+                    ));
                 }
                 Err(e) => return Err(e.into()),
             };
@@ -1441,7 +1451,6 @@ impl Encoder for EntityEncoder {
         load_dict_path(self, value, instance_path, ctx)
     }
 
-    // Streams to the writer; flatten entities fall back to the bridge (parity).
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -1527,11 +1536,17 @@ impl StreamingObject for EntityEncoder {
     ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
         // Missing attr means the value isn't this entity's shape: Schema mismatch
         // (not a raw AttributeError) so an untagged union skips to the next member.
+        // The original is kept as `cause` — the same AttributeError can also come
+        // from inside a user property, and that must stay diagnosable.
         match value.getattr(&field.name) {
             Ok(v) => Ok(Some(v)),
             Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
                 // `cls.__name__` is read only if this error is rendered.
-                Err(invalid_type_dump_err(self.cls.clone_ref(value.py()), value))
+                Err(invalid_type_dump_err_with_cause(
+                    self.cls.clone_ref(value.py()),
+                    value,
+                    e,
+                ))
             }
             Err(e) => Err(e.into()),
         }
@@ -1629,8 +1644,6 @@ impl Encoder for TypedDictEncoder {
         load_dict_path(self, value, instance_path, ctx)
     }
 
-    // Streams the mapping to the writer; missing required -> error, missing
-    // optional -> skipped (dict-path parity). Flatten falls back to the bridge.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -1796,7 +1809,6 @@ impl Encoder for UUIDEncoder {
                     return Ok(result);
                 }
             }
-            // Invalid UUID -> native error, no Python materialization.
             return Err(wrong_type_err("uuid", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "uuid", instance_path))
@@ -2198,8 +2210,6 @@ impl Encoder for UnionEncoder {
         ctx: &Context,
     ) -> SerdeResult<()> {
         for encoder in &self.encoders {
-            // Write into the real writer; a failed member only dirties past the
-            // checkpoint, which the rollback discards before the next attempt.
             let cp = writer.checkpoint();
             match encoder.dump_format(value, writer, ctx) {
                 Ok(()) => return Ok(()),
@@ -2220,10 +2230,8 @@ impl Encoder for UnionEncoder {
         instance_path: &InstancePath,
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
-        // When the value's kind narrows the union to a single member, read it
-        // straight off the cursor: no skip-to-find-the-span pass, no re-parse.
-        // Untagged unions in practice mix distinct JSON kinds (object | string),
-        // so this is the common case.
+        // A kind that narrows the union to one member is read straight off the
+        // cursor — no span capture, no re-parse. Untagged unions usually mix kinds.
         let kind = parser.peek()?;
         let mut only: Option<&Box<TEncoder>> = None;
         let mut viable = 0usize;
@@ -2238,14 +2246,14 @@ impl Encoder for UnionEncoder {
         }
         if viable == 1 {
             let encoder = only.expect("viable == 1");
-            // A Schema error here is the union's own failure: nothing else could
-            // have matched this kind. It surfaces with the member's message and
-            // instance_path, which is strictly more specific than the union's.
+            // Nothing else could have matched this kind, so the member's own error
+            // surfaces — more specific than the union's, and a deliberate divergence
+            // from the dict path, which reports "nothing matched" at the root.
             return encoder.load_format(py, parser, instance_path, ctx);
         }
 
-        // Capture the raw span, try each member on a fresh sub-parser: a partial
-        // consume can't corrupt the main cursor (take_raw_value already advanced it).
+        // `take_raw_value` already advanced the main cursor, so a member that
+        // consumes its sub-parser only partially cannot corrupt it.
         let span = parser.take_raw_value()?;
         for encoder in &self.encoders {
             if !encoder.accepts_kind(kind) {
@@ -2258,7 +2266,6 @@ impl Encoder for UnionEncoder {
                 Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }
-        // No member matched: native Schema error, no materialization.
         let raw = String::from_utf8_lossy(span);
         Err(wrong_type_err(&self.repr, &raw, instance_path))
     }
@@ -2381,8 +2388,8 @@ impl Encoder for DiscriminatedUnionEncoder {
         let mut tag: Option<String> = None;
         {
             let mut scan = parser.sub_parser(span);
-            // Compare each key as a borrowed &str (no per-key String alloc); the
-            // borrow ends at the comparison (NLL), before the next `&mut scan`.
+            // Keys stay borrowed: the borrow ends at the comparison, before the
+            // next `&mut scan`.
             let mut key = scan.enter_map()?;
             while let Some(k) = key {
                 if k == self.load_discriminator_rs {
@@ -2480,7 +2487,6 @@ impl Encoder for TimeEncoder {
             if let Ok(result) = parse_time(py, s) {
                 return Ok(result.into_any());
             }
-            // Invalid time text -> native error, no Python materialization.
             return Err(wrong_type_err("time", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "time", instance_path))
@@ -2549,7 +2555,6 @@ impl Encoder for DateTimeEncoder {
             if let Ok(result) = parse_datetime(py, s) {
                 return Ok(result.into_any());
             }
-            // Invalid datetime text -> native error, no Python materialization.
             return Err(wrong_type_err("datetime", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "datetime", instance_path))
@@ -2616,7 +2621,6 @@ impl Encoder for DateEncoder {
             if let Ok(result) = parse_date(py, s) {
                 return Ok(result.into_any());
             }
-            // Invalid date text -> native error, no Python materialization.
             return Err(wrong_type_err("date", s, instance_path));
         }
         Err(wrong_type_at_cursor(parser, "date", instance_path))
@@ -2760,8 +2764,6 @@ impl Encoder for CustomEncoder {
     ) -> SerdeResult<Bound<'py, PyAny>> {
         match self.load {
             Some(_) => {
-                // The user's `load` callable needs a Python object, so materialize
-                // first — a deliberate exception to the native streaming path.
                 let value = parse_any(py, parser, ctx)?;
                 self.load(&value, instance_path, ctx)
             }

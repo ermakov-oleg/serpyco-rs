@@ -3,7 +3,7 @@ use crate::validator::InstancePath;
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PyList, PySequence, PyString};
-use pyo3::{Bound, PyAny};
+use pyo3::{Bound, PyAny, PyErr};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -246,6 +246,25 @@ pub fn invalid_type_dump_err(type_: impl Into<Expected>, value: &Bound<'_, PyAny
             expected: type_.into(),
         },
         &InstancePath::new(),
+    )
+    .into()
+}
+
+/// [`invalid_type_dump_err`] for a mismatch inferred from a Python exception:
+/// keeps the original as `cause`, so a union still skips the member while a
+/// genuine failure reaching Python is not swallowed.
+pub fn invalid_type_dump_err_with_cause(
+    type_: impl Into<Expected>,
+    value: &Bound<'_, PyAny>,
+    cause: PyErr,
+) -> SerdeError {
+    SchemaError::deferred_with_cause(
+        Message::NotOfTypeDump {
+            value: value.clone().unbind(),
+            expected: type_.into(),
+        },
+        &InstancePath::new(),
+        cause,
     )
     .into()
 }

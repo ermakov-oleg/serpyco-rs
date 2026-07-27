@@ -148,6 +148,17 @@ impl SchemaError {
         }
     }
 
+    /// [`deferred`](Self::deferred) that also chains `cause`. For a mismatch
+    /// inferred from a Python exception: a union discards the error and the
+    /// cause with it, but anything that reaches Python carries the original.
+    pub(crate) fn deferred_with_cause(message: Message, path: &InstancePath, cause: PyErr) -> Self {
+        Self {
+            message,
+            path: path_of(path),
+            cause: Some(cause),
+        }
+    }
+
     pub(crate) fn with_cause(message: String, path: &InstancePath, cause: PyErr) -> Self {
         Self {
             message: Message::Text(message),

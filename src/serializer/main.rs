@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use pyo3::buffer::PyBuffer;
-use pyo3::exceptions::{PyKeyError, PyRuntimeError};
+use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyByteArray, PyBytes, PyDict, PyList, PyMapping, PyMemoryView, PyString};
 use pyo3::{intern, PyAny, PyResult};
@@ -35,8 +35,7 @@ pub struct Serializer {
     pub(crate) encoder: Box<TEncoder>,
     pub(crate) max_recursion_depth: usize,
     /// Byte length of the last `dump_bytes` output, used to pre-size the next
-    /// one's buffer: a fixed 1 KiB start re-grows a large payload every call.
-    /// Relaxed — a stale value from a concurrent dump only costs a re-grow.
+    /// one's buffer. Relaxed: a stale value only costs a re-grow.
     last_dump_len: AtomicUsize,
 }
 
@@ -123,10 +122,8 @@ impl Serializer {
                 parser.finish().map_err(SerdeError::into_py_err)?;
                 Ok(value)
             }
-            // On error, skip finish() and return it untouched: a schema error
-            // raised mid-structure leaves the cursor mid-document, and that error
-            // is more informative than the spurious trailing-garbage DecodeError
-            // that finish() would otherwise produce (and must not be masked by it).
+            // No finish() on error: a schema error leaves the cursor mid-document,
+            // so finish() would mask it with a spurious trailing-garbage DecodeError.
             Err(err) => Err(err.into_py_err()),
         }
     }
@@ -211,7 +208,7 @@ impl<'a> InputBuffer<'a> {
             let buffer: PyBuffer<u8> = PyBuffer::get(data)?;
             return Ok(InputBuffer::Owned(buffer.to_vec(data.py())?));
         }
-        Err(PyRuntimeError::new_err(
+        Err(PyTypeError::new_err(
             "expected bytes, bytearray, memoryview or str",
         ))
     }
@@ -313,9 +310,8 @@ pub fn get_encoder(
             let key_type = get_object_type(type_info.key_type.bind(py))?;
             let value_type = get_object_type(type_info.value_type.bind(py))?;
 
-            // A plain `str` key (no length bounds, no custom encoder) lets the
-            // streaming load path use the parsed key directly, skipping a
-            // redundant re-validate + clone per key.
+            // A plain `str` key lets the streaming load path use the parsed key
+            // directly, skipping a re-validate + clone per key.
             let key_is_plain_str = matches!(
                 &key_type,
                 Type::String(string_info, base)
@@ -537,9 +533,9 @@ fn extract_custom_encoder(
     ))
 }
 
-/// Maps JSON key (`dict_key_rs`) -> field index for non-flatten fields only, so
-/// the streaming load path routes keys straight to their encoder. Flatten fields
-/// are excluded: the streaming path is skipped entirely when any field is flattened.
+/// Maps JSON key (`dict_key_rs`) -> field index so the streaming load path routes
+/// keys straight to their encoder. Flatten fields are excluded: they consume the
+/// keys nobody claimed, which the streaming path collects separately.
 fn build_format_routing(fields: &[Field]) -> rustc_hash::FxHashMap<String, usize> {
     fields
         .iter()

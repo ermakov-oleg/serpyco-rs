@@ -52,7 +52,7 @@ obj = serializer.load(raw)
 ```
 
 - `dump(value)` returns `bytes`; `load(data)` accepts `bytes`, `bytearray`, `memoryview`, or `str`.
-- The codec can also be passed per call, overriding (or opting into) the bound format: `serializer.dump(value, codec=JSON)` / `serializer.load(raw, codec=JSON)`.
+- The codec can also be passed per call: `serializer.dump(value, codec=JSON)` / `serializer.load(raw, codec=JSON)`. This is the way to keep both modes on a single serializer — a bound codec cannot be switched off per call (`codec=None` reads as "argument omitted"), only replaced by another format.
 - Malformed input raises `DecodeError`; schema violations raise `SchemaValidationError` — the same validation as the dict-based path.
 - Only `JSON` ships today. The format layer is abstracted, and a `msgpack` codec is planned.
 
