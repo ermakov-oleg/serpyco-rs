@@ -20,10 +20,10 @@ use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::format::bridge::{
-    invalid_number_err, parse_any, parse_int_text, write_any, write_py_float, write_py_int,
+    invalid_number_err, parse_any, write_any, write_py_float, write_py_int,
     wrong_enum_at_cursor, wrong_type_at_cursor, wrong_type_err,
 };
-use crate::format::{EncodedKey, Kind, ParsedInt, Parser, Writer};
+use crate::format::{EncodedKey, Kind, ParsedInt, ParsedNumber, Parser, Writer};
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_tuple, dump_date,
     dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
@@ -397,8 +397,8 @@ impl Encoder for FloatEncoder {
         invalid_type_dump!("number", value)
     }
 
-    // Integer-shaped tokens defer to `load`, so a float field returns an int (not
-    // 1.0) for `b'1'`, like the dict path; float-shaped tokens parse directly.
+    // Integer-shaped values defer to `load`, so a float field returns an int (not
+    // 1.0) for `b'1'`, like the dict path; float-shaped values load directly.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -407,17 +407,20 @@ impl Encoder for FloatEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Num {
-            let raw = parser.take_number_str_known()?;
-            if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-                let materialized = parse_int_text(py, raw)?;
-                return self.load(&materialized, instance_path, ctx);
+            match parser.take_number_known()? {
+                ParsedNumber::Int(ParsedInt::I64(v)) => {
+                    let materialized = v.into_bound_py_any(py)?;
+                    return self.load(&materialized, instance_path, ctx);
+                }
+                ParsedNumber::Int(ParsedInt::Big(big)) => {
+                    let materialized = big.into_bound_py_any(py)?;
+                    return self.load(&materialized, instance_path, ctx);
+                }
+                ParsedNumber::F64(v) => {
+                    check_bounds!(v, self.type_info, instance_path)?;
+                    return Ok(PyFloat::new(py, v).into_any());
+                }
             }
-            if let Ok(v) = raw.parse::<f64>() {
-                check_bounds!(v, self.type_info, instance_path)?;
-                return Ok(PyFloat::new(py, v).into_any());
-            }
-            // Unreachable: jiter only yields valid JSON numbers. Safe fallback.
-            return Err(invalid_number_err(raw));
         }
         Err(wrong_type_at_cursor(parser, "number", instance_path))
     }
@@ -798,24 +801,14 @@ fn load_enum_scalar<'py>(
             let key = PyString::new(py, parser.take_str_known()?).into_any();
             load(&key, instance_path, ctx)
         }
-        Kind::Num => match parser.take_int_known() {
-            Ok(ParsedInt::I64(v)) => {
-                let key = v.into_bound_py_any(py)?;
-                load(&key, instance_path, ctx)
-            }
-            Ok(ParsedInt::Big(big)) => {
-                let key = big.into_bound_py_any(py)?;
-                load(&key, instance_path, ctx)
-            }
-            // Cursor unmoved: re-read as float, matching parse_any -> load
-            // (invalid_enum_item for a non-member).
-            Err(_) => {
-                let raw = parser.take_number_str_known()?;
-                let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
-                let key = PyFloat::new(py, v).into_any();
-                load(&key, instance_path, ctx)
-            }
-        },
+        Kind::Num => {
+            let key = match parser.take_number_known()? {
+                ParsedNumber::Int(ParsedInt::I64(v)) => v.into_bound_py_any(py)?,
+                ParsedNumber::Int(ParsedInt::Big(big)) => big.into_bound_py_any(py)?,
+                ParsedNumber::F64(v) => PyFloat::new(py, v).into_any(),
+            };
+            load(&key, instance_path, ctx)
+        }
         Kind::Bool => {
             let key = PyBool::new(py, parser.take_bool_known()?)
                 .to_owned()

@@ -3,7 +3,7 @@ use pyo3::PyErr;
 use smallvec::SmallVec;
 
 use crate::errors::{DecodeError, ToPyErr};
-use crate::format::{Kind, ParsedInt};
+use crate::format::{Kind, ParsedInt, ParsedNumber};
 use crate::serde_error::SerdeError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +97,19 @@ impl<'a> MsgpackParser<'a> {
                 self.index = pos;
                 Err(self.err_at("expected integer", pos))
             }
+        }
+    }
+
+    /// Typed number straight from the marker — no text round-trip.
+    #[inline]
+    pub(crate) fn take_number_known(&mut self) -> Result<ParsedNumber, SerdeError> {
+        match self.read_number()? {
+            Number::I64(value) => Ok(ParsedNumber::Int(ParsedInt::I64(value))),
+            Number::U64(value) => match i64::try_from(value) {
+                Ok(value) => Ok(ParsedNumber::Int(ParsedInt::I64(value))),
+                Err(_) => Ok(ParsedNumber::Int(ParsedInt::Big(BigInt::from(value)))),
+            },
+            Number::F64(value) => Ok(ParsedNumber::F64(value)),
         }
     }
 

@@ -3,7 +3,7 @@ use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyT
 use pyo3::IntoPyObjectExt;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::format::{Kind, Parser, Writer};
+use crate::format::{Kind, ParsedInt, ParsedNumber, Parser, Writer};
 use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::{Context, InstancePath};
 
@@ -52,19 +52,6 @@ pub(crate) fn invalid_number_err(raw: &str) -> SerdeError {
     SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
 }
 
-/// Integer-shaped number text (no dot/exponent) -> Python `int`, widening to a
-/// big int beyond i64.
-#[inline(always)]
-pub(crate) fn parse_int_text<'py>(py: Python<'py>, raw: &str) -> SerdeResult<Bound<'py, PyAny>> {
-    match raw.parse::<i64>() {
-        Ok(v) => Ok(v.into_bound_py_any(py)?),
-        Err(_) => {
-            let big: num_bigint::BigInt = raw.parse().map_err(|_| invalid_number_err(raw))?;
-            Ok(big.into_bound_py_any(py)?)
-        }
-    }
-}
-
 /// Stream a Python `int` to the writer: `i64` fast path, decimal-string fallback beyond i64.
 #[inline(always)]
 pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeResult<()> {
@@ -102,16 +89,11 @@ pub(crate) fn parse_any<'py>(
         Kind::Bool => Ok(PyBool::new(py, parser.take_bool_known()?)
             .to_owned()
             .into_any()),
-        Kind::Num => {
-            // Integer when there is no dot/exponent — mirrors json.loads.
-            let raw = parser.take_number_str_known()?;
-            if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-                parse_int_text(py, raw)
-            } else {
-                let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
-                Ok(PyFloat::new(py, v).into_any())
-            }
-        }
+        Kind::Num => match parser.take_number_known()? {
+            ParsedNumber::Int(ParsedInt::I64(v)) => Ok(v.into_bound_py_any(py)?),
+            ParsedNumber::Int(ParsedInt::Big(v)) => Ok(v.into_bound_py_any(py)?),
+            ParsedNumber::F64(v) => Ok(PyFloat::new(py, v).into_any()),
+        },
         Kind::Str => Ok(PyString::new(py, parser.take_str_known()?).into_any()),
         Kind::Bytes => Ok(PyBytes::new(py, parser.take_bytes_known()?).into_any()),
         Kind::Array => {

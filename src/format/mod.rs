@@ -35,6 +35,14 @@ pub(crate) enum ParsedInt {
     Big(BigInt),
 }
 
+/// Any number from the wire, already split int-vs-float by the format itself:
+/// JSON by token shape (dot/exponent), MessagePack by marker. Callers that need
+/// the exact wire text (Decimal) use `take_number_str_known` instead.
+pub(crate) enum ParsedNumber {
+    Int(ParsedInt),
+    F64(f64),
+}
+
 /// Enum dispatch instead of dyn: the set of formats is closed.
 #[derive(Debug)]
 pub(crate) enum Writer {
@@ -307,7 +315,17 @@ impl<'j> Parser<'j> {
         }
     }
 
-    /// Raw text of a number (Decimal, manual int-vs-float split).
+    /// Typed number (int-vs-float decided by the format) — the hot path for
+    /// float/Any loads; binary formats read it without going through text.
+    #[inline]
+    pub(crate) fn take_number_known(&mut self) -> Result<ParsedNumber, SerdeError> {
+        match self {
+            Parser::Json(p) => p.take_number_known(),
+            Parser::Msgpack(p) => p.take_number_known(),
+        }
+    }
+
+    /// Raw text of a number (Decimal, error rendering).
     #[inline]
     pub(crate) fn take_number_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
