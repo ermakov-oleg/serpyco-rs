@@ -23,8 +23,7 @@ use crate::format::bridge::{
     invalid_number_err, parse_any, parse_int_text, write_any, write_py_float, write_py_int,
     wrong_enum_at_cursor, wrong_type_at_cursor, wrong_type_err,
 };
-use crate::format::json::parser::ParsedInt;
-use crate::format::{EncodedKey, Kind, Parser, Writer};
+use crate::format::{EncodedKey, Kind, ParsedInt, Parser, Writer};
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_tuple, dump_date,
     dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
@@ -690,21 +689,37 @@ impl Encoder for BytesEncoder {
         }
     }
 
-    // JSON has no bytes; give a clear error, not the bridge "not serializable".
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
-        _writer: &mut Writer,
+        writer: &mut Writer,
         _ctx: &Context,
     ) -> SerdeResult<()> {
-        // Genuine bytes -> Py error (unrepresentable); anything else is a Schema
-        // mismatch, so an enclosing untagged union skips to the next member.
-        if value.cast::<PyBytes>().is_ok() {
-            return Err(SerdeError::Py(ValidationError::new_err(
-                "bytes values are not supported by this format".to_string(),
-            )));
+        if let Ok(value) = value.cast::<PyBytes>() {
+            writer
+                .write_bytes(value.as_bytes())
+                .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
+            return Ok(());
         }
         invalid_type_dump!("bytes", value)
+    }
+
+    fn load_format<'py>(
+        &self,
+        py: Python<'py>,
+        parser: &mut Parser<'_>,
+        instance_path: &InstancePath,
+        _ctx: &Context,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if parser.peek()? == Kind::Bytes {
+            return Ok(PyBytes::new(py, parser.take_bytes_known()?).into_any());
+        }
+        Err(wrong_type_at_cursor(parser, "bytes", instance_path))
+    }
+
+    #[inline]
+    fn accepts_kind(&self, kind: Kind) -> bool {
+        matches!(kind, Kind::Bytes)
     }
 }
 
@@ -2267,7 +2282,7 @@ impl Encoder for UnionEncoder {
                 Err(e @ SerdeError::Py(_)) => return Err(e),
             }
         }
-        let raw = String::from_utf8_lossy(span);
+        let raw = parser.value_repr(span)?;
         Err(wrong_type_err(&self.repr, &raw, instance_path))
     }
 

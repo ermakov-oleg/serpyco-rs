@@ -1,11 +1,15 @@
 pub(crate) mod bridge;
 pub(crate) mod json;
+pub(crate) mod msgpack;
 
+use num_bigint::BigInt;
 use pyo3::exceptions::PyValueError;
 use pyo3::PyErr;
 
-use json::parser::{JsonParser, ParsedInt};
+use json::parser::JsonParser;
 use json::writer::{Checkpoint as JsonCheckpoint, JsonWriter};
+use msgpack::parser::MsgpackParser;
+use msgpack::writer::{Checkpoint as MsgpackCheckpoint, MsgpackWriter};
 
 use crate::serde_error::SerdeError;
 
@@ -16,22 +20,33 @@ pub(crate) enum Kind {
     Bool,
     Num,
     Str,
+    Bytes,
     Array,
     Map,
 }
 
 pub(crate) const FORMAT_JSON: u8 = 0;
+pub(crate) const FORMAT_MSGPACK: u8 = 1;
+
+/// Integer from a wire format. MessagePack is capped at u64/i64, while JSON can
+/// carry arbitrary-length integer tokens.
+pub(crate) enum ParsedInt {
+    I64(i64),
+    Big(BigInt),
+}
 
 /// Enum dispatch instead of dyn: the set of formats is closed.
 #[derive(Debug)]
 pub(crate) enum Writer {
     Json(JsonWriter),
+    Msgpack(MsgpackWriter),
 }
 
 /// Opaque saved writer position, paired with `checkpoint` / `rollback`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Checkpoint {
     Json(JsonCheckpoint),
+    Msgpack(MsgpackCheckpoint),
 }
 
 /// A map key rendered once at encoder-construction time: Entity/TypedDict keys
@@ -39,12 +54,14 @@ pub(crate) enum Checkpoint {
 #[derive(Debug, Clone)]
 pub(crate) struct EncodedKey {
     json: Box<[u8]>,
+    msgpack: Box<[u8]>,
 }
 
 impl EncodedKey {
     pub(crate) fn new(key: &str) -> Self {
         EncodedKey {
             json: json::writer::encode_map_key(key),
+            msgpack: msgpack::writer::encode_map_key(key),
         }
     }
 }
@@ -55,6 +72,7 @@ impl Writer {
     pub(crate) fn with_capacity(format: u8, capacity: usize) -> Result<Self, PyErr> {
         match format {
             FORMAT_JSON => Ok(Writer::Json(JsonWriter::with_capacity(capacity))),
+            FORMAT_MSGPACK => Ok(Writer::Msgpack(MsgpackWriter::with_capacity(capacity))),
             _ => Err(PyValueError::new_err(format!(
                 "unknown format id: {format}"
             ))),
@@ -65,6 +83,7 @@ impl Writer {
     pub(crate) fn as_bytes(&self) -> &[u8] {
         match self {
             Writer::Json(w) => w.as_bytes(),
+            Writer::Msgpack(w) => w.as_bytes(),
         }
     }
 
@@ -74,6 +93,7 @@ impl Writer {
     pub(crate) fn checkpoint(&self) -> Checkpoint {
         match self {
             Writer::Json(w) => Checkpoint::Json(w.checkpoint()),
+            Writer::Msgpack(w) => Checkpoint::Msgpack(w.checkpoint()),
         }
     }
 
@@ -81,6 +101,8 @@ impl Writer {
     pub(crate) fn rollback(&mut self, cp: Checkpoint) {
         match (self, cp) {
             (Writer::Json(w), Checkpoint::Json(c)) => w.rollback(c),
+            (Writer::Msgpack(w), Checkpoint::Msgpack(c)) => w.rollback(c),
+            _ => unreachable!("checkpoint belongs to a different format"),
         }
     }
 
@@ -89,6 +111,7 @@ impl Writer {
     pub(crate) fn position(&self) -> usize {
         match self {
             Writer::Json(w) => w.position(),
+            Writer::Msgpack(w) => w.position(),
         }
     }
 
@@ -98,6 +121,7 @@ impl Writer {
     pub(crate) fn tail_is_null(&self, from: usize) -> bool {
         match self {
             Writer::Json(w) => w.tail_is_null(from),
+            Writer::Msgpack(w) => w.tail_is_null(from),
         }
     }
 
@@ -105,6 +129,7 @@ impl Writer {
     pub(crate) fn write_null(&mut self) {
         match self {
             Writer::Json(w) => w.write_null(),
+            Writer::Msgpack(w) => w.write_null(),
         }
     }
 
@@ -112,6 +137,7 @@ impl Writer {
     pub(crate) fn write_bool(&mut self, v: bool) {
         match self {
             Writer::Json(w) => w.write_bool(v),
+            Writer::Msgpack(w) => w.write_bool(v),
         }
     }
 
@@ -119,14 +145,19 @@ impl Writer {
     pub(crate) fn write_i64(&mut self, v: i64) {
         match self {
             Writer::Json(w) => w.write_i64(v),
+            Writer::Msgpack(w) => w.write_i64(v),
         }
     }
 
     /// Integer beyond i64 — decimal string (`str(int)` on the Python side).
     #[inline]
-    pub(crate) fn write_big_int(&mut self, v: &str) {
+    pub(crate) fn write_big_int(&mut self, v: &str) -> Result<(), &'static str> {
         match self {
-            Writer::Json(w) => w.write_raw_number(v),
+            Writer::Json(w) => {
+                w.write_raw_number(v);
+                Ok(())
+            }
+            Writer::Msgpack(w) => w.write_big_int(v),
         }
     }
 
@@ -135,6 +166,7 @@ impl Writer {
     pub(crate) fn write_f64(&mut self, v: f64) -> Result<(), &'static str> {
         match self {
             Writer::Json(w) => w.write_f64(v),
+            Writer::Msgpack(w) => w.write_f64(v),
         }
     }
 
@@ -142,6 +174,18 @@ impl Writer {
     pub(crate) fn write_str(&mut self, v: &str) {
         match self {
             Writer::Json(w) => w.write_str(v),
+            Writer::Msgpack(w) => w.write_str(v),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn write_bytes(&mut self, v: &[u8]) -> Result<(), &'static str> {
+        match self {
+            Writer::Json(_) => Err("bytes values are not supported by this format"),
+            Writer::Msgpack(w) => {
+                w.write_bytes(v);
+                Ok(())
+            }
         }
     }
 
@@ -149,6 +193,7 @@ impl Writer {
     pub(crate) fn begin_map(&mut self) {
         match self {
             Writer::Json(w) => w.begin_map(),
+            Writer::Msgpack(w) => w.begin_map(),
         }
     }
 
@@ -156,6 +201,7 @@ impl Writer {
     pub(crate) fn map_key(&mut self, key: &str) {
         match self {
             Writer::Json(w) => w.map_key(key),
+            Writer::Msgpack(w) => w.map_key(key),
         }
     }
 
@@ -164,6 +210,7 @@ impl Writer {
     pub(crate) fn map_key_encoded(&mut self, key: &EncodedKey) {
         match self {
             Writer::Json(w) => w.map_key_encoded(&key.json),
+            Writer::Msgpack(w) => w.map_key_encoded(&key.msgpack),
         }
     }
 
@@ -171,6 +218,7 @@ impl Writer {
     pub(crate) fn end_map(&mut self) {
         match self {
             Writer::Json(w) => w.end_map(),
+            Writer::Msgpack(w) => w.end_map(),
         }
     }
 
@@ -178,6 +226,7 @@ impl Writer {
     pub(crate) fn begin_array(&mut self) {
         match self {
             Writer::Json(w) => w.begin_array(),
+            Writer::Msgpack(w) => w.begin_array(),
         }
     }
 
@@ -186,6 +235,7 @@ impl Writer {
     pub(crate) fn item_end(&mut self) {
         match self {
             Writer::Json(w) => w.item_end(),
+            Writer::Msgpack(w) => w.item_end(),
         }
     }
 
@@ -193,6 +243,7 @@ impl Writer {
     pub(crate) fn end_array(&mut self) {
         match self {
             Writer::Json(w) => w.end_array(),
+            Writer::Msgpack(w) => w.end_array(),
         }
     }
 }
@@ -202,12 +253,14 @@ impl Writer {
 #[derive(Debug)]
 pub(crate) enum Parser<'j> {
     Json(JsonParser<'j>),
+    Msgpack(MsgpackParser<'j>),
 }
 
 impl<'j> Parser<'j> {
     pub(crate) fn new(format: u8, data: &'j [u8]) -> Result<Self, PyErr> {
         match format {
             FORMAT_JSON => Ok(Parser::Json(JsonParser::new(data))),
+            FORMAT_MSGPACK => Ok(Parser::Msgpack(MsgpackParser::new(data))),
             _ => Err(PyValueError::new_err(format!(
                 "unknown format id: {format}"
             ))),
@@ -218,6 +271,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn sub_parser(&self, data: &'j [u8]) -> Parser<'j> {
         match self {
             Parser::Json(_) => Parser::Json(JsonParser::new(data)),
+            Parser::Msgpack(_) => Parser::Msgpack(MsgpackParser::new(data)),
         }
     }
 
@@ -225,6 +279,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn peek(&mut self) -> Result<Kind, SerdeError> {
         match self {
             Parser::Json(p) => p.peek(),
+            Parser::Msgpack(p) => p.peek(),
         }
     }
 
@@ -232,6 +287,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn take_null_known(&mut self) -> Result<(), SerdeError> {
         match self {
             Parser::Json(p) => p.take_null_known(),
+            Parser::Msgpack(p) => p.take_null_known(),
         }
     }
 
@@ -239,6 +295,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn take_bool_known(&mut self) -> Result<bool, SerdeError> {
         match self {
             Parser::Json(p) => p.take_bool_known(),
+            Parser::Msgpack(p) => p.take_bool_known(),
         }
     }
 
@@ -246,6 +303,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn take_int_known(&mut self) -> Result<ParsedInt, SerdeError> {
         match self {
             Parser::Json(p) => p.take_int_known(),
+            Parser::Msgpack(p) => p.take_int_known(),
         }
     }
 
@@ -254,6 +312,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn take_number_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
             Parser::Json(p) => p.take_number_str_known(),
+            Parser::Msgpack(p) => p.take_number_str_known(),
         }
     }
 
@@ -261,6 +320,15 @@ impl<'j> Parser<'j> {
     pub(crate) fn take_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
             Parser::Json(p) => p.take_str_known(),
+            Parser::Msgpack(p) => p.take_str_known(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn take_bytes_known(&mut self) -> Result<&'j [u8], SerdeError> {
+        match self {
+            Parser::Json(_) => unreachable!("JSON never reports Kind::Bytes"),
+            Parser::Msgpack(p) => p.take_bytes_known(),
         }
     }
 
@@ -269,6 +337,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn enter_map_known(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
             Parser::Json(p) => p.enter_map_known(),
+            Parser::Msgpack(p) => p.enter_map_known(),
         }
     }
 
@@ -277,6 +346,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn enter_array_known(&mut self) -> Result<bool, SerdeError> {
         match self {
             Parser::Json(p) => p.enter_array_known(),
+            Parser::Msgpack(p) => p.enter_array_known(),
         }
     }
 
@@ -285,6 +355,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn enter_map(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
             Parser::Json(p) => p.enter_map(),
+            Parser::Msgpack(p) => p.enter_map(),
         }
     }
 
@@ -293,6 +364,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn next_key(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
             Parser::Json(p) => p.next_key(),
+            Parser::Msgpack(p) => p.next_key(),
         }
     }
 
@@ -301,6 +373,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn next_array_item(&mut self) -> Result<bool, SerdeError> {
         match self {
             Parser::Json(p) => p.next_array_item(),
+            Parser::Msgpack(p) => p.next_array_item(),
         }
     }
 
@@ -308,6 +381,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn skip_value(&mut self) -> Result<(), SerdeError> {
         match self {
             Parser::Json(p) => p.skip_value(),
+            Parser::Msgpack(p) => p.skip_value(),
         }
     }
 
@@ -316,6 +390,26 @@ impl<'j> Parser<'j> {
     pub(crate) fn take_raw_value(&mut self) -> Result<&'j [u8], SerdeError> {
         match self {
             Parser::Json(p) => p.take_raw_value(),
+            Parser::Msgpack(p) => p.take_raw_value(),
+        }
+    }
+
+    /// Consume one value and render it for a schema error. JSON keeps its raw
+    /// wire text; MessagePack reconstructs the equivalent Python-style value.
+    #[inline]
+    pub(crate) fn take_value_repr(&mut self) -> Result<String, SerdeError> {
+        match self {
+            Parser::Json(p) => Ok(String::from_utf8_lossy(p.take_raw_value()?).into_owned()),
+            Parser::Msgpack(p) => p.take_value_repr(),
+        }
+    }
+
+    /// Render an already captured value span without affecting this parser.
+    #[inline]
+    pub(crate) fn value_repr(&self, data: &'j [u8]) -> Result<String, SerdeError> {
+        match self {
+            Parser::Json(_) => Ok(String::from_utf8_lossy(data).into_owned()),
+            Parser::Msgpack(_) => MsgpackParser::new(data).take_value_repr(),
         }
     }
 
@@ -324,6 +418,7 @@ impl<'j> Parser<'j> {
     pub(crate) fn finish(&mut self) -> Result<(), SerdeError> {
         match self {
             Parser::Json(p) => p.finish(),
+            Parser::Msgpack(p) => p.finish(),
         }
     }
 }

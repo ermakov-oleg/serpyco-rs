@@ -7,7 +7,7 @@ from typing import Optional, Union
 
 import pytest
 
-from serpyco_rs import JSON, Codec, Serializer
+from serpyco_rs import JSON, MSGPACK, Codec, Serializer
 
 from .utils import repeat
 
@@ -16,7 +16,7 @@ from .utils import repeat
 # here — every benchmark below is already parametrized over this list, and each
 # id is derived from the codec itself, so `[json]` keeps its id and CodSpeed
 # history when `[msgpack]` shows up alongside it.
-CODECS = [JSON]
+CODECS = [JSON, MSGPACK]
 
 
 def _codec_id(codec: Codec) -> str:

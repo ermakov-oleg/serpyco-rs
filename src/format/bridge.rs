@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use crate::errors::{ToPyErr, ValidationError};
@@ -26,8 +26,8 @@ pub(crate) fn wrong_type_at_cursor(
     expected: &str,
     path: &InstancePath,
 ) -> SerdeError {
-    match parser.take_raw_value() {
-        Ok(raw) => wrong_type_err(expected, &String::from_utf8_lossy(raw), path),
+    match parser.take_value_repr() {
+        Ok(raw) => wrong_type_err(expected, &raw, path),
         Err(e) => e,
     }
 }
@@ -39,8 +39,8 @@ pub(crate) fn wrong_enum_at_cursor(
     items: &str,
     path: &InstancePath,
 ) -> SerdeError {
-    match parser.take_raw_value() {
-        Ok(raw) => wrong_enum_err(items, &String::from_utf8_lossy(raw), path),
+    match parser.take_value_repr() {
+        Ok(raw) => wrong_enum_err(items, &raw, path),
         Err(e) => e,
     }
 }
@@ -70,7 +70,9 @@ pub(crate) fn parse_int_text<'py>(py: Python<'py>, raw: &str) -> SerdeResult<Bou
 pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeResult<()> {
     match v.extract::<i64>() {
         Ok(i) => writer.write_i64(i),
-        Err(_) => writer.write_big_int(v.str()?.to_str()?),
+        Err(_) => writer
+            .write_big_int(v.str()?.to_str()?)
+            .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?,
     }
     Ok(())
 }
@@ -111,6 +113,7 @@ pub(crate) fn parse_any<'py>(
             }
         }
         Kind::Str => Ok(PyString::new(py, parser.take_str_known()?).into_any()),
+        Kind::Bytes => Ok(PyBytes::new(py, parser.take_bytes_known()?).into_any()),
         Kind::Array => {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
             if parser.enter_array_known()? {
@@ -166,6 +169,12 @@ pub(crate) fn write_any(
     }
     if let Ok(v) = value.cast::<PyString>() {
         writer.write_str(v.to_str()?);
+        return Ok(());
+    }
+    if let Ok(v) = value.cast::<PyBytes>() {
+        writer
+            .write_bytes(v.as_bytes())
+            .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
         return Ok(());
     }
     if let Ok(list) = value.cast::<PyList>() {

@@ -1,16 +1,9 @@
 use jiter::{Jiter, JiterError, JiterErrorType, JsonErrorType, NumberInt, Peek};
-use num_bigint::BigInt;
 use pyo3::PyErr;
 
 use crate::errors::{DecodeError, ToPyErr};
-use crate::format::Kind;
+use crate::format::{Kind, ParsedInt};
 use crate::serde_error::SerdeError;
-
-/// Integer from the stream: JSON allows arbitrary-length numbers.
-pub(crate) enum ParsedInt {
-    I64(i64),
-    Big(BigInt),
-}
 
 /// Pull-parser over jiter. Syntax errors map to `DecodeError`; schema mismatches are
 /// the encoders' job. `*_known` readers are valid only immediately after a `peek()`;
