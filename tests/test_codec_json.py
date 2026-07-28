@@ -17,11 +17,9 @@ from serpyco_rs._custom_types import CustomType
 from serpyco_rs.metadata import CustomEncoder, Discriminator, Flatten, Max, MaxLength, Min, MinLength
 
 
-# One codec per supported byte format. Adding msgpack later is exactly one entry
-# here — every codec-agnostic test below is already parametrized over this list,
-# and each id is derived from the codec itself. Mirrors bench/test_codec_encoders.py
-# (`CODECS` / `_codec_id` / `parametrize_codec`) on purpose: keeping the two files
-# consistent matters more than inventing a nicer scheme here.
+# One entry per supported byte format; every codec-agnostic test below is already
+# parametrized over this list. Mirrors bench/test_codec_encoders.py's CODECS/_codec_id
+# on purpose, so adding msgpack later means updating one list, not two schemes.
 CODECS = [JSON]
 
 
@@ -33,16 +31,12 @@ parametrize_codec = pytest.mark.parametrize('codec', CODECS, ids=_codec_id)
 
 
 def _dump_any(codec: Codec, value: Any) -> bytes:
-    """Encode an arbitrary Python value to `codec`'s wire bytes through the generic
-    Any bridge. Stands in for a format-specific literal (`json.dumps`) so a
-    codec-agnostic test can build `load()` input without assuming JSON's syntax."""
+    """Codec-agnostic stand-in for `json.dumps`: builds `load()` input without assuming JSON's syntax."""
     return Serializer(Any, codec=codec).dump(value)
 
 
 def _load_any(codec: Codec, raw: bytes) -> Any:
-    """Decode `codec` wire bytes back to a plain Python structure through the generic
-    Any bridge. Stands in for `json.loads` so a codec-agnostic test can inspect a
-    dump's shape without assuming JSON's syntax."""
+    """Codec-agnostic stand-in for `json.loads`: inspects a dump's shape without assuming JSON's syntax."""
     return Serializer(Any, codec=codec).load(raw)
 
 
@@ -100,8 +94,6 @@ EVERYTHING = Everything(
 )
 
 
-# --- Models reused by the parity sweeps below ---------------------------------
-
 T = TypeVar('T')
 
 
@@ -138,13 +130,11 @@ class Outer:
     inner: Inner
 
 
-# CustomType needs a custom_type_resolver kwarg the parametrized signature cannot
-# pass, so the sweep goes through CustomEncoder on a known base type instead.
-# test_custom_type_resolver_parity covers the real CustomType path.
+# CustomType needs a custom_type_resolver kwarg the parametrized signature can't pass,
+# so the sweep uses CustomEncoder instead; test_custom_type_resolver_parity covers CustomType.
 UpperStr = Annotated[str, CustomEncoder(serialize=str.upper, deserialize=str.lower)]
 
 
-# Untagged / discriminated union members (module-level for parametrization).
 @dataclass
 class UP:
     name: str
@@ -177,7 +167,6 @@ PetT = Annotated[Union[UCat, UDog], Discriminator('kind')]
 
 
 PARITY_CASES: list[tuple[Any, Any]] = [
-    # scalars
     (int, 42),
     (int, -(2**63)),  # i64 lower boundary
     (Any, 2**100),  # big int is fine inside Any (not a plain int field)
@@ -194,33 +183,30 @@ PARITY_CASES: list[tuple[Any, Any]] = [
     (date, date(2026, 7, 23)),
     (time, time(12, 30, 0)),
     (datetime, datetime(2026, 7, 23, 12, 30, 0, tzinfo=timezone.utc)),
-    (Color, Color.RED),  # enum by value
+    (Color, Color.RED),
     (Color, Color.GREEN),
-    (Literal['foo', 'bar'], 'foo'),  # literal
-    # containers
+    (Literal['foo', 'bar'], 'foo'),
     (list[int], [1, 2, 3]),
     (dict[str, int], {'a': 1, 'b': 2}),
     (tuple[int, str], (1, 'x')),  # tuple -> list on the wire, tuple back
     (tuple[int, str, float], (1, 'x', 0.5)),
-    (list[dict[str, list[int]]], [{'a': [1, 2]}, {'b': []}]),  # deeply nested
-    (Optional[list[Optional[int]]], [1, None, 2]),  # optional chain
+    (list[dict[str, list[int]]], [{'a': [1, 2]}, {'b': []}]),
+    (Optional[list[Optional[int]]], [1, None, 2]),
     (Optional[list[Optional[int]]], None),
-    # dataclasses / generics / recursion / typeddict / custom encoder
     (Inner, Inner(name='inner', score=0.5)),
-    (Everything, EVERYTHING),  # big nested dataclass
-    (GenericBox[bool], GenericBox(value=True, path='some_path')),  # generic dataclass
-    (GenericBox[Pair], GenericBox(value=Pair(q='q', w=1), path='p')),  # generic w/ nested dc
+    (Everything, EVERYTHING),
+    (GenericBox[bool], GenericBox(value=True, path='some_path')),
+    (GenericBox[Pair], GenericBox(value=Pair(q='q', w=1), path='p')),
     (GenericBox[int], GenericBox(value=1)),
-    (Node, Node(value='1', next=Node(value='2'))),  # recursive
+    (Node, Node(value='1', next=Node(value='2'))),
     (Root, Root(head=Node(value='a', next=None))),
-    (MovieTD, {'name': 'Blade Runner', 'year': 1982}),  # TypedDict
-    (UpperStr, 'abc'),  # custom encoder through both paths
+    (MovieTD, {'name': 'Blade Runner', 'year': 1982}),
+    (UpperStr, 'abc'),
 ]
 
 
-# Untagged-union dump is quirky by design (the dict path returns the object
-# unchanged and can even raise for A|B), so unions are proven with round-trip
-# parity only, never dump-equality against the dict path.
+# Untagged-union dump is quirky by design (dict path returns the object unchanged, and
+# can even raise for A|B), so unions get round-trip parity only, never dump-equality.
 ROUNDTRIP_ONLY_CASES: list[tuple[Any, Any]] = [
     (int | str, 5),
     (int | str, 'hello'),
@@ -228,46 +214,37 @@ ROUNDTRIP_ONLY_CASES: list[tuple[Any, Any]] = [
     (int | UP, 7),
     (UA | UB, UA(a=1)),
     (UA | UB, UB(b='x')),
-    (PetT, UCat(kind='cat', meow='m')),  # discriminated union
+    (PetT, UCat(kind='cat', meow='m')),
     (PetT, UDog(kind='dog', bark='woof')),
 ]
 
 
-# Each case fails validation on the dict path; the codec path must produce the
-# identical (message, instance_path) list. Single-invalid-field cases only, so
-# wire order vs field order never matters. Excluded: union all-fail (message
-# carries a naming counter, see test_union_all_fail_parity), big-int-for-plain-int
-# (a deliberate divergence), and float-for-int (deliberate divergence, parity
-# waived by reviewer — see test_int_rejects_float_for_int_message_divergence).
+# Single-invalid-field cases only (wire order vs field order never matters). Excluded:
+# union all-fail (naming counter, see test_union_all_fail_parity), big-int-for-plain-int
+# and float-for-int (deliberate divergences — see test_int_rejects_float_for_int_message_divergence).
 ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
-    (int, '1'),  # wrong scalar type
+    (int, '1'),
     (str, 1),
-    (list[int], [2, 3, 'foo']),  # array element error with index path
-    (dict[str, int], {'foo': 1, 'bar': '2'}),  # dict value error with key path
-    (Inner, {'name': 'x'}),  # missing required field
-    (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),  # nested field error path
-    (Annotated[int, Min(10), Max(100)], 1),  # below Min
-    (Annotated[int, Min(10), Max(100)], 101),  # above Max
-    (Annotated[str, MinLength(6), MaxLength(8)], 'hi'),  # below MinLength
-    (Annotated[str, MinLength(6), MaxLength(8)], 'hello world'),  # above MaxLength
-    (Color, 'blue'),  # enum invalid value
-    (Literal['foo', 'bar'], 1),  # literal invalid value
-    (tuple[int, str], [1, 2]),  # tuple element type
-    (tuple[int, str], [1]),  # tuple too short
-    (tuple[int, str], [1, 'x', 3]),  # tuple too long
+    (list[int], [2, 3, 'foo']),
+    (dict[str, int], {'foo': 1, 'bar': '2'}),
+    (Inner, {'name': 'x'}),
+    (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),
+    (Annotated[int, Min(10), Max(100)], 1),
+    (Annotated[int, Min(10), Max(100)], 101),
+    (Annotated[str, MinLength(6), MaxLength(8)], 'hi'),
+    (Annotated[str, MinLength(6), MaxLength(8)], 'hello world'),
+    (Color, 'blue'),
+    (Literal['foo', 'bar'], 1),
+    (tuple[int, str], [1, 2]),
+    (tuple[int, str], [1]),
+    (tuple[int, str], [1, 'x', 3]),
 ]
 
 
 # ==============================================================================
-# Codec-agnostic tests
-#
-# Parametrized over CODECS via `parametrize_codec` (currently just JSON — adding
-# msgpack later means adding one entry to CODECS, not touching these tests).
-# Wire bytes for `load()` are built via `_dump_any` and inspected via `_load_any`,
-# both routed through the codec's own generic Any bridge, so nothing here assumes
-# JSON's specific grammar. Tests that genuinely need JSON's own syntax (raw byte
-# literals, escaping, malformed-input recovery, exact dump bytes) live in the
-# JSON-specific section below instead.
+# Codec-agnostic tests: parametrized over CODECS (currently just JSON). Wire bytes
+# go through `_dump_any`/`_load_any` so nothing here assumes JSON's grammar; tests
+# that genuinely need JSON's own syntax live in the JSON-specific section below.
 # ==============================================================================
 
 
@@ -276,9 +253,8 @@ def test_decode_error_exported():
 
 
 def test_codec_is_not_an_extension_point():
-    # Format ids live in the Rust core, so a user-defined Codec can never work;
-    # fail at class definition with a clear message instead of AttributeError
-    # (or `ValueError: unknown format id`) at the first dump.
+    # Format ids live in the Rust core, so a subclass fails at class definition with a
+    # clear message instead of AttributeError/ValueError at the first dump.
     with pytest.raises(TypeError, match='not an extension point'):
 
         class MyCodec(serpyco_rs.Codec):
@@ -372,11 +348,10 @@ def test_scalar_edges(codec):
     assert s_int.load(_dump_any(codec, -(2**63))) == -(2**63)
 
     with pytest.raises(SchemaValidationError):
-        s_int.load(_dump_any(codec, 1.5))  # float is not a valid int -> schema error, NOT DecodeError
+        s_int.load(_dump_any(codec, 1.5))  # float is not a valid int -> schema error, not DecodeError
 
     s_float = Serializer(float, codec=codec)
-    # An integer wire value in a float field returns an int, exactly like the dict
-    # path (equality 1 == 1.0 holds; the point is the int type matches the dict path).
+    # integer wire value in a float field returns an int, exactly like the dict path
     dict_result = Serializer(float).load(1)
     codec_result = s_float.load(_dump_any(codec, 1))
     assert codec_result == dict_result
@@ -414,7 +389,6 @@ def test_array_element_error_path(codec):
     s = Serializer(list[int], codec=codec)
     with pytest.raises(SchemaValidationError) as e:
         s.load(_dump_any(codec, [1, 'bad', 3]))
-    # element error must carry the index path, exactly like the dict path
     dict_s = Serializer(list[int])
     with pytest.raises(SchemaValidationError) as d:
         dict_s.load([1, 'bad', 3])
@@ -434,7 +408,7 @@ def test_entity_unknown_keys_skipped(codec):
 def test_entity_missing_required_error_parity(codec):
     s = Serializer(Inner)
     sc = Serializer(Inner, codec=codec)
-    bad = {'name': 'x'}  # missing score
+    bad = {'name': 'x'}
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
@@ -600,9 +574,8 @@ def test_flatten_dict_only_parity_codec(codec):
 
 @parametrize_codec
 def test_flatten_nested_parity_codec(codec):
-    # A flatten field whose own type contains a flatten field: the outer stream
-    # collects unknowns for `address`, then `Address.load` (dict path, unaffected
-    # by streaming) recurses into its own `geo` flatten field.
+    # A flatten field whose own type itself has a flatten field: the outer stream
+    # collects unknowns for `address`, then `Address.load` recurses into `geo` normally.
     @dataclass
     class GeoInfo:
         lat: float
@@ -675,14 +648,10 @@ def test_flatten_extra_unknown_keys_parity_codec(codec):
 
 @parametrize_codec
 def test_flatten_nested_dict_catchall_key_overlap_divergence_codec(codec):
-    # Pre-existing (not introduced by the codec work) divergence between the two
-    # load paths on VALID input, when a nested Flatten struct itself has a dict
-    # catch-all: the dict path re-passes the *entire* raw mapping down into
-    # `Inner.load`, so a key already claimed by `Outer.a` is also visible to (and
-    # lands in) `Inner`'s own catch-all. The streaming codec path routes each wire
-    # key to exactly one destination, so `a` is consumed once by `Outer` and never
-    # reaches `Inner.rest`. This pins BOTH current behaviors; it does not assert
-    # they agree, and is not something to fix here.
+    # Pre-existing divergence (not introduced by this PR): the dict path re-passes the
+    # entire raw mapping into `Inner.load`, so a key already claimed by `Outer.a` also
+    # lands in `Inner`'s catch-all; the streaming path routes each key to one destination
+    # only. Pins both current behaviors — not asserting they agree, not a bug to fix here.
     @dataclass
     class Inner:
         x: int
@@ -703,8 +672,7 @@ def test_flatten_nested_dict_catchall_key_overlap_divergence_codec(codec):
 
 @parametrize_codec
 def test_flatten_struct_only_extra_key_dropped_parity_codec(codec):
-    # With no dict-flatten catch-all, a truly unrecognized key is silently
-    # dropped (same as the dict path: Address.load never looks it up).
+    # No dict-flatten catch-all here, so an unrecognized key is silently dropped (same as the dict path).
     @dataclass
     class Address:
         street: str
@@ -907,9 +875,8 @@ def test_union_codec(codec):
     assert s.load(_dump_any(codec, {'name': 'n', 'score': 1.0})) == P(name='n', score=1.0)
     # discriminator-free container with extra keys still round-trips to the entity
     assert s.load(_dump_any(codec, {'score': 2.5, 'name': 'z'})) == P(name='z', score=2.5)
-    # round-trip of primitive members (dataclass dump inside an untagged union is a
-    # pre-existing dict-path behavior returning the object unchanged, so it is not
-    # serializable via a byte codec; only the streaming load path is in scope here)
+    # round-trip of primitive members (dataclass dump inside an untagged union returns the
+    # object unchanged on the dict path, so it's not serializable via a byte codec here)
     assert s.load(s.dump(5)) == 5
     assert s.load(s.dump('x')) == 'x'
 
@@ -917,12 +884,9 @@ def test_union_codec(codec):
 @parametrize_codec
 def test_union_all_fail_parity(codec):
     def type_suffix(msg):
-        # The message is "<repr of the offending value> is not of type <name>".
-        # Only the suffix is comparable across paths: the value repr differs
-        # (raw wire bytes on the codec path vs Python repr() on the dict path,
-        # same mismatch as test_flatten_wrong_type_error_parity_codec), and the
-        # second Serializer built for one type gets a disambiguation counter in
-        # the union's name ("int | str" vs "int | str1"); strip both.
+        # Only the "is not of type <name>" suffix is comparable across paths: the value
+        # repr differs (raw wire bytes vs Python repr()), and a second Serializer for the
+        # same type gets a disambiguation counter ("int | str1"); strip both.
         return re.sub(r'\d*"$', '"', msg.split('is not of type', 1)[-1])
 
     s = Serializer(int | str)
@@ -978,7 +942,6 @@ def test_untagged_union_dump_entity(codec):
     data = s.dump(P(name='n', score=1.5))
     assert _load_any(codec, data) == {'name': 'n', 'score': 1.5}
     assert s.load(data) == P(name='n', score=1.5)
-    # scalar member still dumps correctly
     assert _load_any(codec, s.dump(7)) == 7
     assert s.load(s.dump(7)) == 7
 
@@ -998,12 +961,7 @@ def test_untagged_union_dump_roundtrip_both_orders(codec):
     assert s.load(s.dump(B(b='x'))) == B(b='x')
 
 
-# --- parity sweeps ------------------------------------------------------------
-#
-# Every case is dumped through both paths (codec output decoded via the generic
-# Any bridge vs. the dict-path dump) and round-tripped through the codec.
-# Intentional divergences are excluded: big int in a plain int field, untagged-
-# union dump, dump-side type coercion.
+# --- parity sweeps: dumped/round-tripped through PARITY_CASES/ROUNDTRIP_ONLY_CASES above ---
 
 
 @parametrize_codec
@@ -1030,9 +988,8 @@ def test_parity_roundtrip_only(typ, value, codec):
 
 @parametrize_codec
 def test_custom_type_resolver_parity(codec):
-    # CustomType needs a custom_type_resolver (a Serializer kwarg), which the
-    # parametrized PARITY_CASES signature cannot supply, so its dump/round-trip
-    # parity is checked directly here.
+    # custom_type_resolver is a Serializer kwarg the parametrized PARITY_CASES signature
+    # can't supply, so this case is checked directly instead of joining that sweep.
     class IPv4Type(CustomType[IPv4Address, str]):
         def serialize(self, value: IPv4Address) -> str:
             return str(value)
@@ -1073,8 +1030,7 @@ def test_error_parity(typ, bad, codec):
 
 @parametrize_codec
 def test_load_rejects_unsupported_input_type(codec):
-    # A wrong argument type is a TypeError, not a RuntimeError, so callers can
-    # write `except TypeError` around the boundary.
+    # Wrong argument type is TypeError, not RuntimeError, so callers can `except TypeError`.
     s = Serializer(int, codec=codec)
     for bad in (123, None, {'a': 1}, [1]):
         with pytest.raises(TypeError):
@@ -1083,9 +1039,9 @@ def test_load_rejects_unsupported_input_type(codec):
 
 @parametrize_codec
 def test_bound_codec_cannot_be_disabled_per_call(codec):
-    # A per-call codec selects a format, it does not switch the dict path back on:
-    # `codec=None` is indistinguishable from "argument omitted". Keeping both modes
-    # is done by NOT binding a codec and passing it per call (checked below).
+    # A per-call codec selects a format; it does not switch the dict path back on —
+    # `codec=None` is indistinguishable from "omitted". Keeping both modes means NOT
+    # binding a codec and passing it per call instead (checked below).
     @dataclass
     class M:
         a: int
@@ -1106,8 +1062,8 @@ def test_bound_codec_cannot_be_disabled_per_call(codec):
 
 @parametrize_codec
 def test_codec_entity_dump_attribute_error_is_chained(codec):
-    # Same as the dict path: a broken property must not be silently reinterpreted
-    # as "wrong shape" — the original AttributeError stays reachable as __cause__.
+    # Same as the dict path: a broken property isn't reinterpreted as "wrong shape" —
+    # the original AttributeError stays reachable as __cause__.
     @dataclass
     class Bar:
         a: int
@@ -1133,9 +1089,8 @@ def test_codec_entity_dump_attribute_error_is_chained(codec):
 
 @parametrize_codec
 def test_codec_int_dump_accepts_int_subclass(codec):
-    # An `int` subclass (IntEnum/IntFlag) on an `int` field must dump like the
-    # dict path does; only `bool` stays rejected. Mirrors StringEncoder, which
-    # already accepts `str` subclasses (StrEnum).
+    # An `int` subclass (IntEnum/IntFlag) must dump like the dict path; only `bool` stays
+    # rejected. Mirrors StringEncoder already accepting `str` subclasses (StrEnum).
     class Level(IntEnum):
         LOW = 1
 
@@ -1182,19 +1137,17 @@ def test_codec_dict_omit_none_validates_key(codec):
     sd = Serializer(dict[Color, Optional[int]], omit_none=True)
     bad = {'not_a_color': None}
     with pytest.raises(serpyco_rs.SchemaValidationError):
-        sd.dump(bad)  # dict path validates the key
+        sd.dump(bad)
     with pytest.raises(serpyco_rs.SchemaValidationError):
         s.dump(bad)  # codec must too (currently returns an empty object)
-    # valid case still omits None values and dumps present ones
     assert s.load(s.dump({Color.RED: None})) == {}
     assert _load_any(codec, s.dump({Color.RED: 5})) == {'red': 5}
 
 
 @parametrize_codec
 def test_union_kind_narrowing_reads_off_the_cursor(codec):
-    # A union whose members occupy distinct wire kinds is resolved by the kind
-    # alone: the sole viable member reads straight off the cursor (no skip pass,
-    # no re-parse), and every member still round-trips.
+    # A union whose members occupy distinct wire kinds is resolved by kind alone: the
+    # sole viable member reads straight off the cursor (no skip pass, no re-parse).
     @dataclass
     class P:
         name: str
@@ -1212,9 +1165,8 @@ def test_union_kind_narrowing_reads_off_the_cursor(codec):
 
 @parametrize_codec
 def test_union_kind_narrowing_error_is_the_member_error(codec):
-    # With one viable member, its error surfaces as-is: the path points at the
-    # offending field instead of the union root. This is a deliberate divergence
-    # from the dict path, which reports "nothing matched" at the root.
+    # With one viable member, its error surfaces as-is (path points at the field, not
+    # the union root) — deliberate divergence from the dict path's root-level report.
     @dataclass
     class P:
         foo: int
@@ -1250,10 +1202,9 @@ def test_union_kind_narrowing_keeps_optional_and_nested_members(codec):
 
 @parametrize_codec
 def test_entity_load_key_order_independent(codec):
-    # The streaming load path guesses that keys arrive in schema order; a shuffled
-    # or unknown-key-interleaved document must load identically. (A literal
-    # *duplicate* key can't be built from a Python dict — see
-    # test_entity_load_duplicate_key_last_wins in the JSON-specific section.)
+    # The streaming load path guesses keys arrive in schema order; a shuffled or
+    # unknown-key-interleaved document must load identically (duplicate-key case:
+    # test_entity_load_duplicate_key_last_wins, needs raw JSON, not a dict).
     @dataclass
     class M:
         a: int
@@ -1277,28 +1228,19 @@ def test_entity_load_key_order_independent(codec):
 
 
 # ==============================================================================
-# JSON-specific tests
-#
-# These test JSON's own wire grammar directly: raw byte literals, malformed-
-# input recovery, string-escape decoding, or an exact dump byte string. None of
-# that generalizes to another format, so it is left hardcoded to JSON rather
-# than forced through the _dump_any/_load_any helpers above.
+# JSON-specific tests: raw byte literals, malformed-input recovery, string-escape
+# decoding, exact dump bytes — none of it generalizes, so it's hardcoded to JSON
+# rather than forced through the _dump_any/_load_any helpers above.
 # ==============================================================================
 
 
 @pytest.mark.parametrize(('typ', 'value'), PARITY_CASES)
 def test_parity_dump_json_oracle(typ, value):
-    # test_parity_dump (codec-agnostic section) checks codec-dump == dict-dump
-    # by decoding both sides through `_load_any`, which routes through the same
-    # low-level Parser/Writer primitives (take_str_known, write_f64, ...) the
-    # typed encoders use. That makes it a self-consistency check, not an
-    # independent one: a bug shared by both sides of a primitive (e.g. string
-    # escaping, float formatting) couldn't be caught there. Re-run the same
-    # comparison here with `json.loads` — CPython's independently implemented
-    # JSON parser — standing in for `_load_any`, across the same PARITY_CASES
-    # matrix, so the whole type matrix still has an independent oracle for at
-    # least one codec. (This also covers the single EVERYTHING/Everything case
-    # from test_dump_codec_matches_dict_path, which is one of PARITY_CASES.)
+    # test_parity_dump decodes both sides via `_load_any`, which shares low-level
+    # Parser/Writer primitives with the encoders under test — a self-consistency
+    # check, not independent (a shared string-escaping/float-formatting bug would
+    # slip through). Re-run with `json.loads`, CPython's independent JSON parser,
+    # as a real oracle for the same matrix.
     s = Serializer(typ)
     sc = Serializer(typ, codec=JSON)
     assert json.loads(sc.dump(value)) == s.dump(value)
@@ -1312,33 +1254,30 @@ def test_malformed_json_raises_decode_error():
 
 
 def test_nan_raises():
-    # NaN/Infinity have no representation in the JSON grammar; a future binary
-    # codec's float type could legitimately accept them (IEEE-754 doubles do),
-    # so this rejection is a JSON-specific constraint, not a general one.
+    # NaN/Infinity have no representation in JSON's grammar; a future binary codec's
+    # float type could legitimately accept them (IEEE-754 doubles do) — JSON-specific, not general.
     s = Serializer(float, codec=JSON)
     with pytest.raises(ValidationError):
         s.dump(float('nan'))
 
 
 def test_scalar_edges_json_specific():
-    # Pieces of the scalar-edges sweep that are inherently about JSON's textual
-    # grammar and cannot be phrased through another format's wire form.
+    # Pieces of scalar-edges that are inherently about JSON's textual grammar and
+    # cannot be phrased through another format's wire form.
     s_str = Serializer(str, codec=JSON)
-    # Backslash-n and backslash-u0000 are JSON string-escape syntax; a binary
-    # codec's strings are raw UTF-8 with no such escape grammar to decode.
+    # \n and \u0000 are JSON string-escape syntax; a binary codec's strings are raw
+    # UTF-8 with no such escape grammar to decode.
     assert s_str.load('"a\\nb\\u0000"'.encode()) == 'a\nb\x00'
 
     s_dec = Serializer(Decimal, codec=JSON)
-    # An *unquoted* JSON number token: precision comes straight from the raw
-    # source text, not through a lossy float64 round-trip. A binary codec has no
-    # raw text to preserve for a number in the first place.
-    assert s_dec.load(b'1.1') == Decimal('1.1')  # precision from raw text, not repr(float)
+    # Unquoted JSON number token: precision comes from raw source text, not a lossy
+    # float64 round-trip. A binary codec has no raw text to preserve for a number.
+    assert s_dec.load(b'1.1') == Decimal('1.1')
 
 
 def test_recursion_depth_codec():
-    # The nested-array bytes are crafted directly (not via dump) because dump
-    # enforces the same recursion guard the load path is being tested here, so
-    # going through dump first would fail before load is ever reached.
+    # Bytes are crafted directly, not via dump: dump enforces the same recursion guard
+    # being tested here, so going through it first would fail before load is reached.
     s = Serializer(Any, codec=JSON)
     deep = b'[' * 2000 + b'1' + b']' * 2000
     with pytest.raises(RecursionError):
@@ -1346,34 +1285,24 @@ def test_recursion_depth_codec():
 
 
 def test_load_json_accepts_str():
-    # `load` also accepts `str`: its UTF-8 bytes are reinterpreted as the wire
-    # buffer directly. That is only meaningful for a text-based format — JSON's
-    # own dump output is valid UTF-8 and round-trips through str, but a binary
-    # codec's bytes would generally not decode as str at all.
+    # `load` also accepts `str` (UTF-8 bytes reinterpreted as the wire buffer) — only
+    # meaningful for a text format; a binary codec's bytes wouldn't decode as str at all.
     s = Serializer(Inner, codec=JSON)
     raw = s.dump(Inner(name='x', score=1.0))
     assert s.load(raw.decode()) == Inner(name='x', score=1.0)
 
 
-# IntEncoder::load_format's float branch never accepts a float for an int field:
-# `Err(_)` on `take_int_known` re-reads the same token as raw text and builds the
-# SchemaValidationError natively from that text (see the comment on that branch,
-# and src/format/bridge.rs::wrong_type_err) — no PyFloat materialization, no
-# delegation to `load()`. The dict path instead renders Python's `str()` of the
-# *parsed* float value (`fmt_py`). The two texts happen to agree for a plain
-# decimal wire form (`1.5`, `1.0`, `-0.0` all equal their own `str()`), but
-# diverge whenever JSON's number grammar disagrees with Python's float repr:
-# exponent notation, an extreme exponent that overflows/underflows, or a long
-# low-precision mantissa Python reprs more compactly. These cases use raw wire
-# bytes rather than `json.dumps(python_value)` (or `_dump_any`, which goes
-# through the same dump-side float writer) because that round-trip would
-# normalize the exponent/precision away before it ever reached the wire.
+# IntEncoder::load_format's float branch re-reads the raw token as text and builds the
+# error natively (src/format/bridge.rs::wrong_type_err) — no PyFloat materialization. The
+# dict path instead renders Python's str() of the parsed float. Both agree for a plain
+# decimal (`1.5`, `-0.0`) but diverge whenever JSON's number grammar disagrees with
+# Python's float repr (exponents, overflow/underflow, long mantissas) — hence raw wire
+# bytes here instead of a dump round-trip, which would normalize that away before the
+# wire ever saw it.
 #
-# The reviewer explicitly waived error-message parity for this whole case (crit
-# round 2, task 10: "не надо нам такой парити по ошибкам поддерживать") — this
-# test pins the actual current behavior of BOTH paths, match or not; it is not
-# asserting they *should* match, and a change in either direction here is not
-# something to "fix" back to enforce equality.
+# Reviewer explicitly waived error-message parity for this case (crit round 2, task 10).
+# This test pins BOTH paths' actual current behavior, match or not — not asserting they
+# should match, and not something to "fix" back into agreement.
 @pytest.mark.parametrize(
     ('raw', 'equivalent_value', 'messages_match'),
     [
@@ -1396,18 +1325,15 @@ def test_int_rejects_float_for_int_message_divergence(raw, equivalent_value, mes
         sc.load(raw)
     dict_result = [(e.message, e.instance_path) for e in dict_err.value.errors]
     codec_result = [(e.message, e.instance_path) for e in codec_err.value.errors]
-    # codec message always splices in the raw wire text verbatim, never a
-    # materialized-and-reformatted float.
+    # codec message always splices in the raw wire text verbatim, never a reformatted float.
     assert codec_result == [(f'{raw.decode()} is not of type "integer"', '')]
     assert (codec_result == dict_result) is messages_match
 
 
 def test_int_bounded_rejects_float_message_divergence():
-    # Same divergence as above, but on a bounded int: the "integer" type
-    # rejection fires before the Min/Max bounds check is ever reached (a float
-    # never passes the `PyInt` cast bounds-check gates on), so the message is
-    # the plain "not of type \"integer\"" text, not a bounds error, on both
-    # paths — same coincidental match as the unbounded `1.5` case above.
+    # Same divergence as above, on a bounded int: "integer" type rejection fires before
+    # Min/Max is ever reached (a float never passes the PyInt cast bounds-check gates on),
+    # so both paths report the plain type error, not a bounds error — same coincidental match.
     typ = Annotated[int, Min(10), Max(100)]
     s = Serializer(typ)
     sc = Serializer(typ, codec=JSON)
@@ -1422,26 +1348,19 @@ def test_int_bounded_rejects_float_message_divergence():
 
 
 def test_int_malformed_float_text_raises_decode_error():
-    # Same `Err(_)` arm as above, but the re-read of the raw text itself fails
-    # (genuinely malformed number, not just float-shaped) -> DecodeError, never
-    # a SchemaValidationError. Confirms the error-class split survives the
-    # simplification: `take_number_str_known` propagates its own failure via
-    # `?` for this input instead of reaching `wrong_type_err`.
+    # Same `Err(_)` arm as above, but the raw-text re-read itself fails (genuinely
+    # malformed, not just float-shaped) -> DecodeError, never SchemaValidationError:
+    # `take_number_str_known` propagates via `?` instead of reaching `wrong_type_err`.
     sc = Serializer(int, codec=JSON)
     with pytest.raises(serpyco_rs.DecodeError):
         sc.load(b'1e')
 
 
 def test_union_all_fail_message_json_specific():
-    # test_union_all_fail_parity (codec-agnostic section) strips the offending
-    # value's rendering before comparing, because the two paths render a
-    # container differently: raw wire text on the codec path, Python repr() on
-    # the dict path. Pin both renderings literally here — this is the actual
-    # observed divergence, not the intended contract, so it is not fixed. The
-    # trailing digit `strip_counter` removes is the same pre-existing
-    # per-Serializer union-naming-counter artifact test_union_all_fail_parity
-    # already strips (a second `Serializer(int | str, ...)` built anywhere in
-    # the process gets "int | str1", "int | str2", ... to disambiguate).
+    # test_union_all_fail_parity strips the offending value's rendering before comparing
+    # (raw wire text vs Python repr()); pin both literal renderings here instead — an
+    # observed divergence, not the contract, so not something to fix. `strip_counter`
+    # removes the same per-Serializer naming-counter artifact ("int | str1", ...).
     def strip_counter(msg):
         return re.sub(r'\d*"$', '"', msg)
 
@@ -1481,16 +1400,15 @@ def test_union_all_fail_message_json_specific():
     ],
 )
 def test_decode_error_corpus(bad):
-    s = Serializer(Any, codec=JSON)  # permissive: only JSON syntax can fail
+    s = Serializer(Any, codec=JSON)
     with pytest.raises(serpyco_rs.DecodeError) as e:
         s.load(bad)
     assert isinstance(e.value.position, int)
 
 
 def test_codec_literal_bool_roundtrip():
-    # bool-valued Literal: the codec must be able to decode its own dump output.
-    # Byte-exact: `true`/`false` are JSON keyword literals, not a general
-    # "dump a bool" concern (a binary codec would use its own boolean encoding).
+    # bool-valued Literal must decode its own dump output. Byte-exact because `true`/
+    # `false` are JSON keyword literals — a binary codec would use its own encoding.
     s = Serializer(Literal[True, False], codec=JSON)
     sd = Serializer(Literal[True, False])
     assert s.dump(True) == b'true'
@@ -1501,9 +1419,8 @@ def test_codec_literal_bool_roundtrip():
 
 
 def test_codec_float_dump_rejects_bool():
-    # dict-path dump is lenient (orjson emits `true`); the codec dump validates
-    # types and must not silently reinterpret a bool as the integer 1. Byte-exact
-    # assertions below tie this to JSON's own textual number formatting.
+    # dict-path dump is lenient (orjson emits `true`); codec dump validates types and
+    # must not silently reinterpret a bool as the integer 1.
     s = Serializer(float, codec=JSON)
     with pytest.raises(serpyco_rs.SchemaValidationError):
         s.dump(True)
@@ -1513,9 +1430,8 @@ def test_codec_float_dump_rejects_bool():
 
 
 def test_json_dump_is_compact():
-    # The JSON writer emits no whitespace between tokens. Verified once, here,
-    # with an exact byte comparison — not generalizable, since a binary codec
-    # has no "whitespace" concept for its dump output at all.
+    # The JSON writer emits no whitespace between tokens — verified once via exact byte
+    # comparison; a binary codec has no "whitespace" concept for its output at all.
     @dataclass
     class M:
         a: int
@@ -1524,10 +1440,8 @@ def test_json_dump_is_compact():
 
 
 def test_entity_load_duplicate_key_last_wins():
-    # A literal repeated key on the wire cannot be represented as a Python dict
-    # (the dict collapses duplicates before any codec sees it), so this needs a
-    # raw JSON literal rather than the codec-agnostic dict-based sweep in
-    # test_entity_load_key_order_independent above.
+    # A repeated wire key can't be represented as a Python dict (it collapses duplicates
+    # before any codec sees it), so this needs a raw literal, not the dict-based sweep above.
     @dataclass
     class M:
         a: int

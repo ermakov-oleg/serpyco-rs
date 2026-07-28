@@ -19,9 +19,8 @@ def test_dump_union_time_or_date_picks_right_encoder():
 
 
 def test_dump_union_of_dataclasses_skips_non_matching_member():
-    # Regression: dict-path union dump must skip a structurally non-matching
-    # dataclass member. A missing attribute on the tried member is a type
-    # mismatch (try the next member), not a hard AttributeError that aborts.
+    # Regression: a missing attribute on the tried member is a type mismatch (try the
+    # next member), not a hard AttributeError that aborts the whole union dump.
     @dataclass
     class A:
         a: int

@@ -119,12 +119,11 @@ impl Serializer {
             .load_format(py, &mut parser, &instance_path, &ctx)
         {
             Ok(value) => {
-                // Well-formed value: the stream must have nothing left over.
                 parser.finish().map_err(SerdeError::into_py_err)?;
                 Ok(value)
             }
-            // No finish() on error: a schema error leaves the cursor mid-document,
-            // so finish() would mask it with a spurious trailing-garbage DecodeError.
+            // No finish() on error: a schema error leaves the cursor mid-document, so
+            // finish() would mask it with a spurious trailing-garbage DecodeError.
             Err(err) => Err(err.into_py_err()),
         }
     }
@@ -534,9 +533,8 @@ fn extract_custom_encoder(
     ))
 }
 
-/// Maps JSON key (`dict_key_rs`) -> field index so the streaming load path routes
-/// keys straight to their encoder. Flatten fields are excluded: they consume the
-/// keys nobody claimed, which the streaming path collects separately.
+/// Maps JSON key -> field index for the streaming load path. Flatten fields are
+/// excluded — they consume unclaimed keys, which that path collects separately.
 fn build_format_routing(fields: &[Field]) -> rustc_hash::FxHashMap<String, usize> {
     fields
         .iter()

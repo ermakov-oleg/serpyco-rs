@@ -12,12 +12,9 @@ pub(crate) enum ParsedInt {
     Big(BigInt),
 }
 
-/// Pull-parser over jiter. Syntax errors map to DecodeError; schema mismatches
-/// are the encoders' job (peek + take_*). `*_known` readers reuse the preceding
-/// `peek()`, so each is valid ONLY immediately after a `peek()` — any
-/// cursor-moving call in between makes the cached peek stale. `enter_map`
-/// self-positions (peeks internally) for the one caller that reads an object
-/// without a preceding `peek()` (discriminated-union scan).
+/// Pull-parser over jiter. Syntax errors map to `DecodeError`; schema mismatches are
+/// the encoders' job. `*_known` readers are valid only immediately after a `peek()`;
+/// `enter_map` peeks internally for the one caller without one (discriminated-union scan).
 #[derive(Debug)]
 pub(crate) struct JsonParser<'j> {
     jiter: Jiter<'j>,
@@ -35,14 +32,11 @@ impl<'j> JsonParser<'j> {
         }
     }
 
-    // `jiter::Peek` is a newtype over the token's raw lead byte (not an enum), so a
-    // `match` on it can't be exhaustive at the compiler level. Match the byte itself
-    // (`peek.into_inner()`) instead of `Peek`'s associated consts: it lets the digit
-    // run be a proper range pattern. That arm comes first because a number is JSON's
-    // most frequent token, so it should cost the fewest comparisons to reach. Anything
-    // that isn't one of JSON's token-lead bytes is a decode error, not a silent
-    // "it's a number" — so a future jiter version that adds a new `Peek` kind fails
-    // loudly here instead of being fed to the number reader.
+    // `Peek` is a newtype over the lead byte, not an enum, so match the byte itself
+    // (`into_inner()`) rather than `Peek`'s consts — lets the digit run be a range
+    // pattern, checked first since numbers are JSON's most frequent token. The
+    // catch-all errors instead of assuming "number", so a future `Peek` kind fails
+    // loudly here rather than being fed to the number reader.
     #[inline]
     pub(crate) fn peek(&mut self) -> Result<Kind, SerdeError> {
         let peek = self.jiter.peek().map_err(err)?;
@@ -121,10 +115,9 @@ impl<'j> JsonParser<'j> {
         Ok(self.jiter.array_step().map_err(err)?.is_some())
     }
 
-    /// Bounded by jiter's own recursion limit (~200), not `max_recursion_depth`:
-    /// a deeply nested value under an unknown key fails with "recursion limit
-    /// exceeded", while the same value on an `Any` field goes through `parse_any`
-    /// and honours `max_recursion_depth`.
+    /// Bounded by jiter's own recursion limit (~200), not `max_recursion_depth`: skipping
+    /// a deeply nested value under an unknown key hits jiter's limit, not ours — only
+    /// `Any` fields, via `parse_any`, honour `max_recursion_depth`.
     #[inline]
     pub(crate) fn skip_value(&mut self) -> Result<(), SerdeError> {
         self.jiter.next_skip().map_err(err)
@@ -148,18 +141,16 @@ impl<'j> JsonParser<'j> {
     }
 }
 
-/// Takes `JiterError` by value rather than being a `&self` method: jiter's
-/// readers return `&str` tied to `&mut self.jiter`, which a `|e| self.err(e)`
-/// closure's borrow would conflict with.
+/// Takes `JiterError` by value rather than being a `&self` method: jiter's readers
+/// return `&str` tied to `&mut self.jiter`, which a `|e| self.err(e)` closure would conflict with.
 #[inline]
 fn err(e: JiterError) -> SerdeError {
     SerdeError::Py(decode_err(&e))
 }
 
-/// `peek()`'s byte matched none of JSON's token-lead bytes. Same `ExpectedSomeValue`
-/// jiter itself reports for a bad lead byte (see jiter's `Jiter::wrong_type` /
-/// `take_value_skip`), so the message and position are consistent with every other
-/// syntax error from this parser.
+/// `peek()`'s byte matched none of JSON's token-lead bytes — reports the same
+/// `ExpectedSomeValue` jiter itself uses for a bad lead byte, so message and position
+/// stay consistent with every other syntax error from this parser.
 #[inline]
 fn unexpected_token_err(index: usize) -> SerdeError {
     err(JiterError {

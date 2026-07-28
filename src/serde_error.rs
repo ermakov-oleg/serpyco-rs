@@ -31,11 +31,8 @@ pub(crate) enum SerdeError {
 /// What a value was expected to be, kept unrendered until the message is built.
 #[derive(Debug)]
 pub(crate) enum Expected {
-    /// Fixed type name from an encoder ("integer", "object", …).
     Static(&'static str),
-    /// Encoder-owned text (union repr, enum item list) shared by refcount.
     Shared(Arc<str>),
-    /// A Python class — its `__name__` is read only when the message is built.
     Cls(Py<PyType>),
 }
 
@@ -70,10 +67,9 @@ impl Expected {
     }
 }
 
-/// Deferred error text. A union discards every message but the one from the
-/// member it finally accepts, and rendering one costs a Python `str()` call on
-/// the value (a full dataclass repr) — so the parts are captured here and
-/// formatted only if the error reaches the FFI boundary.
+/// Deferred error text: a union discards every message but the one from the member
+/// it finally accepts, and rendering costs a Python `str()` call — so parts are
+/// captured here and formatted only if the error reaches the FFI boundary.
 #[derive(Debug)]
 pub(crate) enum Message {
     Text(String),
@@ -148,9 +144,8 @@ impl SchemaError {
         }
     }
 
-    /// [`deferred`](Self::deferred) that also chains `cause`. For a mismatch
-    /// inferred from a Python exception: a union discards the error and the
-    /// cause with it, but anything that reaches Python carries the original.
+    /// [`deferred`](Self::deferred) that also chains `cause`: a union discards it
+    /// with the error, but anything reaching Python carries the original.
     pub(crate) fn deferred_with_cause(message: Message, path: &InstancePath, cause: PyErr) -> Self {
         Self {
             message,

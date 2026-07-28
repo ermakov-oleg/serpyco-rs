@@ -145,11 +145,9 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
     .into()
 }
 
-/// Just the length comparison, no `PySequence` required. Lets a caller that
-/// doesn't have (or doesn't want to allocate) a sequence object yet — e.g.
-/// building a tuple straight from a `Vec` during codec load — cheaply detect
-/// an arity mismatch before paying for anything just to report the same
-/// error `check_sequence_size` would produce.
+/// Just the length comparison, no `PySequence` required — lets a caller without one
+/// yet (e.g. building a tuple from a `Vec` during codec load) cheaply detect an arity
+/// mismatch before paying to build the same error `check_sequence_size` would.
 #[inline(always)]
 pub fn sequence_size_ordering(seq_len: usize, size: usize) -> Ordering {
     seq_len.cmp(&size)
@@ -167,12 +165,9 @@ pub fn check_sequence_size(
     }
 }
 
-/// The `Err` half of `check_sequence_size`'s message, factored out for a caller
-/// that already knows (via `sequence_size_ordering`) the sizes differ — e.g.
-/// `TupleEncoder::load_format`'s arity check, which used to reach this only by
-/// calling `check_sequence_size` and then `unreachable!()`-ing on the `Ok` arm
-/// it knew could never happen. Both functions share this one implementation of
-/// the message.
+/// The `Err` half of `check_sequence_size`'s message, factored out for a caller that
+/// already knows (via `sequence_size_ordering`) the sizes differ — e.g. `TupleEncoder`'s
+/// arity check, which used to reach this only via `check_sequence_size` + `unreachable!()`.
 #[cold]
 pub fn sequence_size_err(
     val: &Bound<'_, PySequence>,
@@ -238,8 +233,7 @@ where
     .into()
 }
 
-// The message is deferred (see `Message`): a union probes members by calling
-// them and discarding `Schema` errors, so most of these are never rendered.
+// Deferred (see `Message`): a union probes members and discards most `Schema` errors unrendered.
 pub fn invalid_type_err(
     type_: impl Into<Expected>,
     value: &Bound<'_, PyAny>,
@@ -274,9 +268,8 @@ pub fn invalid_type_dump_err(type_: impl Into<Expected>, value: &Bound<'_, PyAny
     .into()
 }
 
-/// [`invalid_type_dump_err`] for a mismatch inferred from a Python exception:
-/// keeps the original as `cause`, so a union still skips the member while a
-/// genuine failure reaching Python is not swallowed.
+/// [`invalid_type_dump_err`] for a mismatch inferred from a Python exception: keeps
+/// it as `cause`, so a genuine failure reaching Python is not swallowed.
 pub fn invalid_type_dump_err_with_cause(
     type_: impl Into<Expected>,
     value: &Bound<'_, PyAny>,

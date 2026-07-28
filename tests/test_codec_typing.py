@@ -18,9 +18,8 @@ def check_no_codec(s: Serializer[Foo]) -> None:
 
 
 def check_no_codec_optional_codec(s: Serializer[Foo], c: Codec | None) -> None:
-    # A per-call codec of static type `Codec | None` may resolve to the dict
-    # path at runtime, so `dump` must widen to Any (not bytes) and `load` must
-    # still accept dict-path (arbitrary) input as well as bytes.
+    # `Codec | None` may resolve to the dict path at runtime, so `dump` must widen to
+    # Any (not bytes) and `load` must still accept dict-path input as well as bytes.
     assert_type(s.dump(Foo(x=1), codec=c), Any)
     assert_type(s.load({'x': 1}, codec=c), Foo)
     assert_type(s.load(b'{"x": 1}', codec=c), Foo)

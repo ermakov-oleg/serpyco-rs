@@ -18,8 +18,8 @@ pub(crate) fn wrong_enum_err(items: &str, raw: &str, path: &InstancePath) -> Ser
     SchemaError::new(format!("{raw} is not one of {items}"), path).into()
 }
 
-/// Type-mismatch error for the value at the cursor: take its raw slice and render
-/// it via `wrong_type_err`. A parser/decode error taking the value takes priority.
+/// [`wrong_type_err`] for the value at the cursor. A parser/decode error while
+/// taking that value takes priority over the schema mismatch it would otherwise render.
 #[inline]
 pub(crate) fn wrong_type_at_cursor(
     parser: &mut Parser<'_>,
@@ -65,8 +65,7 @@ pub(crate) fn parse_int_text<'py>(py: Python<'py>, raw: &str) -> SerdeResult<Bou
     }
 }
 
-/// Stream a Python `int` to the writer: `i64` fast path, decimal-string fallback
-/// beyond i64. The caller has already narrowed `value` to `PyInt`.
+/// Stream a Python `int` to the writer: `i64` fast path, decimal-string fallback beyond i64.
 #[inline(always)]
 pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeResult<()> {
     match v.extract::<i64>() {
@@ -77,7 +76,7 @@ pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeRe
 }
 
 /// Stream a Python `float` to the writer, mapping the format's "cannot represent"
-/// signal (JSON: NaN/Infinity) to a `ValidationError`. Caller has narrowed to `PyFloat`.
+/// signal (JSON: NaN/Infinity) to a `ValidationError`.
 #[inline(always)]
 pub(crate) fn write_py_float(writer: &mut Writer, v: &Bound<'_, PyFloat>) -> SerdeResult<()> {
     writer

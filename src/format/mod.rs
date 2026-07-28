@@ -34,9 +34,8 @@ pub(crate) enum Checkpoint {
     Json(JsonCheckpoint),
 }
 
-/// A map key rendered once at encoder-construction time. Entity and TypedDict
-/// keys are fixed by the type, so the hot path copies these bytes verbatim
-/// instead of re-escaping per dump.
+/// A map key rendered once at encoder-construction time: Entity/TypedDict keys
+/// are fixed by the type, so the hot path copies these bytes instead of re-escaping.
 #[derive(Debug, Clone)]
 pub(crate) struct EncodedKey {
     json: Box<[u8]>,
@@ -198,9 +197,8 @@ impl Writer {
     }
 }
 
-/// Pull-parser over the input. The `*_known` readers consume the `peek()` that
-/// must immediately precede them; any cursor-moving call in between makes that
-/// cached peek stale. `enter_map` peeks internally instead.
+/// Pull-parser over the input. `*_known` readers require an immediately preceding
+/// `peek()` (any cursor-moving call between invalidates it); `enter_map` peeks internally.
 #[derive(Debug)]
 pub(crate) enum Parser<'j> {
     Json(JsonParser<'j>),

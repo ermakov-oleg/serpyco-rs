@@ -51,12 +51,9 @@ pub(crate) trait Encoder: DynClone + Debug {
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>>;
 
-    /// Streaming serialization to a format. Default goes through the generic
-    /// bridge: identical semantics to dump(); direct impls are an optimization,
-    /// kept for encoders with no dedicated per-field streaming path — a
-    /// pass-through, a runtime-chosen redirect, or a type with no wire
-    /// representation at all, where the bridge's own mismatch error is
-    /// already the right one.
+    /// Default: bridges through `dump` + `write_any`. Override only where a
+    /// direct per-field streaming path is faster; the bridge error is already
+    /// correct for pass-throughs, runtime redirects, and wire-less types.
     fn dump_format(
         &self,
         value: &Bound<'_, PyAny>,
@@ -67,11 +64,7 @@ pub(crate) trait Encoder: DynClone + Debug {
         write_any(&dumped, writer, ctx)
     }
 
-    /// Streaming deserialization from a format. Default goes through the bridge,
-    /// kept for encoders with no dedicated per-field streaming path — a
-    /// pass-through, a runtime-chosen redirect, or a type with no wire
-    /// representation at all, where the bridge's own mismatch error is
-    /// already the right one.
+    /// Default: bridges through `parse_any` + `load`; see `dump_format`.
     fn load_format<'py>(
         &self,
         py: Python<'py>,
@@ -83,12 +76,8 @@ pub(crate) trait Encoder: DynClone + Debug {
         self.load(&value, instance_path, ctx)
     }
 
-    /// Whether `load_format` can accept a value of this kind. Unions use it to
-    /// drop members that cannot match before touching the input.
-    ///
     /// Must stay conservative: returning `false` for a kind the encoder would
-    /// have accepted turns a valid document into an error. The default accepts
-    /// everything, which is always correct (just not faster).
+    /// accept turns a valid document into an error. Default accepts everything.
     fn accepts_kind(&self, _kind: Kind) -> bool {
         true
     }
@@ -244,12 +233,9 @@ impl Encoder for NeverEncoder {
     }
 }
 
-/// Narrow to an `int` subclass that is not `bool`. `IntEnum`/`IntFlag` values
-/// dump as plain ints on the dict path (it hands them to the JSON layer as-is),
-/// so the codec accepts them too; `bool` stays a mismatch on a numeric field.
-///
-/// Cold path: callers try `cast_exact::<PyInt>` first, so a plain `int` never
-/// pays for the extra `bool` check.
+/// Narrow to an `int` subclass that is not `bool`: `IntEnum`/`IntFlag` dump as
+/// plain ints on the dict path, so the codec accepts them too; `bool` stays a
+/// mismatch on a numeric field.
 #[inline]
 fn cast_int_subclass<'a, 'py>(value: &'a Bound<'py, PyAny>) -> Option<&'a Bound<'py, PyInt>> {
     if value.is_instance_of::<PyBool>() {
@@ -334,18 +320,11 @@ impl Encoder for IntEncoder {
                     return self.load(&materialized, instance_path, ctx);
                 }
                 Err(_) => {
-                    // Cursor unmoved: re-read the same token as raw text. `take_int_known`
-                    // bails at the first `.`/`e`/`E` without checking what follows; the
-                    // retry validates the whole grammar, so its own success/failure
-                    // decides DecodeError vs SchemaValidationError below.
-                    //
-                    // The message renders the raw wire text, not Python's
-                    // `str()` of the parsed value, so it deliberately diverges
-                    // from the dict path whenever JSON's number grammar doesn't
-                    // match Python's float repr (`1e3` on the wire vs `1000.0`
-                    // dict-side; `1e400` vs `inf`). Reviewer waived parity for
-                    // this case (crit round 2, task 10) — do not "fix" this
-                    // back to match the dict path.
+                    // Cursor unmoved: re-read as raw text, whose grammar validation
+                    // decides DecodeError vs SchemaValidationError below. The error
+                    // renders that raw wire text rather than Python's float repr
+                    // (`1e3` vs `1000.0`), diverging from the dict path — reviewer-
+                    // waived, crit round 2 task 10; do not "fix" back.
                     let raw = parser.take_number_str_known()?;
                     return Err(wrong_type_err("integer", raw, instance_path));
                 }
@@ -729,8 +708,7 @@ impl Encoder for BytesEncoder {
     }
 }
 
-/// Write a dict key as a map key, mirroring `bridge::write_any`: strings direct,
-/// everything else via `str()`.
+/// Write a dict key as a map key, mirroring `bridge::write_any`'s key handling.
 #[inline]
 fn write_map_key(key: &Bound<'_, PyAny>, writer: &mut Writer) -> SerdeResult<()> {
     match key.cast::<PyString>() {
@@ -762,9 +740,8 @@ fn dump_field_unless_null(
     Ok(())
 }
 
-/// Stream an enum/literal value by its concrete Python type: str/int members go
-/// direct (off the `write_any` bridge); anything else falls back to `write_any`
-/// for byte-identical output.
+/// Stream an enum/literal value directly by its concrete Python type; anything
+/// exotic falls back to `write_any` for byte-identical output.
 fn write_scalar_item(
     item: &Bound<'_, PyAny>,
     writer: &mut Writer,
@@ -787,7 +764,6 @@ fn write_scalar_item(
         write_py_float(writer, v)?;
         return Ok(());
     }
-    // Exotic value (None / container / other): full-fidelity fallback.
     write_any(item, writer, ctx)
 }
 
@@ -1117,10 +1093,8 @@ enum Route {
     End,
 }
 
-/// Resolve a borrowed key to a `Route` (no allocation).
-///
-/// `expect` is the field following the one just filled. Documents usually list keys
-/// in schema order, so the common case is one string compare instead of a hash
+/// `expect` is the field following the one just filled: documents usually list
+/// keys in schema order, so the common case is one string compare, not a hash
 /// lookup; a miss falls through to the map.
 #[inline]
 fn resolve_route(
@@ -1165,10 +1139,9 @@ impl SeenSet {
     }
 }
 
-/// The streaming object codec shared by `EntityEncoder` (-> class instance) and
-/// `TypedDictEncoder` (-> dict): the load/dump algorithm is identical; only the
-/// "sink" (store/fetch a field, build the container) differs. Sink hooks are
-/// `#[inline(always)]`, so each monomorphization is as if hand-written.
+/// Shared by `EntityEncoder` (-> class instance) and `TypedDictEncoder` (->
+/// dict): identical load/dump algorithm, only the "sink" differs. Sink hooks
+/// are `#[inline(always)]` so each monomorphization is as if hand-written.
 trait StreamingObject: Encoder {
     /// Schema type-mismatch label ("object" / "dict").
     const TYPE_NAME: &'static str;
@@ -1205,9 +1178,7 @@ trait StreamingObject: Encoder {
     ) -> SerdeResult<Option<Bound<'py, PyAny>>>;
 }
 
-/// Stream an object into `S`'s target, avoiding the dict-path's intermediate
-/// PyDict. Keys route via `format_routing`; unknown keys are skipped (or, with
-/// flatten, collected into `unknowns`). Missing fields fall back to `get_default`.
+/// Stream an object into `S`'s target, avoiding the dict-path's intermediate PyDict.
 fn load_object_streaming<'py, S: StreamingObject + 'py>(
     enc: &S,
     py: Python<'py>,
@@ -1432,10 +1403,9 @@ impl Encoder for EntityEncoder {
         for field in &self.fields {
             let field_val = match value.getattr(&field.name) {
                 Ok(v) => v,
-                // Missing attr means `value` isn't this entity's shape: surface a
-                // Schema mismatch (not AttributeError) so an untagged union skips on.
-                // The original is kept as `cause` — the same AttributeError can also
-                // come from inside a user property, and that must stay diagnosable.
+                // Missing attr means `value` isn't this entity's shape: surface a Schema
+                // mismatch (not AttributeError) so an untagged union skips on, keeping
+                // the original as `cause` since it may come from a user property.
                 Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
                     // `cls.__name__` is read only if this error is rendered.
                     return Err(invalid_type_dump_err_with_cause(
@@ -1554,10 +1524,8 @@ impl StreamingObject for EntityEncoder {
         value: &Bound<'py, PyAny>,
         field: &Field,
     ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
-        // Missing attr means the value isn't this entity's shape: Schema mismatch
-        // (not a raw AttributeError) so an untagged union skips to the next member.
-        // The original is kept as `cause` — the same AttributeError can also come
-        // from inside a user property, and that must stay diagnosable.
+        // Same AttributeError -> Schema-mismatch conversion as `dump`, for the
+        // streaming dump path.
         match value.getattr(&field.name) {
             Ok(v) => Ok(Some(v)),
             Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {

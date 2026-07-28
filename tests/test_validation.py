@@ -237,9 +237,8 @@ def test_typed_dict_validation__invalid_type():
 
 
 def _bad_property_instance():
-    # A property that raises AttributeError from *inside* — the attribute exists,
-    # the user's own code is broken. Distinct from "this object is the wrong shape".
-    # __repr__ is kept working so the failure under test is only the property.
+    # A property raising AttributeError from *inside* (attribute exists, user code is
+    # broken) — distinct from "wrong shape". __repr__ stays working so only the property fails.
     @dataclass
     class Bar:
         a: int
@@ -259,9 +258,8 @@ def _bad_property_instance():
 
 
 def test_entity_dump__attribute_error_from_property_is_chained():
-    # Dump maps a missing attribute to a schema mismatch so an untagged union can
-    # skip the member; the original AttributeError must survive as __cause__
-    # rather than vanish.
+    # Dump maps a missing attribute to a schema mismatch so an untagged union can skip
+    # the member; the original AttributeError must survive as __cause__, not vanish.
     bar_cls, broken = _bad_property_instance()
     s = Serializer(bar_cls)
 

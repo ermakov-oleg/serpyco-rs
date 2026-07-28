@@ -1,21 +1,16 @@
 use super::escape;
 
-/// Streaming JSON writer over a `Vec<u8>`.
-///
-/// Separators are trailing: every element is followed by `item_end`, and the
-/// container's closer drops the one comma left over. That keeps the per-element
-/// path an unconditional push and needs no open-container stack.
-///
-/// Call contract: `map_key`/`map_key_encoded` before each map value, then
-/// `item_end` after each map value and after each array element.
+/// Separators are trailing (`item_end` after each element; the closer drops the
+/// leftover comma), so the per-element path is an unconditional push with no
+/// open-container stack. Call contract: `map_key`/`map_key_encoded` before each
+/// map value, `item_end` after each map value and array element.
 #[derive(Debug)]
 pub(crate) struct JsonWriter {
     buf: Vec<u8>,
 }
 
-/// A saved writer position for a speculative write that may be rolled back
-/// (union member probing, omit_none null-skip). The buffer length alone captures
-/// the whole state, so rollback is a truncate.
+/// Saved position for a speculative write that may be rolled back (union member
+/// probing, omit_none null-skip) — the buffer length alone is enough to truncate back to it.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Checkpoint {
     buf_len: usize,
@@ -48,9 +43,8 @@ impl JsonWriter {
         self.buf.push(b',');
     }
 
-    /// Close a container: drop the comma left by the last element, if any.
-    /// Only this writer's own separator can be the final byte — a nested value
-    /// always ends in `"`, a digit, `e`, `l` (null/true), `}` or `]`.
+    /// Only this writer's own trailing separator can be the last byte — a nested
+    /// value always ends in `"`, a digit, `e`, `l` (null/true), `}` or `]`.
     #[inline]
     fn close(&mut self, terminator: u8) {
         if self.buf.last() == Some(&b',') {
@@ -133,8 +127,7 @@ impl JsonWriter {
         self.buf.push(b':');
     }
 
-    /// Append a key already rendered by [`encode_map_key`] (quotes, escaping and
-    /// the `:` included).
+    /// Append a key already rendered by [`encode_map_key`] — quotes, escaping and `:` included.
     #[inline]
     pub(crate) fn map_key_encoded(&mut self, encoded: &[u8]) {
         self.buf.extend_from_slice(encoded);
