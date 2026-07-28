@@ -33,6 +33,29 @@ You can also embed other dataclasses in a definition.
 
 The main use-case for serpyco-rs is to serialize objects for an API, but it can be helpful whenever you need to transform objects to/from builtin Python types.
 
+## Serializing to/from bytes (codec API)
+
+By default `dump`/`load` convert between objects and builtin Python types (`dict`, `list`, ...), leaving the JSON layer to you. Binding a `codec` makes the serializer work directly with `bytes`, skipping the intermediate `dict`:
+
+```python
+import serpyco_rs
+from serpyco_rs import JSON
+
+serializer = serpyco_rs.Serializer(Example, codec=JSON)
+
+raw = serializer.dump(Example(name="foo", num=2, tags=["hello", "world"]))
+print(raw)
+>> b'{"name":"foo","num":2,"tags":["hello","world"]}'
+
+obj = serializer.load(raw)
+>> Example(name='foo', num=2, tags=['hello', 'world'])
+```
+
+- `dump(value)` returns `bytes`; `load(data)` accepts `bytes`, `bytearray`, `memoryview`, or `str`.
+- The codec can also be passed per call: `serializer.dump(value, codec=JSON)` / `serializer.load(raw, codec=JSON)`. This is the way to keep both modes on a single serializer — a bound codec cannot be switched off per call (`codec=None` reads as "argument omitted"), only replaced by another format.
+- Malformed input raises `DecodeError`; schema violations raise `SchemaValidationError` — the same validation as the dict-based path.
+- Only `JSON` ships today. The format layer is abstracted, and a `msgpack` codec is planned.
+
 ## Installation
 Use pip to install:
 

@@ -1,12 +1,12 @@
-use crate::python::fmt_py;
-use crate::serde_error::{SchemaError, SerdeError};
+use crate::serde_error::{Expected, Message, SchemaError, SerdeError};
 use crate::validator::InstancePath;
 
 use pyo3::prelude::PyAnyMethods;
 use pyo3::types::{PyList, PySequence, PyString};
-use pyo3::{Bound, PyAny};
+use pyo3::{Bound, PyAny, PyErr};
 use std::cmp::Ordering;
 use std::fmt::Display;
+use std::sync::Arc;
 
 pub fn check_lower_bound<T>(
     val: T,
@@ -145,22 +145,41 @@ pub fn missing_required_property(property: &str, instance_path: &InstancePath) -
     .into()
 }
 
+/// Just the length comparison, no `PySequence` required — lets a caller without one
+/// yet (e.g. building a tuple from a `Vec` during codec load) cheaply detect an arity
+/// mismatch before paying to build the same error `check_sequence_size` would.
+#[inline(always)]
+pub fn sequence_size_ordering(seq_len: usize, size: usize) -> Ordering {
+    seq_len.cmp(&size)
+}
+
 pub fn check_sequence_size(
     val: &Bound<'_, PySequence>,
     seq_len: usize,
     size: usize,
     instance_path: Option<&InstancePath>,
 ) -> Result<(), SerdeError> {
-    match seq_len.cmp(&size) {
+    match sequence_size_ordering(seq_len, size) {
         Ordering::Equal => Ok(()),
-        Ordering::Less => {
-            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
-            Err(SchemaError::new(format!(r#"{val} has less than {size} items"#), &path).into())
-        }
-        Ordering::Greater => {
-            let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
-            Err(SchemaError::new(format!(r#"{val} has more than {size} items"#), &path).into())
-        }
+        _ => Err(sequence_size_err(val, seq_len, size, instance_path)),
+    }
+}
+
+/// The `Err` half of `check_sequence_size`'s message, factored out for a caller that
+/// already knows (via `sequence_size_ordering`) the sizes differ — e.g. `TupleEncoder`'s
+/// arity check, which used to reach this only via `check_sequence_size` + `unreachable!()`.
+#[cold]
+pub fn sequence_size_err(
+    val: &Bound<'_, PySequence>,
+    seq_len: usize,
+    size: usize,
+    instance_path: Option<&InstancePath>,
+) -> SerdeError {
+    let path = instance_path.cloned().unwrap_or_else(InstancePath::new);
+    if seq_len < size {
+        SchemaError::new(format!(r#"{val} has less than {size} items"#), &path).into()
+    } else {
+        SchemaError::new(format!(r#"{val} has more than {size} items"#), &path).into()
     }
 }
 
@@ -214,13 +233,17 @@ where
     .into()
 }
 
+// Deferred (see `Message`): a union probes members and discards most `Schema` errors unrendered.
 pub fn invalid_type_err(
-    type_: &str,
+    type_: impl Into<Expected>,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> SerdeError {
-    SchemaError::new(
-        format!(r#"{} is not of type "{}""#, fmt_py(value), type_),
+    SchemaError::deferred(
+        Message::NotOfType {
+            value: value.clone().unbind(),
+            expected: type_.into(),
+        },
         instance_path,
     )
     .into()
@@ -234,10 +257,31 @@ macro_rules! invalid_type {
     };
 }
 
-pub fn invalid_type_dump_err(type_: &str, value: &Bound<'_, PyAny>) -> SerdeError {
-    SchemaError::new(
-        format!(r#""{value}" is not of type "{type_}""#),
+pub fn invalid_type_dump_err(type_: impl Into<Expected>, value: &Bound<'_, PyAny>) -> SerdeError {
+    SchemaError::deferred(
+        Message::NotOfTypeDump {
+            value: value.clone().unbind(),
+            expected: type_.into(),
+        },
         &InstancePath::new(),
+    )
+    .into()
+}
+
+/// [`invalid_type_dump_err`] for a mismatch inferred from a Python exception: keeps
+/// it as `cause`, so a genuine failure reaching Python is not swallowed.
+pub fn invalid_type_dump_err_with_cause(
+    type_: impl Into<Expected>,
+    value: &Bound<'_, PyAny>,
+    cause: PyErr,
+) -> SerdeError {
+    SchemaError::deferred_with_cause(
+        Message::NotOfTypeDump {
+            value: value.clone().unbind(),
+            expected: type_.into(),
+        },
+        &InstancePath::new(),
+        cause,
     )
     .into()
 }
@@ -251,12 +295,15 @@ macro_rules! invalid_type_dump {
 }
 
 pub fn invalid_enum_item_err(
-    items: &str,
+    items: &Arc<str>,
     value: &Bound<'_, PyAny>,
     instance_path: &InstancePath,
 ) -> SerdeError {
-    SchemaError::new(
-        format!(r#"{} is not one of {}"#, fmt_py(value), items),
+    SchemaError::deferred(
+        Message::NotOneOf {
+            value: value.clone().unbind(),
+            items: Arc::clone(items),
+        },
         instance_path,
     )
     .into()

@@ -46,9 +46,9 @@ _run-lint mode="fix":
     cd python/serpyco_rs && {{uv}} run --no-sync ruff check {{ if mode == "fix" { "--fix" } else { "" } }} .
 
 _run-type-check:
-    PYTHONPATH=python {{uv}} run --no-sync pyright python/serpyco_rs
+    PYTHONPATH=python {{uv}} run --no-sync pyright python/serpyco_rs tests/test_codec_typing.py
     PYTHONPATH=python {{uv}} run --no-sync pyright --verifytypes serpyco_rs
-    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs --strict --implicit-reexport --enable-incomplete-feature=TypeForm --pretty
+    PYTHONPATH=python {{uv}} run --no-sync mypy python/serpyco_rs tests/test_codec_typing.py --strict --implicit-reexport --enable-incomplete-feature=TypeForm --pretty
 
 _run-bench target="bench":
     {{uv}} run --no-sync pytest {{target}} --verbose \
@@ -131,9 +131,16 @@ test-rc-leaks target="bench": build (_sync "bench-compare") (_run-test-rc-leaks 
 
 ci-test-rc-leaks target="bench": (_sync-ci "bench-compare") (_install-wheel "wheels") (_run-test-rc-leaks target)
 
-# CI PGO: install PGO-instrumented wheel + bench deps, run targeted benches to gather profile data
+# The codec (bytes) benches must stay listed: code left out of the profile is
+# compiled as cold, worth -21%..-35% on the codec path. Competitors are deselected.
+[doc("CI PGO: install instrumented wheel + bench deps, run targeted benches to gather profile data")]
 ci-pgo-collect wheel_dir="pgo-wheel": (_sync-ci "pgo") (_install-wheel wheel_dir)
-    {{uv}} run --no-sync pytest bench/test_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py -k "not mashumaro"
+    {{uv}} run --no-sync pytest \
+        bench/test_encoders.py bench/test_codec_encoders.py \
+        bench/test_flatten.py bench/test_full.py \
+        bench/compare/test_github_issue.py bench/compare/test_github_issue_bytes.py \
+        -k "not mashumaro and not msgspec and not orjson" \
+        --benchmark-min-time=0.2 --benchmark-max-time=0.4
 
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
 _bench-codespeed-setup: (_sync "codspeed")

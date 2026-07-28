@@ -236,6 +236,56 @@ def test_typed_dict_validation__invalid_type():
     assert e.value.errors == [ErrorItem(message='"foo" is not of type "dict"', instance_path='')]
 
 
+def _bad_property_instance():
+    # A property raising AttributeError from *inside* (attribute exists, user code is
+    # broken) — distinct from "wrong shape". __repr__ stays working so only the property fails.
+    @dataclass
+    class Bar:
+        a: int
+        b: str = ''
+
+    class BadBar:
+        a = 1
+
+        @property
+        def b(self) -> str:
+            raise AttributeError('internal bug in my property')
+
+        def __repr__(self) -> str:
+            return 'BadBar()'
+
+    return Bar, BadBar()
+
+
+def test_entity_dump__attribute_error_from_property_is_chained():
+    # Dump maps a missing attribute to a schema mismatch so an untagged union can skip
+    # the member; the original AttributeError must survive as __cause__, not vanish.
+    bar_cls, broken = _bad_property_instance()
+    s = Serializer(bar_cls)
+
+    with pytest.raises(SchemaValidationError) as e:
+        s.dump(broken)
+
+    assert isinstance(e.value.__cause__, AttributeError)
+    assert 'internal bug in my property' in str(e.value.__cause__)
+
+
+def test_typed_dict_validation__invalid_type_nested():
+    # A non-dict value for a nested TypedDict must report its instance_path
+    # (regression: the load guard used to emit a path-less dump-style error).
+    class Inner(TypedDict):
+        x: int
+
+    class Outer(TypedDict):
+        inner: Inner
+
+    s = Serializer(Outer)
+    with pytest.raises(SchemaValidationError) as e:
+        s.load({'inner': 'notadict'})
+
+    assert e.value.errors == [ErrorItem(message='"notadict" is not of type "dict"', instance_path='inner')]
+
+
 def test_typed_dict_validation__missing_field():
     class A(TypedDict):
         a: int

@@ -14,7 +14,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
-from serpyco_rs import Serializer
+from serpyco_rs import JSON, Serializer
 
 
 @dataclass
@@ -55,6 +55,31 @@ def test_concurrent_dump_load_recursive_type() -> None:
         for fut in as_completed(futures):
             dumped, loaded = fut.result()
             assert dumped == expected
+            assert loaded == tree
+
+
+def test_concurrent_codec_dump_load_recursive_type() -> None:
+    """Same as above, for the streaming format methods (dict path covered there)."""
+    serializer = Serializer(Node, codec=JSON)
+    tree = _build_tree(depth=4, fanout=3, counter=[0])
+    expected = serializer.dump(tree)
+
+    workers = 8
+    iterations = 200
+
+    def worker() -> tuple[bytes, Node]:
+        dumped = expected
+        loaded = tree
+        for _ in range(iterations):
+            dumped = serializer.dump(tree)
+            loaded = serializer.load(expected)
+        return dumped, loaded
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(worker) for _ in range(workers)]
+        for fut in as_completed(futures):
+            dumped, loaded = fut.result()
+            assert serializer.load(dumped) == tree
             assert loaded == tree
 
 

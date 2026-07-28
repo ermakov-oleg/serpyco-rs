@@ -1,4 +1,5 @@
 mod errors;
+mod format;
 mod python;
 mod serde_error;
 mod serializer;
@@ -17,5 +18,6 @@ fn _serpyco_rs(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         py.get_type::<errors::SchemaValidationError>(),
     )?;
     m.add("ErrorItem", py.get_type::<errors::ErrorItem>())?;
+    m.add("DecodeError", py.get_type::<errors::DecodeError>())?;
     Ok(())
 }

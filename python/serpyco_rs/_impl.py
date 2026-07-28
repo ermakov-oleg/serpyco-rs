@@ -1,4 +1,5 @@
 from ._serpyco_rs import (
+    DecodeError,
     ErrorItem,
     SchemaValidationError,
     Serializer,
@@ -6,6 +7,7 @@ from ._serpyco_rs import (
 )
 
 __all__ = [
+    'DecodeError',
     'ErrorItem',
     'SchemaValidationError',
     'Serializer',

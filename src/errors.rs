@@ -31,6 +31,30 @@ impl ValidationError {
     }
 }
 
+#[pyclass(extends=exceptions::PyValueError, module="serpyco_rs")]
+#[derive(Debug)]
+pub(crate) struct DecodeError {
+    #[pyo3(get)]
+    message: String,
+    /// Byte offset in the input where decoding failed.
+    #[pyo3(get)]
+    position: usize,
+}
+
+#[pymethods]
+impl DecodeError {
+    #[new]
+    fn new(message: String, position: usize) -> Self {
+        DecodeError { message, position }
+    }
+    fn __str__(&self) -> String {
+        format!("{} (position {})", self.message, self.position)
+    }
+    fn __repr__(&self) -> String {
+        format!("<DecodeError: '{}' at {}>", self.message, self.position)
+    }
+}
+
 #[pyclass(extends=ValidationError, module="serpyco_rs")]
 #[derive(Debug)]
 pub(crate) struct SchemaValidationError {
@@ -127,3 +151,4 @@ pub(crate) trait ToPyErr {
 
 impl ToPyErr for ValidationError {}
 impl ToPyErr for SchemaValidationError {}
+impl ToPyErr for DecodeError {}

@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
-use pyo3::exceptions::{PyKeyError, PyRuntimeError};
+use pyo3::buffer::PyBuffer;
+use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyMapping, PyString};
+use pyo3::types::{PyByteArray, PyBytes, PyDict, PyList, PyMapping, PyMemoryView, PyString};
 use pyo3::{intern, PyAny, PyResult};
 
+use crate::format::{EncodedKey, Parser, Writer};
 use crate::python::{get_object_type, BaseTypeInfo, EntityFieldInfo, Type};
 use crate::serde_error::SerdeError;
 use crate::serializer::encoders::{
@@ -31,7 +34,15 @@ type CustomEncoderFns = (Option<Py<PyAny>>, Option<Py<PyAny>>);
 pub struct Serializer {
     pub(crate) encoder: Box<TEncoder>,
     pub(crate) max_recursion_depth: usize,
+    /// Byte length of the last `dump_bytes` output, used to pre-size the next
+    /// one's buffer. Relaxed: a stale value only costs a re-grow.
+    /// Measured: dropping this costs ~0.5% Ir dumping an 8.5KB github-issue payload (mean of 5 runs); see PR #272.
+    last_dump_len: AtomicUsize,
 }
+
+/// Floor for the dump buffer, and the slack added on top of the size hint so a
+/// payload that grew slightly since the last dump still fits without a re-grow.
+const DUMP_BUF_MIN: usize = 1024;
 
 #[pymethods]
 impl Serializer {
@@ -52,6 +63,7 @@ impl Serializer {
                 naive_datetime_to_utc,
             )?,
             max_recursion_depth,
+            last_dump_len: AtomicUsize::new(0),
         };
         Ok(serializer)
     }
@@ -71,6 +83,49 @@ impl Serializer {
         self.encoder
             .load(value, &instance_path, &ctx)
             .map_err(SerdeError::into_py_err)
+    }
+
+    #[inline]
+    pub fn dump_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        value: &Bound<'py, PyAny>,
+        format: u8,
+    ) -> PyResult<Bound<'py, PyBytes>> {
+        let ctx = Context::new(false, self.max_recursion_depth);
+        let hint = self.last_dump_len.load(Ordering::Relaxed);
+        let mut writer = Writer::with_capacity(format, hint.max(DUMP_BUF_MIN) + hint / 8)?;
+        self.encoder
+            .dump_format(value, &mut writer, &ctx)
+            .map_err(SerdeError::into_py_err)?;
+        let out = writer.as_bytes();
+        self.last_dump_len.store(out.len(), Ordering::Relaxed);
+        Ok(PyBytes::new(py, out))
+    }
+
+    #[inline]
+    pub fn load_bytes<'py>(
+        &self,
+        py: Python<'py>,
+        data: &Bound<'py, PyAny>,
+        format: u8,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let buf = InputBuffer::extract(data)?;
+        let mut parser = Parser::new(format, buf.as_slice())?;
+        let instance_path = InstancePath::new();
+        let ctx = Context::new(false, self.max_recursion_depth);
+        match self
+            .encoder
+            .load_format(py, &mut parser, &instance_path, &ctx)
+        {
+            Ok(value) => {
+                parser.finish().map_err(SerdeError::into_py_err)?;
+                Ok(value)
+            }
+            // No finish() on error: a schema error leaves the cursor mid-document, so
+            // finish() would mask it with a spurious trailing-garbage DecodeError.
+            Err(err) => Err(err.into_py_err()),
+        }
     }
 
     #[inline]
@@ -128,6 +183,41 @@ impl Serializer {
         encoder
             .load(&new_data, &instance_path, &ctx)
             .map_err(SerdeError::into_py_err)
+    }
+}
+
+/// load_bytes input: bytes/str borrowed without copy; bytearray/memoryview copied
+/// (safety: the buffer could mutate during parsing).
+enum InputBuffer<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Vec<u8>),
+}
+
+impl<'a> InputBuffer<'a> {
+    fn extract(data: &'a Bound<'a, PyAny>) -> PyResult<Self> {
+        if let Ok(b) = data.cast::<PyBytes>() {
+            return Ok(InputBuffer::Borrowed(b.as_bytes()));
+        }
+        if let Ok(s) = data.cast::<PyString>() {
+            return Ok(InputBuffer::Borrowed(s.to_str()?.as_bytes()));
+        }
+        if let Ok(b) = data.cast::<PyByteArray>() {
+            return Ok(InputBuffer::Owned(b.to_vec()));
+        }
+        if data.cast::<PyMemoryView>().is_ok() {
+            let buffer: PyBuffer<u8> = PyBuffer::get(data)?;
+            return Ok(InputBuffer::Owned(buffer.to_vec(data.py())?));
+        }
+        Err(PyTypeError::new_err(
+            "expected bytes, bytearray, memoryview or str",
+        ))
+    }
+
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            InputBuffer::Borrowed(s) => s,
+            InputBuffer::Owned(v) => v,
+        }
     }
 }
 
@@ -203,7 +293,7 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(LiteralEncoder {
-                enum_items: type_info.items_repr.clone(),
+                enum_items: type_info.items_repr.as_str().into(),
                 load_map: type_info.load_map.clone_ref(py),
                 dump_map: type_info.dump_map.clone_ref(py),
             }),
@@ -220,6 +310,16 @@ pub fn get_encoder(
             let key_type = get_object_type(type_info.key_type.bind(py))?;
             let value_type = get_object_type(type_info.value_type.bind(py))?;
 
+            // A plain `str` key lets the streaming load path use the parsed key
+            // directly, skipping a re-validate + clone per key.
+            let key_is_plain_str = matches!(
+                &key_type,
+                Type::String(string_info, base)
+                    if string_info.min_length.is_none()
+                        && string_info.max_length.is_none()
+                        && base.custom_encoder.is_none()
+            );
+
             let key_encoder = get_encoder(py, key_type, encoder_state, naive_datetime_to_utc)?;
             let value_encoder = get_encoder(py, value_type, encoder_state, naive_datetime_to_utc)?;
 
@@ -227,6 +327,7 @@ pub fn get_encoder(
                 key_encoder,
                 value_encoder,
                 omit_none: type_info.omit_none,
+                key_is_plain_str,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -277,7 +378,7 @@ pub fn get_encoder(
 
             let encoder = UnionEncoder {
                 encoders,
-                repr: type_info.repr.clone(),
+                repr: type_info.repr.as_str().into(),
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -320,12 +421,17 @@ pub fn get_encoder(
             let fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
+            let format_routing = build_format_routing(&fields);
+            let has_flatten = fields.iter().any(|f| f.is_flattened);
+
             let encoder = EntityEncoder {
                 fields,
                 omit_none: type_info.omit_none,
                 is_frozen: type_info.is_frozen,
                 cls: type_info.cls.clone_ref(py),
                 used_keys: type_info.used_keys.clone_ref(py),
+                format_routing,
+                has_flatten,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -334,10 +440,15 @@ pub fn get_encoder(
             let fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
 
+            let format_routing = build_format_routing(&fields);
+            let has_flatten = fields.iter().any(|f| f.is_flattened);
+
             let encoder = TypedDictEncoder {
                 fields,
                 omit_none: type_info.omit_none,
                 used_keys: type_info.used_keys.clone_ref(py),
+                format_routing,
+                has_flatten,
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -350,7 +461,7 @@ pub fn get_encoder(
             py,
             base_type,
             Box::new(EnumEncoder {
-                enum_items: type_info.items_repr.clone(),
+                enum_items: type_info.items_repr.as_str().into(),
                 load_map: type_info.load_map.clone_ref(py),
                 dump_map: type_info.dump_map.clone(),
             }),
@@ -422,6 +533,17 @@ fn extract_custom_encoder(
     ))
 }
 
+/// Maps JSON key -> field index for the streaming load path. Flatten fields are
+/// excluded — they consume unclaimed keys, which that path collects separately.
+fn build_format_routing(fields: &[Field]) -> rustc_hash::FxHashMap<String, usize> {
+    fields
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| !f.is_flattened)
+        .map(|(i, f)| (f.dict_key_rs.clone(), i))
+        .collect()
+}
+
 fn iterate_on_fields(
     py: Python<'_>,
     entity_fields: &Vec<EntityFieldInfo>,
@@ -434,10 +556,12 @@ fn iterate_on_fields(
         let dict_key = field.dict_key.cast_bound::<PyString>(py)?;
         let f_type = get_object_type(field.field_type.bind(py))?;
 
+        let dict_key_rs: String = dict_key.to_string_lossy().into();
         let fld = Field {
             name: f_name.clone().unbind(),
             dict_key: dict_key.clone().unbind(),
-            dict_key_rs: dict_key.to_string_lossy().into(),
+            dump_key: EncodedKey::new(&dict_key_rs),
+            dict_key_rs,
             encoder: get_encoder(py, f_type, encoder_state, naive_datetime_to_utc)?,
             required: field.required,
             default: field.default.as_ref().map(|value| value.clone_ref(py)),

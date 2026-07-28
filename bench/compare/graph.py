@@ -6,6 +6,8 @@ import os
 from tabulate import tabulate
 
 
+# Column order per benchmark family; the first entry is the baseline the
+# 'Relative (latency)' column is divided by.
 LIBRARIES = (
     'serpyco_rs',
     'serpyco',
@@ -13,6 +15,26 @@ LIBRARIES = (
     'pydantic',
     'marshmallow',
 )
+
+# The end-to-end bytes benchmarks compare a different set of contenders.
+BYTES_LIBRARIES = (
+    'serpyco_rs_codec',
+    'serpyco_rs+orjson',
+    'msgspec',
+    'mashumaro+orjson',
+)
+
+
+def libs_for(group_results):
+    """Pick the column set a group's results belong to.
+
+    Falls back to whatever the group actually contains — a partially-run bench
+    still gets a table instead of silently vanishing from the output.
+    """
+    for candidates in (LIBRARIES, BYTES_LIBRARIES):
+        if all(lib in group_results for lib in candidates):
+            return candidates
+    return tuple(sorted(group_results))
 
 
 def aggregate():
@@ -41,9 +63,10 @@ def tab(obj):
         'Relative (latency)',
     )
     for group, val in sorted(obj.items(), reverse=True):
+        libraries = libs_for(val)
         buf.write('\n' + '#### ' + group + '\n\n')
         table = []
-        for lib in LIBRARIES:
+        for lib in libraries:
             correct = val[lib]['correct']
             table.append(
                 [
