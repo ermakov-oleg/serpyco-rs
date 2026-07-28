@@ -167,6 +167,7 @@ PetT = Annotated[Union[UCat, UDog], Discriminator('kind')]
 
 
 PARITY_CASES: list[tuple[Any, Any]] = [
+    # scalars
     (int, 42),
     (int, -(2**63)),  # i64 lower boundary
     (Any, 2**100),  # big int is fine inside Any (not a plain int field)
@@ -178,14 +179,17 @@ PARITY_CASES: list[tuple[Any, Any]] = [
     (bool, False),
     (Optional[int], None),
     (Optional[int], 7),
+    # stdlib scalar types
     (Decimal, Decimal('1.100')),  # precision preserved via raw number text
     (uuid.UUID, uuid.UUID('12345678-1234-5678-1234-567812345678')),
     (date, date(2026, 7, 23)),
     (time, time(12, 30, 0)),
     (datetime, datetime(2026, 7, 23, 12, 30, 0, tzinfo=timezone.utc)),
+    # enums and literals
     (Color, Color.RED),
     (Color, Color.GREEN),
     (Literal['foo', 'bar'], 'foo'),
+    # containers
     (list[int], [1, 2, 3]),
     (dict[str, int], {'a': 1, 'b': 2}),
     (tuple[int, str], (1, 'x')),  # tuple -> list on the wire, tuple back
@@ -193,6 +197,7 @@ PARITY_CASES: list[tuple[Any, Any]] = [
     (list[dict[str, list[int]]], [{'a': [1, 2]}, {'b': []}]),
     (Optional[list[Optional[int]]], [1, None, 2]),
     (Optional[list[Optional[int]]], None),
+    # dataclasses, generics, recursion
     (Inner, Inner(name='inner', score=0.5)),
     (Everything, EVERYTHING),
     (GenericBox[bool], GenericBox(value=True, path='some_path')),
@@ -200,6 +205,7 @@ PARITY_CASES: list[tuple[Any, Any]] = [
     (GenericBox[int], GenericBox(value=1)),
     (Node, Node(value='1', next=Node(value='2'))),
     (Root, Root(head=Node(value='a', next=None))),
+    # TypedDict and custom encoder
     (MovieTD, {'name': 'Blade Runner', 'year': 1982}),
     (UpperStr, 'abc'),
 ]
@@ -223,18 +229,20 @@ ROUNDTRIP_ONLY_CASES: list[tuple[Any, Any]] = [
 # union all-fail (naming counter, see test_union_all_fail_parity), big-int-for-plain-int
 # and float-for-int (deliberate divergences — see test_int_rejects_float_for_int_message_divergence).
 ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
-    (int, '1'),
+    (int, '1'),  # wrong scalar type
     (str, 1),
-    (list[int], [2, 3, 'foo']),
-    (dict[str, int], {'foo': 1, 'bar': '2'}),
-    (Inner, {'name': 'x'}),
-    (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),
+    (list[int], [2, 3, 'foo']),  # element error, index in path
+    (dict[str, int], {'foo': 1, 'bar': '2'}),  # value error, key in path
+    (Inner, {'name': 'x'}),  # missing required field
+    (Outer, {'inner': {'name': 'x', 'score': 'notfloat'}}),  # nested field error
+    # bounds
     (Annotated[int, Min(10), Max(100)], 1),
     (Annotated[int, Min(10), Max(100)], 101),
     (Annotated[str, MinLength(6), MaxLength(8)], 'hi'),
     (Annotated[str, MinLength(6), MaxLength(8)], 'hello world'),
-    (Color, 'blue'),
+    (Color, 'blue'),  # not an enum member
     (Literal['foo', 'bar'], 1),
+    # tuple arity and element type
     (tuple[int, str], [1, 2]),
     (tuple[int, str], [1]),
     (tuple[int, str], [1, 'x', 3]),
