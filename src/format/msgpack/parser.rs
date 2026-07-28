@@ -122,7 +122,10 @@ impl<'a> MsgpackParser<'a> {
                 let mut buf = itoa::Buffer::new();
                 self.number_text.push_str(buf.format(value));
             }
-            Number::U64(value) => self.number_text.push_str(&value.to_string()),
+            Number::U64(value) => {
+                let mut buf = itoa::Buffer::new();
+                self.number_text.push_str(buf.format(value));
+            }
             Number::F64(value) => {
                 let mut buf = ryu::Buffer::new();
                 self.number_text.push_str(buf.format(value));
@@ -229,8 +232,10 @@ impl<'a> MsgpackParser<'a> {
             match marker {
                 0x00..=0x7f | 0x80..=0x8f | 0x90..=0x9f | 0xa0..=0xbf | 0xe0..=0xff => match marker
                 {
-                    0x80..=0x8f => add_pending(&mut pending, ((marker & 0x0f) as usize) * 2)?,
-                    0x90..=0x9f => add_pending(&mut pending, (marker & 0x0f) as usize)?,
+                    0x80..=0x8f => {
+                        add_pending(&mut pending, ((marker & 0x0f) as usize) * 2, marker_pos)?
+                    }
+                    0x90..=0x9f => add_pending(&mut pending, (marker & 0x0f) as usize, marker_pos)?,
                     0xa0..=0xbf => self.skip_bytes((marker & 0x1f) as usize)?,
                     _ => {}
                 },
@@ -253,13 +258,13 @@ impl<'a> MsgpackParser<'a> {
                 0xcb | 0xcf | 0xd3 => self.skip_bytes(8)?,
                 0xcc | 0xd0 => self.skip_bytes(1)?,
                 0xcd | 0xd1 => self.skip_bytes(2)?,
-                0xdc => add_pending(&mut pending, self.take_u16()? as usize)?,
+                0xdc => add_pending(&mut pending, self.take_u16()? as usize, marker_pos)?,
                 0xdd => {
                     let len = usize::try_from(self.take_u32()?)
                         .map_err(|_| self.err_at("array length is too large", marker_pos))?;
-                    add_pending(&mut pending, len)?;
+                    add_pending(&mut pending, len, marker_pos)?;
                 }
-                0xde => add_pending(&mut pending, self.take_u16()? as usize * 2)?,
+                0xde => add_pending(&mut pending, self.take_u16()? as usize * 2, marker_pos)?,
                 0xdf => {
                     let len = usize::try_from(self.take_u32()?)
                         .map_err(|_| self.err_at("map length is too large", marker_pos))?;
@@ -267,6 +272,7 @@ impl<'a> MsgpackParser<'a> {
                         &mut pending,
                         len.checked_mul(2)
                             .ok_or_else(|| self.err_at("map length is too large", marker_pos))?,
+                        marker_pos,
                     )?;
                 }
                 0xc7 => {
@@ -532,9 +538,9 @@ impl<'a> MsgpackParser<'a> {
 }
 
 #[inline]
-fn add_pending(pending: &mut usize, count: usize) -> Result<(), SerdeError> {
+fn add_pending(pending: &mut usize, count: usize, marker_pos: usize) -> Result<(), SerdeError> {
     *pending = pending.checked_add(count).ok_or_else(|| {
-        SerdeError::Py(decode_err("MessagePack container is too large", usize::MAX))
+        SerdeError::Py(decode_err("MessagePack container is too large", marker_pos))
     })?;
     Ok(())
 }

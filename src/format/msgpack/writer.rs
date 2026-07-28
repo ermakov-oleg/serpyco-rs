@@ -37,6 +37,10 @@ pub(crate) struct MsgpackWriter {
 pub(crate) struct Checkpoint {
     buf_len: usize,
     containers_len: usize,
+    /// Item count of the innermost open container at snapshot time, restored on
+    /// rollback so the backpatched header stays correct regardless of whether
+    /// `item_end` ran between checkpoint and rollback.
+    top_items: u32,
 }
 
 pub(crate) fn encode_map_key(key: &str) -> Box<[u8]> {
@@ -68,6 +72,7 @@ impl MsgpackWriter {
         Checkpoint {
             buf_len: self.buf.len(),
             containers_len: self.containers.len(),
+            top_items: self.containers.last().map_or(0, |c| c.items),
         }
     }
 
@@ -75,6 +80,9 @@ impl MsgpackWriter {
     pub(crate) fn rollback(&mut self, cp: Checkpoint) {
         self.buf.truncate(cp.buf_len);
         self.containers.truncate(cp.containers_len);
+        if let Some(container) = self.containers.last_mut() {
+            container.items = cp.top_items;
+        }
     }
 
     #[inline(always)]

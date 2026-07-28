@@ -20,8 +20,8 @@ use uuid::Uuid;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::format::bridge::{
-    invalid_number_err, parse_any, write_any, write_py_float, write_py_int,
-    wrong_enum_at_cursor, wrong_type_at_cursor, wrong_type_err,
+    invalid_number_err, parse_any, write_any, write_py_float, write_py_int, wrong_enum_at_cursor,
+    wrong_type_at_cursor, wrong_type_err,
 };
 use crate::format::{EncodedKey, Kind, ParsedInt, ParsedNumber, Parser, Writer};
 use crate::python::{
