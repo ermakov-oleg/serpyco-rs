@@ -880,7 +880,8 @@ impl Encoder for DictionaryEncoder {
     ) -> SerdeResult<()> {
         let _guard = ctx.enter_depth()?;
         if let Ok(dict) = value.cast::<PyDict>() {
-            writer.begin_map();
+            // omit_none may drop entries, so the length is only known without it.
+            writer.begin_map((!self.omit_none).then(|| dict.len()));
             for (k, v) in dict.iter() {
                 if self.omit_none {
                     // Key is always dumped (validated) even when the None value is
@@ -1028,7 +1029,7 @@ impl Encoder for ArrayEncoder {
     ) -> SerdeResult<()> {
         let _guard = ctx.enter_depth()?;
         if let Ok(list) = value.cast::<PyList>() {
-            writer.begin_array();
+            writer.begin_array(Some(list.len()));
             for index in 0..list.len() {
                 let item = py_list_get_item(list, index)?;
                 self.encoder.dump_format(&item, writer, ctx)?;
@@ -1159,6 +1160,10 @@ trait StreamingObject: Encoder {
     fn used_keys(&self) -> &Py<PySet>;
     fn has_flatten(&self) -> bool;
     fn omit_none(&self) -> bool;
+    /// `Some(len)` when every field always emits exactly one entry (no omit_none
+    /// rollbacks, no skipped optional keys), letting sized formats write an
+    /// exact map header. Precomputed at construction.
+    fn dump_len_hint(&self) -> Option<usize>;
 
     // --- load sink: container typed per encoder, so `set` needs no re-cast;
     // `finish` erases it to `Bound<PyAny>` once. ---
@@ -1279,7 +1284,7 @@ fn dump_object_streaming<S: StreamingObject>(
     }
     let _guard = ctx.enter_depth()?;
     enc.check_dump_source(value)?;
-    writer.begin_map();
+    writer.begin_map(enc.dump_len_hint());
     for field in enc.fields() {
         let Some(field_val) = enc.fetch(value, field)? else {
             continue;
@@ -1328,6 +1333,9 @@ pub struct EntityEncoder {
     pub(crate) format_routing: FxHashMap<String, usize>,
     /// Cached `any(is_flattened)` so the format hot paths don't rescan per call.
     pub(crate) has_flatten: bool,
+    /// Every dump emits exactly `fields.len()` entries (no omit_none on optional
+    /// fields), so sized formats can write an exact map header.
+    pub(crate) dump_sized: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1502,6 +1510,10 @@ impl StreamingObject for EntityEncoder {
     fn omit_none(&self) -> bool {
         self.omit_none
     }
+    #[inline(always)]
+    fn dump_len_hint(&self) -> Option<usize> {
+        self.dump_sized.then(|| self.fields.len())
+    }
 
     #[inline(always)]
     fn create<'py>(&self, py: Python<'py>) -> SerdeResult<Self::Target<'py>> {
@@ -1591,6 +1603,9 @@ pub struct TypedDictEncoder {
     pub(crate) format_routing: FxHashMap<String, usize>,
     /// Cached `any(is_flattened)` so the format hot paths don't rescan per call.
     pub(crate) has_flatten: bool,
+    /// Every dump emits exactly `fields.len()` entries (all fields required, so
+    /// no skipped optional keys and no omit_none rollbacks).
+    pub(crate) dump_sized: bool,
 }
 
 impl Encoder for TypedDictEncoder {
@@ -1692,6 +1707,10 @@ impl StreamingObject for TypedDictEncoder {
     #[inline(always)]
     fn omit_none(&self) -> bool {
         self.omit_none
+    }
+    #[inline(always)]
+    fn dump_len_hint(&self) -> Option<usize> {
+        self.dump_sized.then(|| self.fields.len())
     }
 
     #[inline(always)]
@@ -2092,7 +2111,7 @@ impl Encoder for TupleEncoder {
         if let Ok(seq) = value.cast::<PySequence>() {
             let seq_len = seq.len()?;
             check_sequence_size(seq, seq_len, self.encoders.len(), None)?;
-            writer.begin_array();
+            writer.begin_array(Some(seq_len));
             for index in 0..seq_len {
                 let item = seq.get_item(index)?;
                 self.encoders[index].dump_format(&item, writer, ctx)?;

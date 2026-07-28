@@ -160,7 +160,7 @@ pub(crate) fn write_any(
         return Ok(());
     }
     if let Ok(list) = value.cast::<PyList>() {
-        writer.begin_array();
+        writer.begin_array(Some(list.len()));
         for item in list.iter() {
             write_any(&item, writer, ctx)?;
             writer.item_end();
@@ -169,7 +169,7 @@ pub(crate) fn write_any(
         return Ok(());
     }
     if let Ok(tup) = value.cast::<PyTuple>() {
-        writer.begin_array();
+        writer.begin_array(Some(tup.len()));
         for item in tup.iter() {
             write_any(&item, writer, ctx)?;
             writer.item_end();
@@ -178,7 +178,7 @@ pub(crate) fn write_any(
         return Ok(());
     }
     if let Ok(dict) = value.cast::<PyDict>() {
-        writer.begin_map();
+        writer.begin_map(Some(dict.len()));
         for (k, v) in dict.iter() {
             match k.cast::<PyString>() {
                 Ok(s) => writer.map_key(s.to_str()?),

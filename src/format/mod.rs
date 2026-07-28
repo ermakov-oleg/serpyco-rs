@@ -197,11 +197,14 @@ impl Writer {
         }
     }
 
+    /// `len` — number of entries when the caller knows it up front (`None` when
+    /// it depends on what gets written, e.g. omit_none). JSON ignores it; sized
+    /// binary formats use it to emit an exact header instead of backpatching.
     #[inline]
-    pub(crate) fn begin_map(&mut self) {
+    pub(crate) fn begin_map(&mut self, len: Option<usize>) {
         match self {
             Writer::Json(w) => w.begin_map(),
-            Writer::Msgpack(w) => w.begin_map(),
+            Writer::Msgpack(w) => w.begin_map(len),
         }
     }
 
@@ -230,11 +233,12 @@ impl Writer {
         }
     }
 
+    /// See [`Writer::begin_map`] for the `len` contract.
     #[inline]
-    pub(crate) fn begin_array(&mut self) {
+    pub(crate) fn begin_array(&mut self, len: Option<usize>) {
         match self {
             Writer::Json(w) => w.begin_array(),
-            Writer::Msgpack(w) => w.begin_array(),
+            Writer::Msgpack(w) => w.begin_array(len),
         }
     }
 

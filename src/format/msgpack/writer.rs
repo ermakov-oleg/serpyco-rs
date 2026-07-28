@@ -12,15 +12,21 @@ enum ContainerKind {
 #[derive(Debug, Clone, Copy)]
 struct Container {
     kind: ContainerKind,
-    header_pos: usize,
+    /// `Some(pos)` — a reserved 32-bit header at `pos` to backpatch on close;
+    /// `None` — an exact-length header was already written (`len` was known).
+    backpatch: Option<usize>,
+    /// Declared length for sized containers, validated on close in debug builds.
+    declared: u32,
     items: u32,
 }
 
 /// Streaming MessagePack writer.
 ///
-/// Container lengths are not known when the shared writer API opens them, so
-/// arrays/maps use the valid 32-bit header form and backpatch their item count
-/// when closed.
+/// Container lengths are usually known up front (lists, dicts, entities without
+/// omit_none), so `begin_map`/`begin_array` take `Some(len)` and write the exact
+/// minimal header. When the length depends on what actually gets written
+/// (omit_none, TypedDict with missing optional keys), `None` reserves the valid
+/// 32-bit header form and backpatches the item count when closed.
 #[derive(Debug)]
 pub(crate) struct MsgpackWriter {
     buf: Vec<u8>,
@@ -154,8 +160,8 @@ impl MsgpackWriter {
     }
 
     #[inline]
-    pub(crate) fn begin_map(&mut self) {
-        self.begin_container(ContainerKind::Map, MAP32);
+    pub(crate) fn begin_map(&mut self, len: Option<usize>) {
+        self.begin_container(ContainerKind::Map, MAP32, len);
     }
 
     #[inline]
@@ -174,8 +180,8 @@ impl MsgpackWriter {
     }
 
     #[inline]
-    pub(crate) fn begin_array(&mut self) {
-        self.begin_container(ContainerKind::Array, ARRAY32);
+    pub(crate) fn begin_array(&mut self, len: Option<usize>) {
+        self.begin_container(ContainerKind::Array, ARRAY32, len);
     }
 
     #[inline]
@@ -184,12 +190,28 @@ impl MsgpackWriter {
     }
 
     #[inline]
-    fn begin_container(&mut self, kind: ContainerKind, marker: u8) {
-        let header_pos = self.buf.len();
-        self.buf.extend_from_slice(&[marker, 0, 0, 0, 0]);
+    fn begin_container(&mut self, kind: ContainerKind, marker32: u8, len: Option<usize>) {
+        let (backpatch, declared) = match len {
+            Some(len) => {
+                let len: u32 = len
+                    .try_into()
+                    .expect("MessagePack container cannot exceed u32::MAX items");
+                match kind {
+                    ContainerKind::Map => write_map_header(&mut self.buf, len),
+                    ContainerKind::Array => write_array_header(&mut self.buf, len),
+                }
+                (None, len)
+            }
+            None => {
+                let header_pos = self.buf.len();
+                self.buf.extend_from_slice(&[marker32, 0, 0, 0, 0]);
+                (Some(header_pos), 0)
+            }
+        };
         self.containers.push(Container {
             kind,
-            header_pos,
+            backpatch,
+            declared,
             items: 0,
         });
     }
@@ -201,8 +223,41 @@ impl MsgpackWriter {
             .pop()
             .expect("container end without matching begin");
         debug_assert_eq!(container.kind, expected);
-        self.buf[container.header_pos + 1..container.header_pos + 5]
-            .copy_from_slice(&container.items.to_be_bytes());
+        match container.backpatch {
+            Some(pos) => {
+                self.buf[pos + 1..pos + 5].copy_from_slice(&container.items.to_be_bytes());
+            }
+            None => debug_assert_eq!(
+                container.items, container.declared,
+                "sized container wrote a different number of items than declared"
+            ),
+        }
+    }
+}
+
+#[inline]
+fn write_map_header(buf: &mut Vec<u8>, len: u32) {
+    if len <= 0x0f {
+        buf.push(0x80 | len as u8);
+    } else if len <= u16::MAX as u32 {
+        buf.push(0xde);
+        buf.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        buf.push(MAP32);
+        buf.extend_from_slice(&len.to_be_bytes());
+    }
+}
+
+#[inline]
+fn write_array_header(buf: &mut Vec<u8>, len: u32) {
+    if len <= 0x0f {
+        buf.push(0x90 | len as u8);
+    } else if len <= u16::MAX as u32 {
+        buf.push(0xdc);
+        buf.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        buf.push(ARRAY32);
+        buf.extend_from_slice(&len.to_be_bytes());
     }
 }
 

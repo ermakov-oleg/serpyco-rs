@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 import pytest
 
@@ -43,10 +43,26 @@ def test_msgpack_loads_standard_compact_encoding():
     }
 
 
-def test_msgpack_writer_backpatches_container_lengths():
+def test_msgpack_writer_compact_headers_for_known_lengths():
+    # Container lengths known up front use the minimal header form —
+    # byte-identical to canonical encoders like msgpack-python.
     raw = Serializer(dict[str, list[int]], codec=MSGPACK).dump({'a': [1, 2, 3]})
-    assert raw == b'\xdf\x00\x00\x00\x01\xa1a\xdd\x00\x00\x00\x03\x01\x02\x03'
+    assert raw == b'\x81\xa1a\x93\x01\x02\x03'
     assert Serializer(Any, codec=MSGPACK).load(raw) == {'a': [1, 2, 3]}
+
+
+def test_msgpack_writer_backpatches_dynamic_lengths():
+    @dataclass
+    class WithOptional:
+        a: int
+        b: Optional[int] = None
+
+    # omit_none makes the entry count depend on the values, so the writer
+    # reserves the 32-bit header form and backpatches the count on close.
+    s = Serializer(WithOptional, codec=MSGPACK, omit_none=True)
+    assert s.dump(WithOptional(a=1, b=None)) == b'\xdf\x00\x00\x00\x01\xa1a\x01'
+    assert s.dump(WithOptional(a=1, b=2)) == b'\xdf\x00\x00\x00\x02\xa1a\x01\xa1b\x02'
+    assert s.load(s.dump(WithOptional(a=1, b=None))) == WithOptional(a=1, b=None)
 
 
 @pytest.mark.parametrize(
