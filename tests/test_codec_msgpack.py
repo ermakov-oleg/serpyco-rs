@@ -138,6 +138,27 @@ def test_msgpack_schema_error_keeps_path():
     assert exc.value.errors[0].instance_path == 'count'
 
 
+def test_msgpack_schema_error_rendering_is_bounded():
+    serializer = Serializer(int, codec=MSGPACK)
+
+    # A huge array at the mismatch point must not be echoed into the message.
+    big = Serializer(Any, codec=MSGPACK).dump(list(range(100_000)))
+    with pytest.raises(SchemaValidationError) as exc:
+        serializer.load(big)
+    assert len(str(exc.value)) < 5_000
+
+    # A huge string likewise.
+    big_str = Serializer(Any, codec=MSGPACK).dump('x' * 1_000_000)
+    with pytest.raises(SchemaValidationError) as exc:
+        serializer.load(big_str)
+    assert len(str(exc.value)) < 5_000
+
+    # Deep nesting must not overflow the stack while rendering the error.
+    deep = b'\x91' * 100_000 + b'\x01'
+    with pytest.raises(SchemaValidationError):
+        serializer.load(deep)
+
+
 def test_msgpack_requires_string_map_keys():
     # {1: "value"} is legal MessagePack, but serpyco-rs' shared object model
     # requires string keys (matching JSON and aliases/entity field names).

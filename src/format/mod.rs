@@ -35,6 +35,24 @@ pub(crate) enum ParsedInt {
     Big(BigInt),
 }
 
+/// Cap on a wire value rendered into a schema-error message. Error paths must
+/// not amplify attacker-controlled input: a huge value at the mismatch point
+/// contributes at most this many bytes to the message, never a copy of the
+/// whole payload.
+pub(crate) const VALUE_REPR_LIMIT: usize = 2048;
+
+/// `String::from_utf8_lossy` capped at [`VALUE_REPR_LIMIT`] (an ellipsis marks
+/// the cut; a UTF-8 sequence split by the cut lossily degrades — error text only).
+pub(crate) fn lossy_repr_truncated(data: &[u8]) -> String {
+    if data.len() <= VALUE_REPR_LIMIT {
+        String::from_utf8_lossy(data).into_owned()
+    } else {
+        let mut out = String::from_utf8_lossy(&data[..VALUE_REPR_LIMIT]).into_owned();
+        out.push('…');
+        out
+    }
+}
+
 /// Any number from the wire, already split int-vs-float by the format itself:
 /// JSON by token shape (dot/exponent), MessagePack by marker. Callers that need
 /// the exact wire text (Decimal) use `take_number_str_known` instead.
@@ -418,10 +436,11 @@ impl<'j> Parser<'j> {
 
     /// Consume one value and render it for a schema error. JSON keeps its raw
     /// wire text; MessagePack reconstructs the equivalent Python-style value.
+    /// Both renderings are capped at [`VALUE_REPR_LIMIT`].
     #[inline]
     pub(crate) fn take_value_repr(&mut self) -> Result<String, SerdeError> {
         match self {
-            Parser::Json(p) => Ok(String::from_utf8_lossy(p.take_raw_value()?).into_owned()),
+            Parser::Json(p) => Ok(lossy_repr_truncated(p.take_raw_value()?)),
             Parser::Msgpack(p) => p.take_value_repr(),
         }
     }
@@ -430,7 +449,7 @@ impl<'j> Parser<'j> {
     #[inline]
     pub(crate) fn value_repr(&self, data: &'j [u8]) -> Result<String, SerdeError> {
         match self {
-            Parser::Json(_) => Ok(String::from_utf8_lossy(data).into_owned()),
+            Parser::Json(_) => Ok(lossy_repr_truncated(data)),
             Parser::Msgpack(_) => MsgpackParser::new(data).take_value_repr(),
         }
     }

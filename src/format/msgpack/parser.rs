@@ -3,7 +3,7 @@ use pyo3::PyErr;
 use smallvec::SmallVec;
 
 use crate::errors::{DecodeError, ToPyErr};
-use crate::format::{Kind, ParsedInt, ParsedNumber};
+use crate::format::{Kind, ParsedInt, ParsedNumber, VALUE_REPR_LIMIT};
 use crate::serde_error::SerdeError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -331,7 +331,20 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
+    /// Error-message rendering is budgeted by [`VALUE_REPR_LIMIT`]: an attacker
+    /// must not be able to amplify a huge or deeply nested value at the mismatch
+    /// point into an even bigger error string (or a stack overflow — the budget
+    /// check fires before each recursion, bounding the depth too). Whatever the
+    /// budget cuts is still consumed via the iterative `skip_value`, so the
+    /// cursor ends up exactly past the value.
     fn render_value(&mut self, out: &mut String, top_level: bool) -> Result<(), SerdeError> {
+        if out.len() >= VALUE_REPR_LIMIT {
+            self.skip_value()?;
+            if !out.ends_with('…') {
+                out.push('…');
+            }
+            return Ok(());
+        }
         match self.peek()? {
             Kind::Null => {
                 self.take_null_known()?;
@@ -350,23 +363,42 @@ impl<'a> MsgpackParser<'a> {
             }
             Kind::Str => {
                 let value = self.take_str_known()?;
+                let shown = truncate_char_boundary(value, VALUE_REPR_LIMIT);
                 if top_level {
                     out.push('"');
-                    out.push_str(value);
+                    out.push_str(shown);
                     out.push('"');
                 } else {
-                    push_quoted(out, value, '\'');
+                    push_quoted(out, shown, '\'');
+                }
+                if shown.len() < value.len() {
+                    out.push('…');
                 }
             }
             Kind::Bytes => {
                 let value = self.take_bytes_known()?;
-                push_bytes_repr(out, value);
+                let shown = &value[..value.len().min(VALUE_REPR_LIMIT)];
+                push_bytes_repr(out, shown);
+                if shown.len() < value.len() {
+                    out.push('…');
+                }
             }
             Kind::Array => {
                 out.push('[');
                 if self.enter_array_known()? {
                     let mut first = true;
                     loop {
+                        if out.len() >= VALUE_REPR_LIMIT {
+                            out.push('…');
+                            // Consume the current and remaining elements unrendered.
+                            loop {
+                                self.skip_value()?;
+                                if !self.next_array_item()? {
+                                    break;
+                                }
+                            }
+                            break;
+                        }
                         if !first {
                             out.push_str(", ");
                         }
@@ -383,12 +415,27 @@ impl<'a> MsgpackParser<'a> {
                 out.push('{');
                 let mut key = self.enter_map_known()?;
                 let mut first = true;
-                while let Some(value) = key {
+                while let Some(k) = key {
+                    if out.len() >= VALUE_REPR_LIMIT {
+                        out.push('…');
+                        // The key is consumed; skip its value and the remaining pairs.
+                        loop {
+                            self.skip_value()?;
+                            if self.next_key()?.is_none() {
+                                break;
+                            }
+                        }
+                        break;
+                    }
                     if !first {
                         out.push_str(", ");
                     }
                     first = false;
-                    push_quoted(out, value, '\'');
+                    let shown = truncate_char_boundary(k, VALUE_REPR_LIMIT);
+                    push_quoted(out, shown, '\'');
+                    if shown.len() < k.len() {
+                        out.push('…');
+                    }
                     out.push_str(": ");
                     self.render_value(out, false)?;
                     key = self.next_key()?;
@@ -548,6 +595,18 @@ fn add_pending(pending: &mut usize, count: usize, marker_pos: usize) -> Result<(
 #[inline]
 fn decode_err(message: &str, position: usize) -> PyErr {
     DecodeError::new_err((message.to_owned(), position))
+}
+
+/// Longest prefix of `value` at most `max` bytes long that ends on a char boundary.
+fn truncate_char_boundary(value: &str, max: usize) -> &str {
+    if value.len() <= max {
+        return value;
+    }
+    let mut end = max;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    &value[..end]
 }
 
 fn push_quoted(out: &mut String, value: &str, quote: char) {
