@@ -310,7 +310,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn peek(&mut self) -> Result<Kind, SerdeError> {
         match self {
             Parser::Json(p) => p.peek(),
@@ -318,7 +318,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_null_known(&mut self) -> Result<(), SerdeError> {
         match self {
             Parser::Json(p) => p.take_null_known(),
@@ -326,7 +326,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_bool_known(&mut self) -> Result<bool, SerdeError> {
         match self {
             Parser::Json(p) => p.take_bool_known(),
@@ -334,7 +334,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_int_known(&mut self) -> Result<ParsedInt, SerdeError> {
         match self {
             Parser::Json(p) => p.take_int_known(),
@@ -344,7 +344,7 @@ impl<'j> Parser<'j> {
 
     /// Typed number (int-vs-float decided by the format) — the hot path for
     /// float/Any loads; binary formats read it without going through text.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_number_known(&mut self) -> Result<ParsedNumber, SerdeError> {
         match self {
             Parser::Json(p) => p.take_number_known(),
@@ -361,7 +361,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_str_known(&mut self) -> Result<&str, SerdeError> {
         match self {
             Parser::Json(p) => p.take_str_known(),
@@ -369,7 +369,7 @@ impl<'j> Parser<'j> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_bytes_known(&mut self) -> Result<&'j [u8], SerdeError> {
         match self {
             Parser::Json(_) => unreachable!("JSON never reports Kind::Bytes"),
@@ -378,7 +378,7 @@ impl<'j> Parser<'j> {
     }
 
     /// None — empty object; Some(key) — first key.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn enter_map_known(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
             Parser::Json(p) => p.enter_map_known(),
@@ -387,7 +387,7 @@ impl<'j> Parser<'j> {
     }
 
     /// true — has a first element; false — empty array.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn enter_array_known(&mut self) -> Result<bool, SerdeError> {
         match self {
             Parser::Json(p) => p.enter_array_known(),
@@ -405,7 +405,7 @@ impl<'j> Parser<'j> {
     }
 
     /// Next key of the current object (None — end of object).
-    #[inline]
+    #[inline(always)]
     pub(crate) fn next_key(&mut self) -> Result<Option<&str>, SerdeError> {
         match self {
             Parser::Json(p) => p.next_key(),
@@ -414,7 +414,7 @@ impl<'j> Parser<'j> {
     }
 
     /// true — there is a next element; false — end of array.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn next_array_item(&mut self) -> Result<bool, SerdeError> {
         match self {
             Parser::Json(p) => p.next_array_item(),

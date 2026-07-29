@@ -140,7 +140,9 @@ impl<'a> MsgpackParser<'a> {
         let pos = self.index;
         let len = self.read_str_len()?;
         let bytes = self.take_slice(len)?;
-        std::str::from_utf8(bytes).map_err(|_| self.err_at("invalid UTF-8 string", pos))
+        // SIMD validation: strings dominate real payloads, and std's scalar
+        // from_utf8 was the single largest parser cost on string loads.
+        simdutf8::basic::from_utf8(bytes).map_err(|_| self.err_at("invalid UTF-8 string", pos))
     }
 
     #[inline(always)]
