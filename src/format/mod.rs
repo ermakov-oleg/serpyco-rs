@@ -369,6 +369,21 @@ impl<'j> Parser<'j> {
         }
     }
 
+    /// Materialize the next string as a `PyString` (hot-path alternative to
+    /// `take_str_known` + `PyString::new` when the value goes straight to
+    /// Python). MessagePack reuses its validation's ASCII knowledge; JSON
+    /// applies the same ASCII fast path over jiter's already-validated str.
+    #[inline(always)]
+    pub(crate) fn take_pystring_known<'py>(
+        &mut self,
+        py: pyo3::Python<'py>,
+    ) -> Result<pyo3::Bound<'py, pyo3::types::PyString>, SerdeError> {
+        match self {
+            Parser::Json(p) => Ok(crate::python::create_py_string(py, p.take_str_known()?)?),
+            Parser::Msgpack(p) => p.take_pystring_known(py),
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn take_bytes_known(&mut self) -> Result<&'j [u8], SerdeError> {
         match self {

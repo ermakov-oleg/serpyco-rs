@@ -140,9 +140,37 @@ impl<'a> MsgpackParser<'a> {
         let pos = self.index;
         let len = self.read_str_len()?;
         let bytes = self.take_slice(len)?;
-        // SIMD validation: strings dominate real payloads, and std's scalar
-        // from_utf8 was the single largest parser cost on string loads.
-        simdutf8::basic::from_utf8(bytes).map_err(|_| self.err_at("invalid UTF-8 string", pos))
+        Self::validate_str(bytes, pos)
+    }
+
+    /// ASCII short-circuit first: real-payload strings/keys are short and
+    /// overwhelmingly ASCII, where a vectorized `is_ascii` beats a full UTF-8
+    /// scan (simdutf8 delegates sub-64-byte inputs to std's scalar DFA).
+    #[inline(always)]
+    fn validate_str(bytes: &'a [u8], pos: usize) -> Result<&'a str, SerdeError> {
+        if bytes.is_ascii() {
+            return Ok(unsafe { std::str::from_utf8_unchecked(bytes) });
+        }
+        simdutf8::basic::from_utf8(bytes)
+            .map_err(|_| SerdeError::Py(decode_err("invalid UTF-8 string", pos)))
+    }
+
+    /// Materialize the next string straight into a `PyString`, reusing the
+    /// ASCII knowledge from validation so CPython never re-scans the bytes.
+    #[inline(always)]
+    pub(crate) fn take_pystring_known<'py>(
+        &mut self,
+        py: pyo3::Python<'py>,
+    ) -> Result<pyo3::Bound<'py, pyo3::types::PyString>, SerdeError> {
+        let pos = self.index;
+        let len = self.read_str_len()?;
+        let bytes = self.take_slice(len)?;
+        if bytes.is_ascii() {
+            return Ok(unsafe { crate::python::pystring_ascii_new(py, bytes)? });
+        }
+        let s = simdutf8::basic::from_utf8(bytes)
+            .map_err(|_| SerdeError::Py(decode_err("invalid UTF-8 string", pos)))?;
+        Ok(pyo3::types::PyString::new(py, s))
     }
 
     #[inline(always)]

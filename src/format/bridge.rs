@@ -4,6 +4,7 @@ use pyo3::IntoPyObjectExt;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::format::{Kind, ParsedInt, ParsedNumber, Parser, Writer};
+use crate::python::create_py_string;
 use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::{Context, InstancePath};
 
@@ -94,7 +95,7 @@ pub(crate) fn parse_any<'py>(
             ParsedNumber::Int(ParsedInt::Big(v)) => Ok(v.into_bound_py_any(py)?),
             ParsedNumber::F64(v) => Ok(PyFloat::new(py, v).into_any()),
         },
-        Kind::Str => Ok(PyString::new(py, parser.take_str_known()?).into_any()),
+        Kind::Str => Ok(parser.take_pystring_known(py)?.into_any()),
         Kind::Bytes => Ok(PyBytes::new(py, parser.take_bytes_known()?).into_any()),
         Kind::Array => {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -114,7 +115,7 @@ pub(crate) fn parse_any<'py>(
             // the parser for the recursive value parse.
             let mut key = parser.enter_map_known()?;
             while let Some(k) = key {
-                let py_key = PyString::new(py, k);
+                let py_key = create_py_string(py, k)?;
                 let value = parse_any(py, parser, ctx)?;
                 dict.set_item(py_key, value)?;
                 key = parser.next_key()?;

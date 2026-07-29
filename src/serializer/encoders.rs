@@ -25,8 +25,8 @@ use crate::format::bridge::{
 };
 use crate::format::{EncodedKey, Kind, ParsedInt, ParsedNumber, Parser, Writer};
 use crate::python::{
-    create_instance, create_py_dict_known_size, create_py_list, create_py_tuple, dump_date,
-    dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
+    create_instance, create_py_dict_known_size, create_py_list, create_py_string, create_py_tuple,
+    dump_date, dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
     py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
 use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
@@ -585,8 +585,7 @@ impl Encoder for StringEncoder {
         _ctx: &Context,
     ) -> SerdeResult<Bound<'py, PyAny>> {
         if parser.peek()? == Kind::Str {
-            let s = parser.take_str_known()?;
-            let py_str = PyString::new(py, s);
+            let py_str = parser.take_pystring_known(py)?;
             check_length(
                 &py_str,
                 self.type_info.min_length,
@@ -798,7 +797,7 @@ fn load_enum_scalar<'py>(
 ) -> SerdeResult<Bound<'py, PyAny>> {
     match parser.peek()? {
         Kind::Str => {
-            let key = PyString::new(py, parser.take_str_known()?).into_any();
+            let key = parser.take_pystring_known(py)?.into_any();
             load(&key, instance_path, ctx)
         }
         Kind::Num => {
@@ -926,7 +925,7 @@ impl Encoder for DictionaryEncoder {
         // serves both instance_path and the insert.
         let mut key_opt = parser.enter_map_known()?;
         while let Some(k) = key_opt {
-            let py_key = PyString::new(py, k);
+            let py_key = create_py_string(py, k)?;
             let key_any = py_key.as_any();
             let item_path = instance_path.push(key_any);
             // `validated_key` keeps a non-plain key alive past the insert.
@@ -1220,7 +1219,7 @@ fn load_object_streaming<'py, S: StreamingObject + 'py>(
                 }
                 None => {
                     // Unknown key -> a flatten field's: materialize only this value.
-                    let py_key = PyString::new(py, k);
+                    let py_key = create_py_string(py, k)?;
                     let v = parse_any(py, parser, ctx)?;
                     unknowns.set_item(py_key, v)?;
                 }
