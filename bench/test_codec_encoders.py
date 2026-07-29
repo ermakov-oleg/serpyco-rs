@@ -87,6 +87,26 @@ def test_load_list_simple_types(bench_or_check_refcount, codec):
     bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
 
 
+# Floats hit a dedicated wire path in binary formats (fixed-width f64 vs text),
+# so they get their own list case: `list[int]` cannot stand in for it. This also
+# feeds float dump/load into the PGO profile (ci-pgo-collect runs this file).
+@parametrize_codec
+def test_dump_list_float(bench_or_check_refcount, codec):
+    serializer = Serializer(list[float], codec=codec)
+    bench_or_check_refcount.group = 'list_float (codec)'
+    data = [i * 1.5 for i in range(1000)]
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@parametrize_codec
+def test_load_list_float(bench_or_check_refcount, codec):
+    serializer = Serializer(list[float], codec=codec)
+    bench_or_check_refcount.group = 'list_float (codec)'
+    data = [i * 1.5 for i in range(1000)]
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
 @parametrize_codec
 def test_dump_small_list_simple_types(bench_or_check_refcount, codec):
     serializer = Serializer(list[int], codec=codec)
