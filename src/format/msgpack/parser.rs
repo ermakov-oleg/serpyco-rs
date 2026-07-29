@@ -29,6 +29,11 @@ enum Number {
 pub(crate) struct MsgpackParser<'a> {
     data: &'a [u8],
     index: usize,
+    /// Marker byte captured by the last `peek()`. `*_known` readers consume it
+    /// without re-reading (their contract already requires a preceding peek) —
+    /// mirrors jiter's `last_peek`, and keeps the hot loop free of a second
+    /// bounds-check + marker match per value.
+    last_marker: u8,
     containers: SmallVec<[Container; 8]>,
     number_text: String,
 }
@@ -38,14 +43,16 @@ impl<'a> MsgpackParser<'a> {
         Self {
             data,
             index: 0,
+            last_marker: 0,
             containers: SmallVec::new(),
             number_text: String::new(),
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn peek(&mut self) -> Result<Kind, SerdeError> {
         let marker = self.peek_u8()?;
+        self.last_marker = marker;
         match marker {
             0xc0 => Ok(Kind::Null),
             0xc2 | 0xc3 => Ok(Kind::Bool),
@@ -61,27 +68,21 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_null_known(&mut self) -> Result<(), SerdeError> {
-        let pos = self.index;
-        if self.take_u8()? == 0xc0 {
-            Ok(())
-        } else {
-            Err(self.err_at("expected null", pos))
-        }
+        debug_assert_eq!(self.data.get(self.index), Some(&0xc0));
+        self.index += 1;
+        Ok(())
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_bool_known(&mut self) -> Result<bool, SerdeError> {
-        let pos = self.index;
-        match self.take_u8()? {
-            0xc2 => Ok(false),
-            0xc3 => Ok(true),
-            _ => Err(self.err_at("expected boolean", pos)),
-        }
+        debug_assert!(matches!(self.data.get(self.index), Some(0xc2 | 0xc3)));
+        self.index += 1;
+        Ok(self.last_marker == 0xc3)
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_int_known(&mut self) -> Result<ParsedInt, SerdeError> {
         let pos = self.index;
         match self.read_number()? {
@@ -101,7 +102,7 @@ impl<'a> MsgpackParser<'a> {
     }
 
     /// Typed number straight from the marker — no text round-trip.
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_number_known(&mut self) -> Result<ParsedNumber, SerdeError> {
         match self.read_number()? {
             Number::I64(value) => Ok(ParsedNumber::Int(ParsedInt::I64(value))),
@@ -134,7 +135,7 @@ impl<'a> MsgpackParser<'a> {
         Ok(&self.number_text)
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_str_known(&mut self) -> Result<&'a str, SerdeError> {
         let pos = self.index;
         let len = self.read_str_len()?;
@@ -142,7 +143,7 @@ impl<'a> MsgpackParser<'a> {
         std::str::from_utf8(bytes).map_err(|_| self.err_at("invalid UTF-8 string", pos))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn take_bytes_known(&mut self) -> Result<&'a [u8], SerdeError> {
         let pos = self.index;
         let len = self.read_bin_len()?;
@@ -150,12 +151,12 @@ impl<'a> MsgpackParser<'a> {
             .map_err(|_| self.err_at("truncated binary value", pos))
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn enter_map_known(&mut self) -> Result<Option<&'a str>, SerdeError> {
-        self.enter_map()
+        self.enter_map_inner()
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn enter_array_known(&mut self) -> Result<bool, SerdeError> {
         let len = self.read_array_len()?;
         if len == 0 {
@@ -168,8 +169,18 @@ impl<'a> MsgpackParser<'a> {
         Ok(true)
     }
 
+    /// Enter a map without a preceding `peek()` (discriminated-union scan).
     #[inline]
     pub(crate) fn enter_map(&mut self) -> Result<Option<&'a str>, SerdeError> {
+        let pos = self.index;
+        if self.peek()? != Kind::Map {
+            return Err(self.err_at("expected map", pos));
+        }
+        self.enter_map_inner()
+    }
+
+    #[inline(always)]
+    fn enter_map_inner(&mut self) -> Result<Option<&'a str>, SerdeError> {
         let len = self.read_map_len()?;
         if len == 0 {
             return Ok(None);
@@ -181,7 +192,7 @@ impl<'a> MsgpackParser<'a> {
         self.take_map_key().map(Some)
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn next_key(&mut self) -> Result<Option<&'a str>, SerdeError> {
         let has_next = {
             let Some(container) = self.containers.last_mut() else {
@@ -205,7 +216,7 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn next_array_item(&mut self) -> Result<bool, SerdeError> {
         let Some(container) = self.containers.last_mut() else {
             return Err(self.err_at("array iterator is not active", self.index));
@@ -322,7 +333,7 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn take_map_key(&mut self) -> Result<&'a str, SerdeError> {
         let pos = self.index;
         match self.peek()? {
@@ -446,10 +457,12 @@ impl<'a> MsgpackParser<'a> {
         Ok(())
     }
 
-    #[inline]
+    /// `*_known` only: consumes the marker captured by the preceding `peek()`.
+    #[inline(always)]
     fn read_number(&mut self) -> Result<Number, SerdeError> {
         let pos = self.index;
-        let marker = self.take_u8()?;
+        let marker = self.last_marker;
+        self.index += 1;
         match marker {
             0x00..=0x7f => Ok(Number::I64(marker as i64)),
             0xe0..=0xff => Ok(Number::I64(marker as i8 as i64)),
@@ -470,10 +483,13 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    /// `*_known` only: consumes the marker captured by the preceding `peek()`.
+    #[inline(always)]
     fn read_str_len(&mut self) -> Result<usize, SerdeError> {
         let pos = self.index;
-        match self.take_u8()? {
+        let marker = self.last_marker;
+        self.index += 1;
+        match marker {
             marker @ 0xa0..=0xbf => Ok((marker & 0x1f) as usize),
             0xd9 => Ok(self.take_u8()? as usize),
             0xda => Ok(self.take_u16()? as usize),
@@ -483,10 +499,13 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    /// `*_known` only: consumes the marker captured by the preceding `peek()`.
+    #[inline(always)]
     fn read_bin_len(&mut self) -> Result<usize, SerdeError> {
         let pos = self.index;
-        match self.take_u8()? {
+        let marker = self.last_marker;
+        self.index += 1;
+        match marker {
             0xc4 => Ok(self.take_u8()? as usize),
             0xc5 => Ok(self.take_u16()? as usize),
             0xc6 => usize::try_from(self.take_u32()?)
@@ -495,10 +514,13 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    /// `*_known` only: consumes the marker captured by the preceding `peek()`.
+    #[inline(always)]
     fn read_array_len(&mut self) -> Result<u32, SerdeError> {
         let pos = self.index;
-        match self.take_u8()? {
+        let marker = self.last_marker;
+        self.index += 1;
+        match marker {
             marker @ 0x90..=0x9f => Ok((marker & 0x0f) as u32),
             0xdc => Ok(self.take_u16()? as u32),
             0xdd => self.take_u32(),
@@ -506,10 +528,13 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    /// `*_known` only: consumes the marker captured by the preceding `peek()`.
+    #[inline(always)]
     fn read_map_len(&mut self) -> Result<u32, SerdeError> {
         let pos = self.index;
-        match self.take_u8()? {
+        let marker = self.last_marker;
+        self.index += 1;
+        match marker {
             marker @ 0x80..=0x8f => Ok((marker & 0x0f) as u32),
             0xde => Ok(self.take_u16()? as u32),
             0xdf => self.take_u32(),
@@ -517,7 +542,7 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn peek_u8(&self) -> Result<u8, SerdeError> {
         self.data
             .get(self.index)
@@ -525,14 +550,14 @@ impl<'a> MsgpackParser<'a> {
             .ok_or_else(|| self.err_at("unexpected end of MessagePack input", self.index))
     }
 
-    #[inline]
+    #[inline(always)]
     fn take_u8(&mut self) -> Result<u8, SerdeError> {
         let value = self.peek_u8()?;
         self.index += 1;
         Ok(value)
     }
 
-    #[inline]
+    #[inline(always)]
     fn take_u16(&mut self) -> Result<u16, SerdeError> {
         let bytes: [u8; 2] = self
             .take_slice(2)?
@@ -541,7 +566,7 @@ impl<'a> MsgpackParser<'a> {
         Ok(u16::from_be_bytes(bytes))
     }
 
-    #[inline]
+    #[inline(always)]
     fn take_u32(&mut self) -> Result<u32, SerdeError> {
         let bytes: [u8; 4] = self
             .take_slice(4)?
@@ -550,7 +575,7 @@ impl<'a> MsgpackParser<'a> {
         Ok(u32::from_be_bytes(bytes))
     }
 
-    #[inline]
+    #[inline(always)]
     fn take_u64(&mut self) -> Result<u64, SerdeError> {
         let bytes: [u8; 8] = self
             .take_slice(8)?
@@ -559,7 +584,7 @@ impl<'a> MsgpackParser<'a> {
         Ok(u64::from_be_bytes(bytes))
     }
 
-    #[inline]
+    #[inline(always)]
     fn take_slice(&mut self, len: usize) -> Result<&'a [u8], SerdeError> {
         let end = self
             .index
