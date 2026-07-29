@@ -62,6 +62,11 @@ pub(crate) enum ParsedNumber {
 }
 
 /// Enum dispatch instead of dyn: the set of formats is closed.
+// large_enum_variant: MsgpackWriter carries an inline container stack. The
+// Writer is built once per dump and stays on that call's stack — boxing the
+// variant would trade a one-time size cost for pointer indirection on every
+// write call in the hot path.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(crate) enum Writer {
     Json(JsonWriter),

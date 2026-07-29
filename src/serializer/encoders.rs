@@ -881,7 +881,7 @@ impl Encoder for DictionaryEncoder {
         let _guard = ctx.enter_depth()?;
         if let Ok(dict) = value.cast::<PyDict>() {
             // omit_none may drop entries, so the length is only known without it.
-            writer.begin_map((!self.omit_none).then(|| dict.len()));
+            writer.begin_map((!self.omit_none).then_some(dict.len()));
             for (k, v) in dict.iter() {
                 if self.omit_none {
                     // Key is always dumped (validated) even when the None value is
@@ -1512,7 +1512,7 @@ impl StreamingObject for EntityEncoder {
     }
     #[inline(always)]
     fn dump_len_hint(&self) -> Option<usize> {
-        self.dump_sized.then(|| self.fields.len())
+        self.dump_sized.then_some(self.fields.len())
     }
 
     #[inline(always)]
@@ -1710,7 +1710,7 @@ impl StreamingObject for TypedDictEncoder {
     }
     #[inline(always)]
     fn dump_len_hint(&self) -> Option<usize> {
-        self.dump_sized.then(|| self.fields.len())
+        self.dump_sized.then_some(self.fields.len())
     }
 
     #[inline(always)]
