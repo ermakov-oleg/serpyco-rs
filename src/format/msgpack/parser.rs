@@ -322,7 +322,7 @@ impl<'a> MsgpackParser<'a> {
 
     pub(crate) fn take_value_repr(&mut self) -> Result<String, SerdeError> {
         let mut out = String::new();
-        self.render_value(&mut out, true)?;
+        self.render_value(&mut out, true, 0)?;
         Ok(out)
     }
 
@@ -344,14 +344,26 @@ impl<'a> MsgpackParser<'a> {
         }
     }
 
-    /// Error-message rendering is budgeted by [`VALUE_REPR_LIMIT`]: an attacker
-    /// must not be able to amplify a huge or deeply nested value at the mismatch
-    /// point into an even bigger error string (or a stack overflow — the budget
-    /// check fires before each recursion, bounding the depth too). Whatever the
-    /// budget cuts is still consumed via the iterative `skip_value`, so the
-    /// cursor ends up exactly past the value.
-    fn render_value(&mut self, out: &mut String, top_level: bool) -> Result<(), SerdeError> {
-        if out.len() >= VALUE_REPR_LIMIT {
+    /// Recursion cap for error rendering. The byte budget alone bounds the
+    /// depth at VALUE_REPR_LIMIT frames (each level emits at least one byte),
+    /// but that is deeper than a 1 MiB thread stack (Windows main thread on
+    /// CPython < 3.13) survives — so the depth is capped explicitly, far below
+    /// any useful error text.
+    const RENDER_MAX_DEPTH: u32 = 64;
+
+    /// Error-message rendering is budgeted by [`VALUE_REPR_LIMIT`] and
+    /// [`Self::RENDER_MAX_DEPTH`]: an attacker must not be able to amplify a
+    /// huge or deeply nested value at the mismatch point into an even bigger
+    /// error string or a stack overflow. Whatever the budget cuts is still
+    /// consumed via the iterative `skip_value`, so the cursor ends up exactly
+    /// past the value.
+    fn render_value(
+        &mut self,
+        out: &mut String,
+        top_level: bool,
+        depth: u32,
+    ) -> Result<(), SerdeError> {
+        if out.len() >= VALUE_REPR_LIMIT || depth >= Self::RENDER_MAX_DEPTH {
             self.skip_value()?;
             if !out.ends_with('…') {
                 out.push('…');
@@ -416,7 +428,7 @@ impl<'a> MsgpackParser<'a> {
                             out.push_str(", ");
                         }
                         first = false;
-                        self.render_value(out, false)?;
+                        self.render_value(out, false, depth + 1)?;
                         if !self.next_array_item()? {
                             break;
                         }
@@ -450,7 +462,7 @@ impl<'a> MsgpackParser<'a> {
                         out.push('…');
                     }
                     out.push_str(": ");
-                    self.render_value(out, false)?;
+                    self.render_value(out, false, depth + 1)?;
                     key = self.next_key()?;
                 }
                 out.push('}');

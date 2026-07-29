@@ -153,10 +153,32 @@ def test_msgpack_schema_error_rendering_is_bounded():
         serializer.load(big_str)
     assert len(str(exc.value)) < 5_000
 
-    # Deep nesting must not overflow the stack while rendering the error.
+    # Deep nesting must not overflow the stack while rendering the error —
+    # including on a 1 MiB stack (Windows main thread on older CPython), which
+    # a small-stack worker thread simulates on every platform.
     deep = b'\x91' * 100_000 + b'\x01'
     with pytest.raises(SchemaValidationError):
         serializer.load(deep)
+
+    import threading
+
+    result: list[BaseException] = []
+
+    def _load_on_small_stack():
+        try:
+            serializer.load(deep)
+        except BaseException as exc:  # noqa: BLE001 - re-raised in the main thread
+            result.append(exc)
+
+    threading.stack_size(1024 * 1024)
+    try:
+        t = threading.Thread(target=_load_on_small_stack)
+        t.start()
+        t.join()
+    finally:
+        threading.stack_size(0)
+    assert len(result) == 1
+    assert isinstance(result[0], SchemaValidationError)
 
 
 def test_msgpack_requires_string_map_keys():
