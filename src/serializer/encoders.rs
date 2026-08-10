@@ -31,7 +31,7 @@ use crate::python::{
     py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
 use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
-use crate::serde_error::{SerdeError, SerdeResult};
+use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
     invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_dump_err_with_cause,
@@ -1599,10 +1599,16 @@ impl Encoder for TypedDictEncoder {
                 Ok(Some(val)) => val,
                 _ => {
                     if field.required {
-                        return Err(SerdeError::Py(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {}",
-                            field.name
-                        ))));
+                        // Missing required key means `value` isn't this dict's shape:
+                        // a Schema mismatch, so an untagged union tries the next member.
+                        return Err(SchemaError::new(
+                            format!(
+                                "data dictionary is missing required parameter {}",
+                                field.name
+                            ),
+                            &InstancePath::new(),
+                        )
+                        .into());
                     }
                     continue;
                 }
@@ -1725,10 +1731,16 @@ impl StreamingObject for TypedDictEncoder {
             Ok(Some(val)) => Ok(Some(val)),
             _ => {
                 if field.required {
-                    Err(SerdeError::Py(ValidationError::new_err(format!(
-                        "data dictionary is missing required parameter {}",
-                        field.name
-                    ))))
+                    // Same missing-key -> Schema-mismatch conversion as `dump`, for
+                    // the streaming dump path.
+                    Err(SchemaError::new(
+                        format!(
+                            "data dictionary is missing required parameter {}",
+                            field.name
+                        ),
+                        &InstancePath::new(),
+                    )
+                    .into())
                 } else {
                     // Missing optional key: skip entirely (no key emitted).
                     Ok(None)
