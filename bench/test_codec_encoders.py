@@ -3,11 +3,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import pytest
+from typing_extensions import TypedDict
 
-from serpyco_rs import JSON, Codec, Serializer
+from serpyco_rs import JSON, MSGPACK, Codec, Serializer
 
 from .utils import repeat
 
@@ -16,7 +17,7 @@ from .utils import repeat
 # here — every benchmark below is already parametrized over this list, and each
 # id is derived from the codec itself, so `[json]` keeps its id and CodSpeed
 # history when `[msgpack]` shows up alongside it.
-CODECS = [JSON]
+CODECS = [JSON, MSGPACK]
 
 
 def _codec_id(codec: Codec) -> str:
@@ -83,6 +84,80 @@ def test_load_list_simple_types(bench_or_check_refcount, codec):
     serializer = Serializer(list[int], codec=codec)
     bench_or_check_refcount.group = 'list (codec)'
     data = list(range(1000))
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
+# Every scalar wire type gets its own list case: each hits a dedicated encoder
+# and format path (floats: fixed-width f64 vs text; strings: escaping vs
+# length-prefix; bools: single-marker), so `list[int]` cannot stand in for
+# them. This doubles as PGO input — ci-pgo-collect runs this file, and a
+# profile that never sees a type skews inlining against it.
+@parametrize_codec
+def test_dump_list_float(bench_or_check_refcount, codec):
+    serializer = Serializer(list[float], codec=codec)
+    bench_or_check_refcount.group = 'list_float (codec)'
+    data = [i * 1.5 for i in range(1000)]
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@parametrize_codec
+def test_load_list_float(bench_or_check_refcount, codec):
+    serializer = Serializer(list[float], codec=codec)
+    bench_or_check_refcount.group = 'list_float (codec)'
+    data = [i * 1.5 for i in range(1000)]
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
+@parametrize_codec
+def test_dump_list_str(bench_or_check_refcount, codec):
+    serializer = Serializer(list[str], codec=codec)
+    bench_or_check_refcount.group = 'list_str (codec)'
+    data = [f'string-number-{i}' for i in range(1000)]
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@parametrize_codec
+def test_load_list_str(bench_or_check_refcount, codec):
+    serializer = Serializer(list[str], codec=codec)
+    bench_or_check_refcount.group = 'list_str (codec)'
+    data = [f'string-number-{i}' for i in range(1000)]
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
+@parametrize_codec
+def test_dump_list_bool(bench_or_check_refcount, codec):
+    serializer = Serializer(list[bool], codec=codec)
+    bench_or_check_refcount.group = 'list_bool (codec)'
+    data = [True, False] * 500
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@parametrize_codec
+def test_load_list_bool(bench_or_check_refcount, codec):
+    serializer = Serializer(list[bool], codec=codec)
+    bench_or_check_refcount.group = 'list_bool (codec)'
+    data = [True, False] * 500
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
+# bytes is msgpack-only: JSON has no binary value and rejects bytes at dump.
+@pytest.mark.parametrize('codec', [MSGPACK], ids=_codec_id)
+def test_dump_bytes(bench_or_check_refcount, codec):
+    serializer = Serializer(bytes, codec=codec)
+    bench_or_check_refcount.group = 'bytes (codec)'
+    data = bytes(range(256)) * 16
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@pytest.mark.parametrize('codec', [MSGPACK], ids=_codec_id)
+def test_load_bytes(bench_or_check_refcount, codec):
+    serializer = Serializer(bytes, codec=codec)
+    bench_or_check_refcount.group = 'bytes (codec)'
+    data = bytes(range(256)) * 16
     raw = serializer.dump(data)
     bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
 
@@ -274,6 +349,49 @@ def test_load_dataclass(bench_or_check_refcount, codec):
     serializer = Serializer(FooDataclass, codec=codec)
     bench_or_check_refcount.group = 'dataclass (codec)'
     data = FooDataclass(foo=1, bar='2')
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
+class FooTypedDict(TypedDict):
+    foo: int
+    bar: str
+
+
+# TypedDict shares the streaming object algorithm with dataclasses but is a
+# separate monomorphization (different sink), so it needs its own profile entry.
+@parametrize_codec
+def test_dump_typed_dict(bench_or_check_refcount, codec):
+    serializer = Serializer(FooTypedDict, codec=codec)
+    bench_or_check_refcount.group = 'typed_dict (codec)'
+    data: FooTypedDict = {'foo': 1, 'bar': '2'}
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@parametrize_codec
+def test_load_typed_dict(bench_or_check_refcount, codec):
+    serializer = Serializer(FooTypedDict, codec=codec)
+    bench_or_check_refcount.group = 'typed_dict (codec)'
+    data: FooTypedDict = {'foo': 1, 'bar': '2'}
+    raw = serializer.dump(data)
+    bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
+
+
+# Any exercises the schema-less bridge (write_any/parse_any) — the path taken
+# by Any fields, CustomType payloads, and unknown keys under Flatten.
+@parametrize_codec
+def test_dump_any(bench_or_check_refcount, codec):
+    serializer = Serializer(Any, codec=codec)
+    bench_or_check_refcount.group = 'any (codec)'
+    data = {'nums': [1.5, 2, None], 'nested': {'a': [True, 'x', 3.25]}, 'n': 42}
+    bench_or_check_refcount(repeat(lambda: serializer.dump(data)))
+
+
+@parametrize_codec
+def test_load_any(bench_or_check_refcount, codec):
+    serializer = Serializer(Any, codec=codec)
+    bench_or_check_refcount.group = 'any (codec)'
+    data = {'nums': [1.5, 2, None], 'nested': {'a': [True, 'x', 3.25]}, 'n': 42}
     raw = serializer.dump(data)
     bench_or_check_refcount(repeat(lambda: serializer.load(raw)))
 

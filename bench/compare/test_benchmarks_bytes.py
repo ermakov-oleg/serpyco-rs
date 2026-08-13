@@ -1,8 +1,9 @@
 import msgspec
 import orjson
+import ormsgpack
 import pytest
 
-from .libs import msgspec_struct, serpyco_rs, serpyco_rs_codec
+from .libs import msgspec_struct, serpyco_rs, serpyco_rs_codec, serpyco_rs_codec_msgpack
 
 
 def _msgspec_dump(obj):
@@ -11,6 +12,14 @@ def _msgspec_dump(obj):
 
 def _msgspec_load(data):
     return msgspec.json.decode(data, type=msgspec_struct.Dataclass)
+
+
+def _msgspec_msgpack_dump(obj):
+    return msgspec.msgpack.encode(obj)
+
+
+def _msgspec_msgpack_load(data):
+    return msgspec.msgpack.decode(data, type=msgspec_struct.Dataclass)
 
 
 CONTENDERS = {
@@ -31,6 +40,25 @@ CONTENDERS = {
     'msgspec': {
         'dump': _msgspec_dump,
         'load': _msgspec_load,
+        'obj': msgspec_struct.test_object,
+        'skip_refcount': True,
+    },
+    'serpyco_rs_codec_msgpack': {
+        'dump': serpyco_rs_codec_msgpack.dump,
+        'load': serpyco_rs_codec_msgpack.load,
+        'obj': serpyco_rs_codec_msgpack.test_object,
+        'skip_refcount': False,
+    },
+    'serpyco_rs+ormsgpack': {
+        'dump': lambda o: ormsgpack.packb(serpyco_rs.dump(o)),
+        'load': lambda b: serpyco_rs.load(ormsgpack.unpackb(b)),
+        'obj': serpyco_rs.test_object,
+        # Same key-cache behavior as orjson (ormsgpack is an orjson fork).
+        'skip_refcount': True,
+    },
+    'msgspec_msgpack': {
+        'dump': _msgspec_msgpack_dump,
+        'load': _msgspec_msgpack_load,
         'obj': msgspec_struct.test_object,
         'skip_refcount': True,
     },

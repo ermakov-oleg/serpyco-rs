@@ -423,10 +423,13 @@ pub fn get_encoder(
 
             let format_routing = build_format_routing(&fields);
             let has_flatten = fields.iter().any(|f| f.is_flattened);
+            // omit_none can only drop entries of optional fields.
+            let dump_sized = !type_info.omit_none || fields.iter().all(|f| f.required);
 
             let encoder = EntityEncoder {
                 fields,
                 omit_none: type_info.omit_none,
+                dump_sized,
                 is_frozen: type_info.is_frozen,
                 cls: type_info.cls.clone_ref(py),
                 used_keys: type_info.used_keys.clone_ref(py),
@@ -442,10 +445,14 @@ pub fn get_encoder(
 
             let format_routing = build_format_routing(&fields);
             let has_flatten = fields.iter().any(|f| f.is_flattened);
+            // A missing NotRequired key skips its entry outright, and omit_none
+            // drops optional-None entries; both make the length dynamic.
+            let dump_sized = fields.iter().all(|f| f.required);
 
             let encoder = TypedDictEncoder {
                 fields,
                 omit_none: type_info.omit_none,
+                dump_sized,
                 used_keys: type_info.used_keys.clone_ref(py),
                 format_routing,
                 has_flatten,

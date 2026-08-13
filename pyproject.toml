@@ -74,6 +74,7 @@ bench-compare = [
     "marshmallow-dataclass",
     "mashumaro[orjson]",
     "msgspec",
+    "ormsgpack",
 ]
 all = [
     { include-group = "dev" },

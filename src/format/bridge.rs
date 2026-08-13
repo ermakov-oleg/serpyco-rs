@@ -1,9 +1,10 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 use pyo3::IntoPyObjectExt;
 
 use crate::errors::{ToPyErr, ValidationError};
-use crate::format::{Kind, Parser, Writer};
+use crate::format::{Kind, ParsedInt, ParsedNumber, Parser, Writer};
+use crate::python::create_py_string;
 use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::{Context, InstancePath};
 
@@ -26,8 +27,8 @@ pub(crate) fn wrong_type_at_cursor(
     expected: &str,
     path: &InstancePath,
 ) -> SerdeError {
-    match parser.take_raw_value() {
-        Ok(raw) => wrong_type_err(expected, &String::from_utf8_lossy(raw), path),
+    match parser.take_value_repr() {
+        Ok(raw) => wrong_type_err(expected, &raw, path),
         Err(e) => e,
     }
 }
@@ -39,8 +40,8 @@ pub(crate) fn wrong_enum_at_cursor(
     items: &str,
     path: &InstancePath,
 ) -> SerdeError {
-    match parser.take_raw_value() {
-        Ok(raw) => wrong_enum_err(items, &String::from_utf8_lossy(raw), path),
+    match parser.take_value_repr() {
+        Ok(raw) => wrong_enum_err(items, &raw, path),
         Err(e) => e,
     }
 }
@@ -52,25 +53,14 @@ pub(crate) fn invalid_number_err(raw: &str) -> SerdeError {
     SerdeError::Py(ValidationError::new_err(format!("invalid number: {raw}")))
 }
 
-/// Integer-shaped number text (no dot/exponent) -> Python `int`, widening to a
-/// big int beyond i64.
-#[inline(always)]
-pub(crate) fn parse_int_text<'py>(py: Python<'py>, raw: &str) -> SerdeResult<Bound<'py, PyAny>> {
-    match raw.parse::<i64>() {
-        Ok(v) => Ok(v.into_bound_py_any(py)?),
-        Err(_) => {
-            let big: num_bigint::BigInt = raw.parse().map_err(|_| invalid_number_err(raw))?;
-            Ok(big.into_bound_py_any(py)?)
-        }
-    }
-}
-
 /// Stream a Python `int` to the writer: `i64` fast path, decimal-string fallback beyond i64.
 #[inline(always)]
 pub(crate) fn write_py_int(writer: &mut Writer, v: &Bound<'_, PyInt>) -> SerdeResult<()> {
     match v.extract::<i64>() {
         Ok(i) => writer.write_i64(i),
-        Err(_) => writer.write_big_int(v.str()?.to_str()?),
+        Err(_) => writer
+            .write_big_int(v.str()?.to_str()?)
+            .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?,
     }
     Ok(())
 }
@@ -100,17 +90,13 @@ pub(crate) fn parse_any<'py>(
         Kind::Bool => Ok(PyBool::new(py, parser.take_bool_known()?)
             .to_owned()
             .into_any()),
-        Kind::Num => {
-            // Integer when there is no dot/exponent — mirrors json.loads.
-            let raw = parser.take_number_str_known()?;
-            if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
-                parse_int_text(py, raw)
-            } else {
-                let v: f64 = raw.parse().map_err(|_| invalid_number_err(raw))?;
-                Ok(PyFloat::new(py, v).into_any())
-            }
-        }
-        Kind::Str => Ok(PyString::new(py, parser.take_str_known()?).into_any()),
+        Kind::Num => match parser.take_number_known()? {
+            ParsedNumber::Int(ParsedInt::I64(v)) => Ok(v.into_bound_py_any(py)?),
+            ParsedNumber::Int(ParsedInt::Big(v)) => Ok(v.into_bound_py_any(py)?),
+            ParsedNumber::F64(v) => Ok(PyFloat::new(py, v).into_any()),
+        },
+        Kind::Str => Ok(parser.take_pystring_known(py)?.into_any()),
+        Kind::Bytes => Ok(PyBytes::new(py, parser.take_bytes_known()?).into_any()),
         Kind::Array => {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
             if parser.enter_array_known()? {
@@ -129,7 +115,7 @@ pub(crate) fn parse_any<'py>(
             // the parser for the recursive value parse.
             let mut key = parser.enter_map_known()?;
             while let Some(k) = key {
-                let py_key = PyString::new(py, k);
+                let py_key = create_py_string(py, k)?;
                 let value = parse_any(py, parser, ctx)?;
                 dict.set_item(py_key, value)?;
                 key = parser.next_key()?;
@@ -168,8 +154,14 @@ pub(crate) fn write_any(
         writer.write_str(v.to_str()?);
         return Ok(());
     }
+    if let Ok(v) = value.cast::<PyBytes>() {
+        writer
+            .write_bytes(v.as_bytes())
+            .map_err(|msg| SerdeError::Py(ValidationError::new_err(msg)))?;
+        return Ok(());
+    }
     if let Ok(list) = value.cast::<PyList>() {
-        writer.begin_array();
+        writer.begin_array(Some(list.len()));
         for item in list.iter() {
             write_any(&item, writer, ctx)?;
             writer.item_end();
@@ -178,7 +170,7 @@ pub(crate) fn write_any(
         return Ok(());
     }
     if let Ok(tup) = value.cast::<PyTuple>() {
-        writer.begin_array();
+        writer.begin_array(Some(tup.len()));
         for item in tup.iter() {
             write_any(&item, writer, ctx)?;
             writer.item_end();
@@ -187,7 +179,7 @@ pub(crate) fn write_any(
         return Ok(());
     }
     if let Ok(dict) = value.cast::<PyDict>() {
-        writer.begin_map();
+        writer.begin_map(Some(dict.len()));
         for (k, v) in dict.iter() {
             match k.cast::<PyString>() {
                 Ok(s) => writer.map_key(s.to_str()?),
