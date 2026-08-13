@@ -410,6 +410,33 @@ impl<'j> Parser<'j> {
         }
     }
 
+    /// Entry count of the container just entered, when the format states it up front:
+    /// MessagePack headers do, JSON only reveals it at the closing bracket. Lets a
+    /// caller size its Python container once instead of regrowing it per entry.
+    #[inline(always)]
+    pub(crate) fn container_len_hint(&self) -> Option<usize> {
+        match self {
+            Parser::Json(_) => None,
+            Parser::Msgpack(p) => p.container_len_hint(),
+        }
+    }
+
+    /// [`enter_map_known`](Self::enter_map_known) paired with the entry count from
+    /// [`container_len_hint`](Self::container_len_hint). Both come out of one call
+    /// because the borrowed first key rules out a second one.
+    #[inline(always)]
+    pub(crate) fn enter_map_known_sized(
+        &mut self,
+    ) -> Result<(Option<&str>, Option<usize>), SerdeError> {
+        match self {
+            Parser::Json(p) => Ok((p.enter_map_known()?, None)),
+            Parser::Msgpack(p) => {
+                let (key, len) = p.enter_map_known_sized()?;
+                Ok((key, Some(len)))
+            }
+        }
+    }
+
     /// Enter an object without a preceding `peek()` (discriminated-union scan).
     #[inline]
     pub(crate) fn enter_map(&mut self) -> Result<Option<&str>, SerdeError> {

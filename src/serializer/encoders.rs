@@ -920,10 +920,13 @@ impl Encoder for DictionaryEncoder {
         if parser.peek()? != Kind::Map {
             return Err(wrong_type_at_cursor(parser, "dict", instance_path));
         }
-        let result_dict = PyDict::new(py);
         // Materializing the key ends its borrow of the parser buffer and then
         // serves both instance_path and the insert.
-        let mut key_opt = parser.enter_map_known()?;
+        let (mut key_opt, len_hint) = parser.enter_map_known_sized()?;
+        let result_dict = match len_hint {
+            Some(len) => create_py_dict_known_size(py, len)?,
+            None => PyDict::new(py),
+        };
         while let Some(k) = key_opt {
             let py_key = create_py_string(py, k)?;
             let key_any = py_key.as_any();
@@ -1056,8 +1059,9 @@ impl Encoder for ArrayEncoder {
         let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
         if parser.enter_array_known()? {
             // One allocation instead of the regrowth ladder; empty arrays never
-            // reach here and stay allocation-free.
-            items.reserve(8);
+            // reach here and stay allocation-free. A format that states its length
+            // (MessagePack) sizes this exactly — 8 is the guess for one that doesn't.
+            items.reserve(parser.container_len_hint().unwrap_or(8));
             loop {
                 // Length is only known at the closing bracket, so an element-type
                 // error surfaces before a length error (dict path checks length up front).
