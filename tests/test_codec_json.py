@@ -12,7 +12,7 @@ import pytest
 from typing_extensions import NotRequired, TypedDict
 
 import serpyco_rs
-from serpyco_rs import JSON, Codec, SchemaValidationError, Serializer, ValidationError
+from serpyco_rs import JSON, MSGPACK, Codec, SchemaValidationError, Serializer, ValidationError
 from serpyco_rs._custom_types import CustomType
 from serpyco_rs.metadata import CustomEncoder, Discriminator, Flatten, Max, MaxLength, Min, MinLength
 
@@ -20,7 +20,7 @@ from serpyco_rs.metadata import CustomEncoder, Discriminator, Flatten, Max, MaxL
 # One entry per supported byte format; every codec-agnostic test below is already
 # parametrized over this list. Mirrors bench/test_codec_encoders.py's CODECS/_codec_id
 # on purpose, so adding msgpack later means updating one list, not two schemes.
-CODECS = [JSON]
+CODECS = [JSON, MSGPACK]
 
 
 def _codec_id(codec: Codec) -> str:
@@ -170,7 +170,7 @@ PARITY_CASES: list[tuple[Any, Any]] = [
     # scalars
     (int, 42),
     (int, -(2**63)),  # i64 lower boundary
-    (Any, 2**100),  # big int is fine inside Any (not a plain int field)
+    (Any, 2**63),  # exercises MessagePack's unsigned-integer range
     (float, 1.5),
     (float, 3.14),  # ryu shortest repr must round-trip bit-identically
     (str, 'hello "world"\n'),
@@ -306,10 +306,9 @@ def test_per_call_codec_overrides_instance(codec):
     assert isinstance(s.dump(Inner(name='x', score=1.0)), dict)
 
 
-@parametrize_codec
-def test_big_int_roundtrip(codec):
+@pytest.mark.parametrize(('codec', 'big'), [(JSON, 2**100), (MSGPACK, 2**63)], ids=['json', 'msgpack'])
+def test_big_int_roundtrip(codec, big):
     s = Serializer(int, codec=codec)
-    big = 2**100
     assert s.load(s.dump(big)) == big
     assert _load_any(codec, s.dump(big)) == big
 
@@ -343,9 +342,8 @@ def test_schema_error_has_same_instance_path(codec):
     ]
 
 
-@parametrize_codec
-def test_bytes_field_dump_raises(codec):
-    s = Serializer(bytes, codec=codec)
+def test_bytes_field_dump_raises_for_json():
+    s = Serializer(bytes, codec=JSON)
     with pytest.raises(ValidationError):
         s.dump(b'raw')
 
@@ -1133,9 +1131,12 @@ def test_codec_bytes_union_dump_skips_to_next_member(codec):
     s = Serializer(Union[bytes, str], codec=codec)
     assert isinstance(s.dump('x'), bytes)
     assert s.load(s.dump('x')) == 'x'
-    # a genuine bytes value still errors clearly (no serializable member)
-    with pytest.raises(serpyco_rs.ValidationError):
-        s.dump(b'x')
+    if codec is MSGPACK:
+        assert s.load(s.dump(b'x')) == b'x'
+    else:
+        # JSON has no binary value, so no member can serialize genuine bytes.
+        with pytest.raises(serpyco_rs.ValidationError):
+            s.dump(b'x')
 
 
 @parametrize_codec

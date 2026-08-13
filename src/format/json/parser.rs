@@ -1,16 +1,9 @@
 use jiter::{Jiter, JiterError, JiterErrorType, JsonErrorType, NumberInt, Peek};
-use num_bigint::BigInt;
 use pyo3::PyErr;
 
 use crate::errors::{DecodeError, ToPyErr};
-use crate::format::Kind;
+use crate::format::{Kind, ParsedInt, ParsedNumber};
 use crate::serde_error::SerdeError;
-
-/// Integer from the stream: JSON allows arbitrary-length numbers.
-pub(crate) enum ParsedInt {
-    I64(i64),
-    Big(BigInt),
-}
 
 /// Pull-parser over jiter. Syntax errors map to `DecodeError`; schema mismatches are
 /// the encoders' job. `*_known` readers are valid only immediately after a `peek()`;
@@ -70,6 +63,30 @@ impl<'j> JsonParser<'j> {
             NumberInt::Int(v) => Ok(ParsedInt::I64(v)),
             NumberInt::BigInt(v) => Ok(ParsedInt::Big(v)),
         }
+    }
+
+    /// Typed number: int-vs-float decided by token shape (dot/exponent). Goes
+    /// through the raw token text — measured faster than jiter's `known_number`
+    /// (std's Eisel-Lemire f64 parse), and keeps the int split byte-identical
+    /// to the historical text-sniffing behavior.
+    #[inline]
+    pub(crate) fn take_number_known(&mut self) -> Result<ParsedNumber, SerdeError> {
+        let index = self.jiter.current_index();
+        let bytes = self.jiter.known_number_bytes(self.last_peek).map_err(err)?;
+        // jiter guarantees ASCII digits/sign/dot/exponent here
+        let raw = unsafe { std::str::from_utf8_unchecked(bytes) };
+        if raw.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+            if let Ok(v) = raw.parse::<i64>() {
+                return Ok(ParsedNumber::Int(ParsedInt::I64(v)));
+            }
+            if let Ok(v) = raw.parse::<num_bigint::BigInt>() {
+                return Ok(ParsedNumber::Int(ParsedInt::Big(v)));
+            }
+        } else if let Ok(v) = raw.parse::<f64>() {
+            return Ok(ParsedNumber::F64(v));
+        }
+        // Unreachable: jiter only yields valid JSON number tokens.
+        Err(unexpected_token_err(index))
     }
 
     /// Raw text of a number, so Decimal and the int-vs-float split lose no precision.

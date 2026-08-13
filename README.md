@@ -39,7 +39,7 @@ By default `dump`/`load` convert between objects and builtin Python types (`dict
 
 ```python
 import serpyco_rs
-from serpyco_rs import JSON
+from serpyco_rs import JSON, MSGPACK
 
 serializer = serpyco_rs.Serializer(Example, codec=JSON)
 
@@ -49,12 +49,16 @@ print(raw)
 
 obj = serializer.load(raw)
 >> Example(name='foo', num=2, tags=['hello', 'world'])
+
+msgpack_serializer = serpyco_rs.Serializer(Example, codec=MSGPACK)
+msgpack_raw = msgpack_serializer.dump(Example(name="foo", num=2, tags=["hello", "world"]))
 ```
 
 - `dump(value)` returns `bytes`; `load(data)` accepts `bytes`, `bytearray`, `memoryview`, or `str`.
 - The codec can also be passed per call: `serializer.dump(value, codec=JSON)` / `serializer.load(raw, codec=JSON)`. This is the way to keep both modes on a single serializer — a bound codec cannot be switched off per call (`codec=None` reads as "argument omitted"), only replaced by another format.
 - Malformed input raises `DecodeError`; schema violations raise `SchemaValidationError` — the same validation as the dict-based path.
-- Only `JSON` ships today. The format layer is abstracted, and a `msgpack` codec is planned.
+- `JSON` and `MSGPACK` are built in. MessagePack uses its native binary type for Python `bytes`;
+  integer values are limited to MessagePack's standard signed/unsigned 64-bit range.
 
 ## Installation
 Use pip to install:

@@ -2,7 +2,7 @@ use std::os::raw::c_int;
 
 use pyo3::exceptions::PyOverflowError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyTuple, PyType};
+use pyo3::types::{PyDict, PyList, PyString, PyTuple, PyType};
 use pyo3::{ffi, PyErr, PyResult, Python};
 use pyo3_ffi::Py_ssize_t;
 
@@ -184,5 +184,38 @@ pub(crate) fn error_on_minusone(result: c_int) -> PyResult<()> {
         Ok(())
     } else {
         Err(Python::attach(PyErr::fetch))
+    }
+}
+
+/// Build a `str` from bytes already known to be pure ASCII, skipping CPython's
+/// maxchar re-scan inside `PyUnicode_FromStringAndSize`: allocate the compact
+/// ASCII representation directly and memcpy the payload.
+///
+/// # Safety
+/// `bytes` must be ASCII-only (every byte < 0x80).
+#[inline(always)]
+pub(crate) unsafe fn pystring_ascii_new<'py>(
+    py: Python<'py>,
+    bytes: &[u8],
+) -> PyResult<Bound<'py, PyString>> {
+    let obj = ffi::PyUnicode_New(bytes.len() as Py_ssize_t, 127);
+    if obj.is_null() {
+        return Err(err_alloc_failed(py));
+    }
+    debug_assert!(bytes.is_ascii());
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), ffi::PyUnicode_1BYTE_DATA(obj), bytes.len());
+    Ok(Bound::from_owned_ptr(py, obj).cast_into_unchecked())
+}
+
+/// `PyString::new` with an ASCII fast path: one cheap vectorized `is_ascii`
+/// scan, then the direct compact-ASCII constructor; non-ASCII falls back to
+/// CPython's UTF-8 decoder. Use on hot paths that materialize parsed strings.
+#[inline(always)]
+pub(crate) fn create_py_string<'py>(py: Python<'py>, s: &str) -> PyResult<Bound<'py, PyString>> {
+    let bytes = s.as_bytes();
+    if bytes.is_ascii() {
+        unsafe { pystring_ascii_new(py, bytes) }
+    } else {
+        Ok(PyString::new(py, s))
     }
 }
