@@ -30,7 +30,7 @@ use crate::python::{
     py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
 use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
-use crate::serde_error::{SerdeError, SerdeResult};
+use crate::serde_error::{Message, SchemaError, SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
     invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_dump_err_with_cause,
@@ -1361,7 +1361,10 @@ impl Field {
         match (&self.default, &self.default_factory) {
             (Some(val), _) => Ok(val.bind(py).clone()),
             (_, Some(factory)) => Ok(factory.bind(py).call0()?),
-            (None, _) => Err(missing_required_property(&self.dict_key_rs, instance_path)),
+            (None, _) => Err(missing_required_property(
+                self.dict_key.bind(py),
+                instance_path,
+            )),
         }
     }
 
@@ -1607,6 +1610,20 @@ pub struct TypedDictEncoder {
     pub(crate) dump_sized: bool,
 }
 
+/// A required key absent from the dumped dict means `value` isn't this `TypedDict`'s
+/// shape: a Schema mismatch, so an untagged union tries the next member instead of
+/// aborting the dump. Shared by the dict path (`dump`) and the streaming one (`fetch`).
+#[cold]
+fn missing_dict_key_err(py: Python<'_>, field: &Field) -> SerdeError {
+    SchemaError::deferred(
+        Message::MissingDictKey {
+            name: field.name.clone_ref(py),
+        },
+        &InstancePath::new(),
+    )
+    .into()
+}
+
 impl Encoder for TypedDictEncoder {
     #[inline]
     fn dump<'a>(&self, value: &Bound<'a, PyAny>, ctx: &Context) -> SerdeResult<Bound<'a, PyAny>> {
@@ -1621,10 +1638,7 @@ impl Encoder for TypedDictEncoder {
                 Ok(Some(val)) => val,
                 _ => {
                     if field.required {
-                        return Err(SerdeError::Py(ValidationError::new_err(format!(
-                            "data dictionary is missing required parameter {}",
-                            field.name
-                        ))));
+                        return Err(missing_dict_key_err(value.py(), field));
                     }
                     continue;
                 }
@@ -1751,10 +1765,7 @@ impl StreamingObject for TypedDictEncoder {
             Ok(Some(val)) => Ok(Some(val)),
             _ => {
                 if field.required {
-                    Err(SerdeError::Py(ValidationError::new_err(format!(
-                        "data dictionary is missing required parameter {}",
-                        field.name
-                    ))))
+                    Err(missing_dict_key_err(dict.py(), field))
                 } else {
                     // Missing optional key: skip entirely (no key emitted).
                     Ok(None)
@@ -2350,7 +2361,7 @@ impl Encoder for DiscriminatedUnionEncoder {
             Ok(val) => val,
             Err(_) => {
                 return Err(missing_required_property(
-                    self.dump_discriminator.bind(value.py()).str()?.to_str()?,
+                    self.dump_discriminator.bind(value.py()),
                     &InstancePath::new(),
                 ));
             }
@@ -2378,7 +2389,7 @@ impl Encoder for DiscriminatedUnionEncoder {
                 Ok(Some(k)) => k,
                 _ => {
                     return Err(missing_required_property(
-                        &self.load_discriminator_rs,
+                        self.load_discriminator.bind(val.py()),
                         instance_path,
                     ));
                 }

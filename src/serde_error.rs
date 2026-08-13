@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::PyType;
+use pyo3::types::{PyString, PyType};
 
 use crate::errors::{ErrorItem, SchemaValidationError};
 use crate::python::fmt_py;
@@ -87,6 +87,16 @@ pub(crate) enum Message {
         value: Py<PyAny>,
         items: Arc<str>,
     },
+    /// Load-side absent field. The name is already a `Py<PyString>` on the
+    /// encoder, so capturing it is a refcount bump instead of a `format!`.
+    MissingProperty {
+        name: Py<PyString>,
+    },
+    /// Dump-side absent `TypedDict` key — the untagged-union probe that hits
+    /// this on every non-matching member, hence the same deferral.
+    MissingDictKey {
+        name: Py<PyString>,
+    },
 }
 
 impl Message {
@@ -106,6 +116,13 @@ impl Message {
             Message::NotOneOf { value, items } => {
                 format!("{} is not one of {}", fmt_py(value.bind(py)), items)
             }
+            Message::MissingProperty { name } => {
+                format!(r#""{}" is a required property"#, name.bind(py))
+            }
+            Message::MissingDictKey { name } => format!(
+                "data dictionary is missing required parameter {}",
+                name.bind(py)
+            ),
         }
     }
 }
