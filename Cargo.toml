@@ -22,7 +22,7 @@ smallvec = "1"
 uuid = "1"
 
 jiter = { version = "0.16", features = ["num-bigint"] }
-num-bigint = "0.4"
+num-bigint = "0.5"
 itoa = "1"
 ryu = "1"
 simdutf8 = "0.1"
