@@ -135,11 +135,19 @@ pub fn check_length(
     Ok(())
 }
 
+/// Takes the name as the encoder's `Py<PyString>`: an untagged union reaches this on
+/// every non-matching member and throws the error away, so neither the message nor the
+/// path chunk is materialized here.
 #[cold]
-pub fn missing_required_property(property: &str, instance_path: &InstancePath) -> SerdeError {
-    let instance_path = instance_path.push(property);
-    SchemaError::new(
-        format!(r#""{property}" is a required property"#),
+pub fn missing_required_property(
+    property: &Bound<'_, PyString>,
+    instance_path: &InstancePath,
+) -> SerdeError {
+    let instance_path = instance_path.push(property.as_any());
+    SchemaError::deferred(
+        Message::MissingProperty {
+            name: property.clone().unbind(),
+        },
         &instance_path,
     )
     .into()
