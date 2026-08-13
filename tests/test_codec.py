@@ -12,32 +12,11 @@ import pytest
 from typing_extensions import NotRequired, TypedDict
 
 import serpyco_rs
-from serpyco_rs import JSON, MSGPACK, Codec, SchemaValidationError, Serializer, ValidationError
+from serpyco_rs import JSON, MSGPACK, SchemaValidationError, Serializer, ValidationError
 from serpyco_rs._custom_types import CustomType
 from serpyco_rs.metadata import CustomEncoder, Discriminator, Flatten, Max, MaxLength, Min, MinLength
 
-
-# One entry per supported byte format; every codec-agnostic test below is already
-# parametrized over this list. Mirrors bench/test_codec_encoders.py's CODECS/_codec_id
-# on purpose, so adding msgpack later means updating one list, not two schemes.
-CODECS = [JSON, MSGPACK]
-
-
-def _codec_id(codec: Codec) -> str:
-    return codec._name
-
-
-parametrize_codec = pytest.mark.parametrize('codec', CODECS, ids=_codec_id)
-
-
-def _dump_any(codec: Codec, value: Any) -> bytes:
-    """Codec-agnostic stand-in for `json.dumps`: builds `load()` input without assuming JSON's syntax."""
-    return Serializer(Any, codec=codec).dump(value)
-
-
-def _load_any(codec: Codec, raw: bytes) -> Any:
-    """Codec-agnostic stand-in for `json.loads`: inspects a dump's shape without assuming JSON's syntax."""
-    return Serializer(Any, codec=codec).load(raw)
+from tests._codecs import dump_any, load_any, parametrize_codec
 
 
 class Color(Enum):
@@ -250,8 +229,8 @@ ERROR_PARITY_CASES: list[tuple[Any, Any]] = [
 
 
 # ==============================================================================
-# Codec-agnostic tests: parametrized over CODECS (currently just JSON). Wire bytes
-# go through `_dump_any`/`_load_any` so nothing here assumes JSON's grammar; tests
+# Codec-agnostic tests: parametrized over every codec in `tests/_codecs.py`. Wire bytes
+# go through `dump_any`/`load_any` so nothing here assumes JSON's grammar; tests
 # that genuinely need JSON's own syntax live in the JSON-specific section below.
 # ==============================================================================
 
@@ -280,7 +259,7 @@ def test_dump_codec_roundtrip(codec):
 @parametrize_codec
 def test_dump_codec_matches_dict_path(codec):
     s = Serializer(Everything)
-    assert _load_any(codec, s.dump(EVERYTHING, codec=codec)) == s.dump(EVERYTHING)
+    assert load_any(codec, s.dump(EVERYTHING, codec=codec)) == s.dump(EVERYTHING)
 
 
 @parametrize_codec
@@ -310,7 +289,7 @@ def test_per_call_codec_overrides_instance(codec):
 def test_big_int_roundtrip(codec, big):
     s = Serializer(int, codec=codec)
     assert s.load(s.dump(big)) == big
-    assert _load_any(codec, s.dump(big)) == big
+    assert load_any(codec, s.dump(big)) == big
 
 
 @parametrize_codec
@@ -325,7 +304,7 @@ def test_trailing_garbage_on_valid_doc_raises_decode_error(codec):
 def test_schema_invalid_wellformed_raises_schema_error(codec):
     s = Serializer(Inner, codec=codec)
     with pytest.raises(SchemaValidationError):
-        s.load(_dump_any(codec, {'a': 1}))
+        s.load(dump_any(codec, {'a': 1}))
 
 
 @parametrize_codec
@@ -336,7 +315,7 @@ def test_schema_error_has_same_instance_path(codec):
     with pytest.raises(SchemaValidationError) as dict_err:
         s.load(good)
     with pytest.raises(SchemaValidationError) as codec_err:
-        s.load(_dump_any(codec, good), codec=codec)
+        s.load(dump_any(codec, good), codec=codec)
     assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
         (e.message, e.instance_path) for e in dict_err.value.errors
     ]
@@ -351,19 +330,19 @@ def test_bytes_field_dump_raises_for_json():
 @parametrize_codec
 def test_scalar_edges(codec):
     s_int = Serializer(int, codec=codec)
-    assert s_int.load(_dump_any(codec, -(2**63))) == -(2**63)
+    assert s_int.load(dump_any(codec, -(2**63))) == -(2**63)
 
     with pytest.raises(SchemaValidationError):
-        s_int.load(_dump_any(codec, 1.5))  # float is not a valid int -> schema error, not DecodeError
+        s_int.load(dump_any(codec, 1.5))  # float is not a valid int -> schema error, not DecodeError
 
     s_float = Serializer(float, codec=codec)
     # integer wire value in a float field returns an int, exactly like the dict path
     dict_result = Serializer(float).load(1)
-    codec_result = s_float.load(_dump_any(codec, 1))
+    codec_result = s_float.load(dump_any(codec, 1))
     assert codec_result == dict_result
     assert type(codec_result) is type(dict_result)
-    assert s_float.load(_dump_any(codec, 1.5)) == 1.5
-    assert type(s_float.load(_dump_any(codec, 1.5))) is float
+    assert s_float.load(dump_any(codec, 1.5)) == 1.5
+    assert type(s_float.load(dump_any(codec, 1.5))) is float
 
     s_str = Serializer(str, codec=codec)
     assert s_str.load(s_str.dump('cyrillic sh and \x1f')) == 'cyrillic sh and \x1f'
@@ -373,7 +352,7 @@ def test_scalar_edges(codec):
     assert s_dt.load(s_dt.dump(val)) == val
 
     s_dec = Serializer(Decimal, codec=codec)
-    assert s_dec.load(_dump_any(codec, '1.100')) == Decimal('1.100')
+    assert s_dec.load(dump_any(codec, '1.100')) == Decimal('1.100')
 
 
 @parametrize_codec
@@ -386,15 +365,15 @@ def test_containers_deep(codec):
     assert s2.load(s2.dump((1, 'x', 0.5))) == (1, 'x', 0.5)
 
     s3 = Serializer(dict[str, int], codec=codec)
-    assert _load_any(codec, s3.dump({'k': 1})) == {'k': 1}
-    assert s3.load(_dump_any(codec, {'k': 1})) == {'k': 1}
+    assert load_any(codec, s3.dump({'k': 1})) == {'k': 1}
+    assert s3.load(dump_any(codec, {'k': 1})) == {'k': 1}
 
 
 @parametrize_codec
 def test_array_element_error_path(codec):
     s = Serializer(list[int], codec=codec)
     with pytest.raises(SchemaValidationError) as e:
-        s.load(_dump_any(codec, [1, 'bad', 3]))
+        s.load(dump_any(codec, [1, 'bad', 3]))
     dict_s = Serializer(list[int])
     with pytest.raises(SchemaValidationError) as d:
         dict_s.load([1, 'bad', 3])
@@ -406,7 +385,7 @@ def test_array_element_error_path(codec):
 @parametrize_codec
 def test_entity_unknown_keys_skipped(codec):
     s = Serializer(Inner, codec=codec)
-    raw = _dump_any(codec, {'name': 'x', 'unknown': {'deep': [1]}, 'score': 1.0})
+    raw = dump_any(codec, {'name': 'x', 'unknown': {'deep': [1]}, 'score': 1.0})
     assert s.load(raw) == Inner(name='x', score=1.0)
 
 
@@ -418,7 +397,7 @@ def test_entity_missing_required_error_parity(codec):
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -433,7 +412,7 @@ def test_entity_field_error_path_parity(codec):
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -445,7 +424,7 @@ def test_entity_defaults_applied(codec):
     payload = Serializer(Everything).dump(EVERYTHING)
     del payload['with_default']  # has default=5
     del payload['items']  # has default_factory=list
-    obj = s.load(_dump_any(codec, payload))
+    obj = s.load(dump_any(codec, payload))
     assert obj.with_default == 5
     assert obj.items == []
 
@@ -457,8 +436,8 @@ def test_camelcase_codec(codec):
         long_name: str
 
     s = Serializer(TwoWords, camelcase_fields=True, codec=codec)
-    assert _load_any(codec, s.dump(TwoWords(long_name='a'))) == {'longName': 'a'}
-    assert s.load(_dump_any(codec, {'longName': 'a'})) == TwoWords(long_name='a')
+    assert load_any(codec, s.dump(TwoWords(long_name='a'))) == {'longName': 'a'}
+    assert s.load(dump_any(codec, {'longName': 'a'})) == TwoWords(long_name='a')
 
 
 @parametrize_codec
@@ -469,7 +448,7 @@ def test_omit_none_codec(codec):
         b: int = 1
 
     s = Serializer(WithOpt, omit_none=True, codec=codec)
-    assert _load_any(codec, s.dump(WithOpt())) == {'b': 1}
+    assert load_any(codec, s.dump(WithOpt())) == {'b': 1}
 
 
 @parametrize_codec
@@ -480,8 +459,8 @@ def test_typeddict_codec_roundtrip(codec):
 
     s = Serializer(Movie, codec=codec)
     val: Movie = {'name': 'Blade Runner', 'year': 1982}
-    assert _load_any(codec, s.dump(val)) == {'name': 'Blade Runner', 'year': 1982}
-    assert s.load(_dump_any(codec, val)) == val
+    assert load_any(codec, s.dump(val)) == {'name': 'Blade Runner', 'year': 1982}
+    assert s.load(dump_any(codec, val)) == val
 
 
 @parametrize_codec
@@ -494,10 +473,10 @@ def test_typeddict_codec_matches_dict_path(codec):
     sc = Serializer(Movie, codec=codec)
     val: Movie = {'name': 'Blade Runner', 'year': 1982}
     # dump parity
-    assert _load_any(codec, sc.dump(val)) == s.dump(val)
+    assert load_any(codec, sc.dump(val)) == s.dump(val)
     # load parity (including unknown-key skipping)
     raw_dict = {'name': 'x', 'year': 1, 'unknown': [1, 2]}
-    assert sc.load(_dump_any(codec, raw_dict)) == s.load(raw_dict)
+    assert sc.load(dump_any(codec, raw_dict)) == s.load(raw_dict)
 
 
 @parametrize_codec
@@ -509,8 +488,8 @@ def test_typeddict_partial_codec_parity(codec):
     s = Serializer(Movie)
     sc = Serializer(Movie, codec=codec)
     val: Movie = {'name': 'x'}  # optional 'year' omitted
-    assert _load_any(codec, sc.dump(val)) == s.dump(val)
-    assert sc.load(_dump_any(codec, val)) == s.load(dict(val))
+    assert load_any(codec, sc.dump(val)) == s.dump(val)
+    assert sc.load(dump_any(codec, val)) == s.load(dict(val))
 
 
 @parametrize_codec
@@ -537,10 +516,10 @@ def test_flatten_parity_codec(codec):
     s_dict = Serializer(Person)
     s_codec = Serializer(Person, codec=codec)
     # dump parity: streaming falls back to the bridge for flatten entities
-    assert _load_any(codec, s_codec.dump(person)) == s_dict.dump(person)
+    assert load_any(codec, s_codec.dump(person)) == s_dict.dump(person)
     # load parity: native flatten streaming round-trips exactly like the bridge did
     assert s_codec.load(s_codec.dump(person)) == person
-    assert s_codec.load(_dump_any(codec, s_dict.dump(person))) == person
+    assert s_codec.load(dump_any(codec, s_dict.dump(person))) == person
 
 
 @parametrize_codec
@@ -558,9 +537,9 @@ def test_flatten_struct_only_parity_codec(codec):
     person = Person(name='John', address=Address(street='123 Main', city='NYC'))
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
-    assert _load_any(codec, sc.dump(person)) == s.dump(person)
+    assert load_any(codec, sc.dump(person)) == s.dump(person)
     assert sc.load(sc.dump(person)) == person
-    assert sc.load(_dump_any(codec, s.dump(person))) == s.load(s.dump(person))
+    assert sc.load(dump_any(codec, s.dump(person))) == s.load(s.dump(person))
 
 
 @parametrize_codec
@@ -573,9 +552,9 @@ def test_flatten_dict_only_parity_codec(codec):
     person = Person(name='John', extra={'phone': '555-1234', 'age': 30})
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
-    assert _load_any(codec, sc.dump(person)) == s.dump(person)
+    assert load_any(codec, sc.dump(person)) == s.dump(person)
     assert sc.load(sc.dump(person)) == person
-    assert sc.load(_dump_any(codec, s.dump(person))) == s.load(s.dump(person))
+    assert sc.load(dump_any(codec, s.dump(person))) == s.load(s.dump(person))
 
 
 @parametrize_codec
@@ -600,9 +579,9 @@ def test_flatten_nested_parity_codec(codec):
     person = Person(name='John', address=Address(street='123 Main', geo=GeoInfo(lat=1.0, lon=2.0)))
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
-    assert _load_any(codec, sc.dump(person)) == s.dump(person)
+    assert load_any(codec, sc.dump(person)) == s.dump(person)
     assert sc.load(sc.dump(person)) == person
-    assert sc.load(_dump_any(codec, s.dump(person))) == s.load(s.dump(person))
+    assert sc.load(dump_any(codec, s.dump(person))) == s.load(s.dump(person))
 
 
 @parametrize_codec
@@ -621,7 +600,7 @@ def test_flatten_missing_optional_default_parity_codec(codec):
     sc = Serializer(Person, codec=codec)
     # 'city' is entirely absent from the wire payload; Address.city default applies.
     raw_dict = {'name': 'John', 'street': '123 Main'}
-    raw = _dump_any(codec, raw_dict)
+    raw = dump_any(codec, raw_dict)
     assert sc.load(raw) == s.load(raw_dict)
     assert sc.load(raw) == Person(name='John', address=Address(street='123 Main', city='Unknown'))
 
@@ -642,7 +621,7 @@ def test_flatten_extra_unknown_keys_parity_codec(codec):
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
     raw_dict = {'name': 'John', 'street': '123 Main', 'city': 'NYC', 'phone': '555-1234', 'note': 'vip'}
-    raw = _dump_any(codec, raw_dict)
+    raw = dump_any(codec, raw_dict)
     expected = Person(
         name='John',
         address=Address(street='123 Main', city='NYC'),
@@ -671,7 +650,7 @@ def test_flatten_nested_dict_catchall_key_overlap_divergence_codec(codec):
     s = Serializer(Outer)
     sc = Serializer(Outer, codec=codec)
     raw_dict = {'a': 1, 'x': 2, 'zzz': 3}
-    raw = _dump_any(codec, raw_dict)
+    raw = dump_any(codec, raw_dict)
     assert s.load(raw_dict) == Outer(a=1, inner=Inner(x=2, rest={'a': 1, 'zzz': 3}))
     assert sc.load(raw) == Outer(a=1, inner=Inner(x=2, rest={'zzz': 3}))
 
@@ -692,7 +671,7 @@ def test_flatten_struct_only_extra_key_dropped_parity_codec(codec):
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
     raw_dict = {'name': 'John', 'street': '123 Main', 'city': 'NYC', 'unexpected': 123}
-    raw = _dump_any(codec, raw_dict)
+    raw = dump_any(codec, raw_dict)
     assert sc.load(raw) == s.load(raw_dict)
     assert sc.load(raw) == Person(name='John', address=Address(street='123 Main', city='NYC'))
 
@@ -715,7 +694,7 @@ def test_flatten_field_error_path_parity_codec(codec):
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -739,7 +718,7 @@ def test_flatten_missing_required_error_parity_codec(codec):
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -758,7 +737,7 @@ def test_flatten_dict_value_error_path_parity_codec(codec):
     with pytest.raises(SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [(e.message, e.instance_path) for e in c.value.errors] == [
         (e.message, e.instance_path) for e in d.value.errors
     ]
@@ -780,7 +759,7 @@ def test_flatten_wrong_type_error_parity_codec(codec):
     with pytest.raises(SchemaValidationError) as d:
         s.load([1, 2, 3])
     with pytest.raises(SchemaValidationError) as c:
-        sc.load(_dump_any(codec, [1, 2, 3]))
+        sc.load(dump_any(codec, [1, 2, 3]))
     # Only instance_path is compared: the message embeds the raw wire form on the
     # codec path vs a Python repr() on the dict path.
     assert [e.instance_path for e in c.value.errors] == [e.instance_path for e in d.value.errors]
@@ -801,9 +780,9 @@ def test_typeddict_flatten_struct_only_parity_codec(codec):
     person: Person = {'name': 'John', 'address': {'street': '123 Main', 'city': 'NYC'}}
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
-    assert _load_any(codec, sc.dump(person)) == s.dump(person)
+    assert load_any(codec, sc.dump(person)) == s.dump(person)
     assert sc.load(sc.dump(person)) == person
-    assert sc.load(_dump_any(codec, s.dump(person))) == s.load(s.dump(person))
+    assert sc.load(dump_any(codec, s.dump(person))) == s.load(s.dump(person))
 
 
 @parametrize_codec
@@ -815,9 +794,9 @@ def test_typeddict_flatten_dict_only_parity_codec(codec):
     person: Person = {'name': 'John', 'extra': {'phone': '555-1234', 'age': 30}}
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
-    assert _load_any(codec, sc.dump(person)) == s.dump(person)
+    assert load_any(codec, sc.dump(person)) == s.dump(person)
     assert sc.load(sc.dump(person)) == person
-    assert sc.load(_dump_any(codec, s.dump(person))) == s.load(s.dump(person))
+    assert sc.load(dump_any(codec, s.dump(person))) == s.load(s.dump(person))
 
 
 @parametrize_codec
@@ -841,9 +820,9 @@ def test_typeddict_flatten_struct_and_dict_parity_codec(codec):
     }
     s = Serializer(Person)
     sc = Serializer(Person, codec=codec)
-    assert _load_any(codec, sc.dump(person)) == s.dump(person)
+    assert load_any(codec, sc.dump(person)) == s.dump(person)
     assert sc.load(sc.dump(person)) == person
-    assert sc.load(_dump_any(codec, s.dump(person))) == s.load(s.dump(person))
+    assert sc.load(dump_any(codec, s.dump(person))) == s.load(s.dump(person))
 
 
 @parametrize_codec
@@ -861,7 +840,7 @@ def test_typeddict_flatten_missing_optional_default_parity_codec(codec):
     # 'city' is entirely absent from the wire payload; Address.city is
     # NotRequired, so the dict-path default (None) applies.
     raw_dict = {'name': 'John', 'street': '123 Main'}
-    raw = _dump_any(codec, raw_dict)
+    raw = dump_any(codec, raw_dict)
     assert sc.load(raw) == s.load(raw_dict)
     assert sc.load(raw) == {'name': 'John', 'address': {'street': '123 Main', 'city': None}}
 
@@ -875,12 +854,12 @@ def test_union_codec(codec):
 
     s = Serializer(int | str | P, codec=codec)
     # primitive members: streaming materializes via parse_any and reuses the load loop
-    assert s.load(_dump_any(codec, 5)) == 5
-    assert s.load(_dump_any(codec, 'x')) == 'x'
+    assert s.load(dump_any(codec, 5)) == 5
+    assert s.load(dump_any(codec, 'x')) == 'x'
     # container member: raw span is captured and re-parsed by the matching variant
-    assert s.load(_dump_any(codec, {'name': 'n', 'score': 1.0})) == P(name='n', score=1.0)
+    assert s.load(dump_any(codec, {'name': 'n', 'score': 1.0})) == P(name='n', score=1.0)
     # discriminator-free container with extra keys still round-trips to the entity
-    assert s.load(_dump_any(codec, {'score': 2.5, 'name': 'z'})) == P(name='z', score=2.5)
+    assert s.load(dump_any(codec, {'score': 2.5, 'name': 'z'})) == P(name='z', score=2.5)
     # round-trip of primitive members (dataclass dump inside an untagged union returns the
     # object unchanged on the dict path, so it's not serializable via a byte codec here)
     assert s.load(s.dump(5)) == 5
@@ -901,7 +880,7 @@ def test_union_all_fail_parity(codec):
     with pytest.raises(serpyco_rs.SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [e.instance_path for e in c.value.errors] == [e.instance_path for e in d.value.errors]
     assert [type_suffix(e.message) for e in c.value.errors] == [type_suffix(e.message) for e in d.value.errors]
 
@@ -921,7 +900,7 @@ def test_discriminated_union_codec(codec):
     Pet = Annotated[Union[Cat, Dog], Discriminator('kind')]
     s = Serializer(Pet, codec=codec)
     # discriminator NOT first key -> requires scan-ahead over the captured span
-    assert s.load(_dump_any(codec, {'meow': 'm', 'kind': 'cat'})) == Cat(kind='cat', meow='m')
+    assert s.load(dump_any(codec, {'meow': 'm', 'kind': 'cat'})) == Cat(kind='cat', meow='m')
     assert s.load(s.dump(Dog(kind='dog', bark='woof'))) == Dog(kind='dog', bark='woof')
 
     # unknown tag + missing discriminator: parity with the dict-path
@@ -930,7 +909,7 @@ def test_discriminated_union_codec(codec):
         with pytest.raises(serpyco_rs.SchemaValidationError) as d:
             sd.load(bad)
         with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-            s.load(_dump_any(codec, bad))
+            s.load(dump_any(codec, bad))
         assert [(e.message, e.instance_path) for e in c.value.errors] == [
             (e.message, e.instance_path) for e in d.value.errors
         ]
@@ -946,9 +925,9 @@ def test_untagged_union_dump_entity(codec):
     # entity is the SECOND member, after a scalar whose dump doesn't validate
     s = Serializer(int | P, codec=codec)
     data = s.dump(P(name='n', score=1.5))
-    assert _load_any(codec, data) == {'name': 'n', 'score': 1.5}
+    assert load_any(codec, data) == {'name': 'n', 'score': 1.5}
     assert s.load(data) == P(name='n', score=1.5)
-    assert _load_any(codec, s.dump(7)) == 7
+    assert load_any(codec, s.dump(7)) == 7
     assert s.load(s.dump(7)) == 7
 
 
@@ -975,7 +954,7 @@ def test_untagged_union_dump_roundtrip_both_orders(codec):
 def test_parity_dump(typ, value, codec):
     s = Serializer(typ)
     sc = Serializer(typ, codec=codec)
-    assert _load_any(codec, sc.dump(value)) == s.dump(value)
+    assert load_any(codec, sc.dump(value)) == s.dump(value)
 
 
 @parametrize_codec
@@ -1016,7 +995,7 @@ def test_custom_type_resolver_parity(codec):
     val = Data(ip=IPv4Address('1.1.1.1'))
     s = Serializer(Data, custom_type_resolver=resolver)
     sc = Serializer(Data, custom_type_resolver=resolver, codec=codec)
-    assert _load_any(codec, sc.dump(val)) == s.dump(val)
+    assert load_any(codec, sc.dump(val)) == s.dump(val)
     assert sc.load(sc.dump(val)) == val
 
 
@@ -1028,7 +1007,7 @@ def test_error_parity(typ, bad, codec):
     with pytest.raises(SchemaValidationError) as dict_err:
         s.load(bad)
     with pytest.raises(SchemaValidationError) as codec_err:
-        sc.load(_dump_any(codec, bad))
+        sc.load(dump_any(codec, bad))
     assert [(e.message, e.instance_path) for e in codec_err.value.errors] == [
         (e.message, e.instance_path) for e in dict_err.value.errors
     ]
@@ -1150,7 +1129,7 @@ def test_codec_dict_omit_none_validates_key(codec):
     with pytest.raises(serpyco_rs.SchemaValidationError):
         s.dump(bad)  # codec must too (currently returns an empty object)
     assert s.load(s.dump({Color.RED: None})) == {}
-    assert _load_any(codec, s.dump({Color.RED: 5})) == {'red': 5}
+    assert load_any(codec, s.dump({Color.RED: 5})) == {'red': 5}
 
 
 @parametrize_codec
@@ -1163,13 +1142,13 @@ def test_union_kind_narrowing_reads_off_the_cursor(codec):
         score: float
 
     s = Serializer(Union[P, str], codec=codec)
-    assert s.load(_dump_any(codec, {'name': 'n', 'score': 1.5})) == P(name='n', score=1.5)
-    assert s.load(_dump_any(codec, 'plain')) == 'plain'
+    assert s.load(dump_any(codec, {'name': 'n', 'score': 1.5})) == P(name='n', score=1.5)
+    assert s.load(dump_any(codec, 'plain')) == 'plain'
 
     # Ambiguous kinds (both members accept a number) keep the probing path.
     si = Serializer(Union[int, float], codec=codec)
-    assert si.load(_dump_any(codec, 7)) == 7
-    assert si.load(_dump_any(codec, 1.5)) == 1.5
+    assert si.load(dump_any(codec, 7)) == 7
+    assert si.load(dump_any(codec, 1.5)) == 1.5
 
 
 @parametrize_codec
@@ -1182,14 +1161,14 @@ def test_union_kind_narrowing_error_is_the_member_error(codec):
 
     sc = Serializer(Union[int, P], codec=codec)
     with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-        sc.load(_dump_any(codec, {'foo': 'not-an-int'}))
+        sc.load(dump_any(codec, {'foo': 'not-an-int'}))
     (err,) = c.value.errors
     assert err.instance_path == 'foo'
     assert 'is not of type "integer"' in err.message
 
     # No member accepts the kind -> the union's own error at the root.
     with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-        sc.load(_dump_any(codec, [1]))
+        sc.load(dump_any(codec, [1]))
     (err,) = c.value.errors
     assert err.instance_path == ''
     assert 'is not of type' in err.message
@@ -1204,9 +1183,9 @@ def test_union_kind_narrowing_keeps_optional_and_nested_members(codec):
         foo: int
 
     s = Serializer(Union[Optional[P], str], codec=codec)
-    assert s.load(_dump_any(codec, None)) is None
-    assert s.load(_dump_any(codec, {'foo': 1})) == P(foo=1)
-    assert s.load(_dump_any(codec, 's')) == 's'
+    assert s.load(dump_any(codec, None)) is None
+    assert s.load(dump_any(codec, {'foo': 1})) == P(foo=1)
+    assert s.load(dump_any(codec, 's')) == 's'
 
 
 @parametrize_codec
@@ -1229,23 +1208,23 @@ def test_entity_load_key_order_independent(codec):
         {'b': 'x', 'a': 1, 'd': 2, 'c': True},  # shuffled
         {'a': 1, 'zzz': [1, {'k': 2}], 'b': 'x', 'c': True, 'd': 2},  # unknown key between
     ):
-        assert s.load(_dump_any(codec, raw_dict)) == sd.load(raw_dict) == M(a=1, b='x', c=True, d=2)
+        assert s.load(dump_any(codec, raw_dict)) == sd.load(raw_dict) == M(a=1, b='x', c=True, d=2)
 
     # missing trailing field falls back to its default
-    raw = _dump_any(codec, {'a': 1, 'b': 'x', 'c': False})
+    raw = dump_any(codec, {'a': 1, 'b': 'x', 'c': False})
     assert s.load(raw) == M(a=1, b='x', c=False, d=None)
 
 
 # ==============================================================================
 # JSON-specific tests: raw byte literals, malformed-input recovery, string-escape
 # decoding, exact dump bytes — none of it generalizes, so it's hardcoded to JSON
-# rather than forced through the _dump_any/_load_any helpers above.
+# rather than forced through the dump_any/load_any helpers above.
 # ==============================================================================
 
 
 @pytest.mark.parametrize(('typ', 'value'), PARITY_CASES)
 def test_parity_dump_json_oracle(typ, value):
-    # test_parity_dump decodes both sides via `_load_any`, which shares low-level
+    # test_parity_dump decodes both sides via `load_any`, which shares low-level
     # Parser/Writer primitives with the encoders under test — a self-consistency
     # check, not independent (a shared string-escaping/float-formatting bug would
     # slip through). Re-run with `json.loads`, CPython's independent JSON parser,
@@ -1379,7 +1358,7 @@ def test_union_all_fail_message_json_specific():
     with pytest.raises(serpyco_rs.SchemaValidationError) as d:
         s.load(bad)
     with pytest.raises(serpyco_rs.SchemaValidationError) as c:
-        sc.load(_dump_any(JSON, bad))
+        sc.load(dump_any(JSON, bad))
     assert strip_counter(d.value.errors[0].message) == '[1, 2, 3] is not of type "int | str"'
     assert strip_counter(c.value.errors[0].message) == '[1,2,3] is not of type "int | str"'
 

@@ -4,7 +4,10 @@ from typing import Optional, TypedDict, Union
 
 import pytest
 
-from serpyco_rs import JSON, Serializer
+from serpyco_rs import SchemaValidationError, Serializer, ValidationError
+from serpyco_rs._impl import ErrorItem
+
+from tests._codecs import as_python, parametrize_codec_or_dict
 
 
 def test_dump_union_time_or_date_picks_right_encoder():
@@ -51,50 +54,70 @@ class Create:
     name: Optional[str] = None
 
 
-@pytest.mark.parametrize('codec', [None, JSON])
-def test_dump_list_of_union_of_dataclasses_dispatches_by_runtime_type(codec):
+@dataclass
+class AttachFirst:
+    contacts: Optional[list[Union[Attach, Create]]] = None
+
+
+@dataclass
+class CreateFirst:
+    contacts: Optional[list[Union[Create, Attach]]] = None
+
+
+class TdA(TypedDict):
+    a: int
+
+
+class TdB(TypedDict):
+    b: str
+
+
+class SharedA(TypedDict):
+    shared: int
+    only_a: int
+
+
+class SharedB(TypedDict):
+    shared: int
+    only_b: str
+
+
+@parametrize_codec_or_dict
+@pytest.mark.parametrize('model', [AttachFirst, CreateFirst], ids=['attach-first', 'create-first'])
+def test_dump_list_of_union_of_dataclasses_dispatches_by_runtime_type(codec, model):
     # Regression (1.21.0): dumping a list[Attach | Create] always went through the
     # first member's encoder, so a Create raised AttributeError: no attribute 'id'.
-    @dataclass
-    class Embedded:
-        contacts: Optional[list[Union[Attach, Create]]] = None
-
-    s = Serializer(Embedded, codec=codec)
-    dumped = s.dump(Embedded(contacts=[Attach(id=1), Create(name='x')]))
-    if codec is not None:
-        assert dumped == b'{"contacts":[{"id":1,"is_main":null},{"name":"x"}]}'
-    else:
-        assert dumped == {'contacts': [{'id': 1, 'is_main': None}, {'name': 'x'}]}
+    s = Serializer(model, codec=codec)
+    dumped = s.dump(model(contacts=[Attach(id=1), Create(name='x')]))
+    assert as_python(codec, dumped) == {'contacts': [{'id': 1, 'is_main': None}, {'name': 'x'}]}
 
 
-@pytest.mark.parametrize('codec', [None, JSON])
-def test_dump_list_of_union_of_dataclasses_reversed_member_order(codec):
-    @dataclass
-    class Embedded:
-        contacts: Optional[list[Union[Create, Attach]]] = None
-
-    s = Serializer(Embedded, codec=codec)
-    dumped = s.dump(Embedded(contacts=[Attach(id=2, is_main=True)]))
-    if codec is not None:
-        assert dumped == b'{"contacts":[{"id":2,"is_main":true}]}'
-    else:
-        assert dumped == {'contacts': [{'id': 2, 'is_main': True}]}
-
-
-@pytest.mark.parametrize('codec', [None, JSON])
-def test_dump_union_of_typed_dicts_skips_member_with_missing_required_key(codec):
+@parametrize_codec_or_dict
+@pytest.mark.parametrize('value', [{'a': 1}, {'b': 'x'}], ids=['first-member', 'second-member'])
+def test_dump_union_of_typed_dicts_skips_member_with_missing_required_key(codec, value):
     # Regression: a missing required key on the tried TypedDict member is a type
     # mismatch (try the next member), not a hard ValidationError that aborts the dump.
-    class TdA(TypedDict):
-        a: int
-
-    class TdB(TypedDict):
-        b: str
-
     s = Serializer(Union[TdA, TdB], codec=codec)
-    if codec is not None:
-        assert s.dump({'a': 1}) == b'{"a":1}'
-        assert s.dump({'b': 'x'}) == b'{"b":"x"}'
-    else:
-        assert s.dump({'a': 1}) == {'a': 1}
-        assert s.dump({'b': 'x'}) == {'b': 'x'}
+    assert as_python(codec, s.dump(value)) == value
+
+
+@parametrize_codec_or_dict
+def test_dump_union_of_typed_dicts_rolls_back_partially_written_member(codec):
+    # The mismatch surfaces only on the member's second key, so `shared` is already in
+    # the codec's buffer — under a map header msgpack has to backpatch — by the time the
+    # member is abandoned. Nothing of the skipped attempt may survive in the output.
+    s = Serializer(list[Union[SharedA, SharedB]], codec=codec)
+    value = [{'shared': 1, 'only_a': 2}, {'shared': 3, 'only_b': 'x'}]
+    assert as_python(codec, s.dump(value)) == value
+
+
+@parametrize_codec_or_dict
+def test_dump_typed_dict_missing_required_key_outside_union_reports_schema_error(codec):
+    # With no union to absorb it the mismatch still surfaces, now as
+    # SchemaValidationError. It subclasses ValidationError, so `except` clauses written
+    # against the ValidationError this used to raise keep catching it.
+    s = Serializer(TdA, codec=codec)
+    with pytest.raises(SchemaValidationError) as exc:
+        s.dump({})
+    assert isinstance(exc.value, ValidationError)
+    assert exc.value.errors == [ErrorItem(message='data dictionary is missing required parameter a', instance_path='')]
