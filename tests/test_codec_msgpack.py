@@ -124,6 +124,38 @@ def test_malformed_msgpack_raises_decode_error(raw):
     assert isinstance(exc.value.position, int)
 
 
+@pytest.mark.parametrize('tp', [Any, list[int], dict[str, int]])
+@pytest.mark.parametrize(
+    'raw',
+    [
+        b'\xdd\xff\xff\xff\xff',  # array32 claiming 2**32-1 entries, no payload
+        b'\xdf\xff\xff\xff\xff',  # map32, same
+    ],
+)
+def test_msgpack_oversized_container_header_is_not_preallocated(tp, raw):
+    # The header count sizes the Python container up front, so a claim the input cannot
+    # back must be capped by the bytes left — reserving 2**32-1 entries would abort the
+    # process long before the truncated payload is reported.
+    with pytest.raises(serpyco_rs.DecodeError):
+        Serializer(tp, codec=MSGPACK).load(raw)
+
+
+@pytest.mark.parametrize('size', [0, 1, 15, 16, 100, 65535, 65536])
+def test_msgpack_container_roundtrip_across_header_forms(size):
+    # fixarray/fixmap, array16/map16 and array32/map32 state their length differently;
+    # the presize path has to read each form correctly.
+    lst = Serializer(list[int], codec=MSGPACK)
+    values = list(range(size))
+    assert lst.load(lst.dump(values)) == values
+
+    dct = Serializer(dict[str, int], codec=MSGPACK)
+    mapping = {str(i): i for i in range(size)}
+    assert dct.load(dct.dump(mapping)) == mapping
+
+    any_codec = Serializer(Any, codec=MSGPACK)
+    assert any_codec.load(any_codec.dump(mapping)) == mapping
+
+
 def test_msgpack_rejects_trailing_data():
     serializer = Serializer(int, codec=MSGPACK)
     with pytest.raises(serpyco_rs.DecodeError, match='trailing data'):

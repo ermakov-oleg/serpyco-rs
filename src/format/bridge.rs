@@ -4,7 +4,7 @@ use pyo3::IntoPyObjectExt;
 
 use crate::errors::{ToPyErr, ValidationError};
 use crate::format::{Kind, ParsedInt, ParsedNumber, Parser, Writer};
-use crate::python::create_py_string;
+use crate::python::{create_py_dict_known_size, create_py_string};
 use crate::serde_error::{SchemaError, SerdeError, SerdeResult};
 use crate::validator::{Context, InstancePath};
 
@@ -100,6 +100,7 @@ pub(crate) fn parse_any<'py>(
         Kind::Array => {
             let mut items: Vec<Bound<'py, PyAny>> = Vec::new();
             if parser.enter_array_known()? {
+                items.reserve(parser.container_len_hint().unwrap_or(8));
                 loop {
                     items.push(parse_any(py, parser, ctx)?);
                     if !parser.next_array_item()? {
@@ -110,10 +111,13 @@ pub(crate) fn parse_any<'py>(
             Ok(PyList::new(py, items)?.into_any())
         }
         Kind::Map => {
-            let dict = PyDict::new(py);
             // Materializing the key ends its borrow of the parser buffer, freeing
             // the parser for the recursive value parse.
-            let mut key = parser.enter_map_known()?;
+            let (mut key, len_hint) = parser.enter_map_known_sized()?;
+            let dict = match len_hint {
+                Some(len) => create_py_dict_known_size(py, len)?,
+                None => PyDict::new(py),
+            };
             while let Some(k) = key {
                 let py_key = create_py_string(py, k)?;
                 let value = parse_any(py, parser, ctx)?;

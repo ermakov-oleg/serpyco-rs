@@ -183,6 +183,14 @@ impl<'a> MsgpackParser<'a> {
 
     #[inline(always)]
     pub(crate) fn enter_map_known(&mut self) -> Result<Option<&'a str>, SerdeError> {
+        self.enter_map_inner().map(|(key, _)| key)
+    }
+
+    /// `enter_map_known` that also reports the entry count, for a caller that sizes a
+    /// dict from it: the returned first key borrows the buffer, so it could not ask
+    /// afterwards. `0` means the map was empty.
+    #[inline(always)]
+    pub(crate) fn enter_map_known_sized(&mut self) -> Result<(Option<&'a str>, usize), SerdeError> {
         self.enter_map_inner()
     }
 
@@ -199,6 +207,28 @@ impl<'a> MsgpackParser<'a> {
         Ok(true)
     }
 
+    /// Entry count of the container the last `enter_*_known` opened, from its header.
+    /// Only valid right after entering — it is derived from the entries still pending,
+    /// so it shrinks as they are consumed.
+    #[inline(always)]
+    pub(crate) fn container_len_hint(&self) -> Option<usize> {
+        let container = self.containers.last()?;
+        Some(self.clamp_stated_len(container.kind, container.remaining as usize + 1))
+    }
+
+    /// A header can claim up to 2^32 entries that the input cannot possibly hold, and
+    /// the caller turns this count into an allocation, so the bytes left cap it: an
+    /// array entry costs at least one byte, a map pair at least two (an empty fixstr
+    /// key plus a one-byte value).
+    #[inline(always)]
+    fn clamp_stated_len(&self, kind: ContainerKind, stated: usize) -> usize {
+        let room = self.data.len() - self.index;
+        match kind {
+            ContainerKind::Array => stated.min(room + 1),
+            ContainerKind::Map => stated.min(room / 2 + 1),
+        }
+    }
+
     /// Enter a map without a preceding `peek()` (discriminated-union scan).
     #[inline]
     pub(crate) fn enter_map(&mut self) -> Result<Option<&'a str>, SerdeError> {
@@ -206,20 +236,21 @@ impl<'a> MsgpackParser<'a> {
         if self.peek()? != Kind::Map {
             return Err(self.err_at("expected map", pos));
         }
-        self.enter_map_inner()
+        self.enter_map_inner().map(|(key, _)| key)
     }
 
     #[inline(always)]
-    fn enter_map_inner(&mut self) -> Result<Option<&'a str>, SerdeError> {
+    fn enter_map_inner(&mut self) -> Result<(Option<&'a str>, usize), SerdeError> {
         let len = self.read_map_len()?;
         if len == 0 {
-            return Ok(None);
+            return Ok((None, 0));
         }
         self.containers.push(Container {
             kind: ContainerKind::Map,
             remaining: len - 1,
         });
-        self.take_map_key().map(Some)
+        let hint = self.clamp_stated_len(ContainerKind::Map, len as usize);
+        Ok((Some(self.take_map_key()?), hint))
     }
 
     #[inline(always)]
