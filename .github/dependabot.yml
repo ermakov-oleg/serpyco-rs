@@ -1,14 +1,32 @@
 version: 2
+# Scheduled updates are monthly and grouped; security fixes come through a
+# separate channel (automated-security-fixes) that this schedule does not delay.
 updates:
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      cargo:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # pyo3 and jiter require num-bigint ^0.4: our BigInt must be their type,
+      # otherwise IntoPyObject is lost. Drop once upstream moves to 0.5 (#280).
+      - dependency-name: "num-bigint"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
