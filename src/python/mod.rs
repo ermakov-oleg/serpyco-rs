@@ -1,6 +1,7 @@
 mod dateutil;
 pub(crate) mod macros;
 mod py;
+pub(crate) mod slots;
 pub(super) mod types;
 mod utils;
 
@@ -10,6 +11,6 @@ pub(crate) use dateutil::{
 pub(crate) use py::*;
 pub(crate) use types::{
     get_object_type, BaseTypeInfo, DecimalTypeInfo, EntityFieldInfo, FloatTypeInfo,
-    IntegerTypeInfo, StringTypeInfo, Type,
+    IntegerTypeInfo, StrLoadMap, StringTypeInfo, Type,
 };
 pub(crate) use utils::fmt_py;

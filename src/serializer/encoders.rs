@@ -24,12 +24,15 @@ use crate::format::bridge::{
     wrong_type_at_cursor, wrong_type_err,
 };
 use crate::format::{EncodedKey, Kind, ParsedInt, ParsedNumber, Parser, Writer};
+#[cfg(not(Py_GIL_DISABLED))]
+use crate::python::slots::read_slot;
+use crate::python::slots::store_slot;
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_string, create_py_tuple,
     dump_date, dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
     py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
-use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
+use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StrLoadMap, StringTypeInfo};
 use crate::serde_error::{Message, SchemaError, SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
@@ -793,11 +796,19 @@ fn load_enum_scalar<'py>(
     instance_path: &InstancePath,
     ctx: &Context,
     enum_items: &str,
+    str_load_map: &StrLoadMap,
     load: impl Fn(&Bound<'py, PyAny>, &InstancePath, &Context) -> SerdeResult<Bound<'py, PyAny>>,
 ) -> SerdeResult<Bound<'py, PyAny>> {
     match parser.peek()? {
         Kind::Str => {
-            let key = parser.take_pystring_known(py)?.into_any();
+            let text = parser.take_str_known()?;
+            // A hit skips building the Python `str` and hashing it; a miss
+            // rebuilds it and takes the ordinary path, so int members,
+            // `try_cast_from_string` and the error text are untouched.
+            if let Some(member) = str_load_map.get(text) {
+                return Ok(member.bind(py).clone());
+            }
+            let key = create_py_string(py, text)?.into_any();
             load(&key, instance_path, ctx)
         }
         Kind::Num => {
@@ -1354,6 +1365,10 @@ pub struct Field {
     pub(crate) default_factory: Option<Py<PyAny>>,
     pub(crate) is_flattened: bool,
     pub(crate) is_dict_flatten: bool,
+    /// Byte offset of this field's `__slots__` member, when the owning entity's
+    /// layout was verified by `python::slots::resolve`. `None` keeps the
+    /// descriptor path (TypedDict fields are always `None`).
+    pub(crate) slot_offset: Option<pyo3_ffi::Py_ssize_t>,
 }
 
 impl Field {
@@ -1408,12 +1423,64 @@ impl EntityEncoder {
         field: &Field,
         val: Bound<'_, PyAny>,
     ) -> SerdeResult<()> {
+        if let Some(offset) = field.slot_offset {
+            // Safety: every caller passes an instance this encoder just built
+            // with `create_instance(self.cls)`, and the offset was verified
+            // against a probe of that same class at construction time.
+            unsafe { store_slot(obj.as_ptr(), offset, val) };
+            return Ok(());
+        }
         if self.is_frozen {
             generic_set_attr(obj, field.name.as_ptr(), val)?;
         } else {
             set_attr_unchecked(obj, field.name.as_ptr(), val)?;
         }
         Ok(())
+    }
+
+    /// Read a field for dumping, skipping the descriptor where the layout allows.
+    ///
+    /// Restricted to exact instances of `cls`: a subclass may shadow the
+    /// attribute with its own descriptor, and an unrelated object — which
+    /// untagged-union probing feeds in on purpose — must still raise
+    /// `AttributeError` rather than have its memory read at this offset.
+    ///
+    /// Free-threaded builds always take the descriptor path; see [`read_slot`].
+    #[inline(always)]
+    fn read_field<'py>(
+        &self,
+        value: &Bound<'py, PyAny>,
+        field: &Field,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        #[cfg(not(Py_GIL_DISABLED))]
+        if let Some(offset) = field.slot_offset {
+            let py = value.py();
+            if std::ptr::eq(
+                unsafe { pyo3::ffi::Py_TYPE(value.as_ptr()) },
+                self.cls.bind(py).as_type_ptr(),
+            ) {
+                // A null slot means the attribute was never assigned; fall
+                // through so the descriptor raises the proper AttributeError.
+                if let Some(val) = unsafe { read_slot(py, value.as_ptr(), offset) } {
+                    return Ok(val);
+                }
+            }
+        }
+        match value.getattr(&field.name) {
+            Ok(v) => Ok(v),
+            // Missing attr means `value` isn't this entity's shape: surface a Schema
+            // mismatch (not AttributeError) so an untagged union skips on, keeping
+            // the original as `cause` since it may come from a user property.
+            Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
+                // `cls.__name__` is read only if this error is rendered.
+                Err(invalid_type_dump_err_with_cause(
+                    self.cls.clone_ref(value.py()),
+                    value,
+                    e,
+                ))
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -1423,21 +1490,7 @@ impl Encoder for EntityEncoder {
         let _guard = ctx.enter_depth()?;
         let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
-            let field_val = match value.getattr(&field.name) {
-                Ok(v) => v,
-                // Missing attr means `value` isn't this entity's shape: surface a Schema
-                // mismatch (not AttributeError) so an untagged union skips on, keeping
-                // the original as `cause` since it may come from a user property.
-                Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                    // `cls.__name__` is read only if this error is rendered.
-                    return Err(invalid_type_dump_err_with_cause(
-                        self.cls.clone_ref(value.py()),
-                        value,
-                        e,
-                    ));
-                }
-                Err(e) => return Err(e.into()),
-            };
+            let field_val = self.read_field(value, field)?;
             let dump_result = field.encoder.dump(&field_val, ctx)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
@@ -1550,20 +1603,7 @@ impl StreamingObject for EntityEncoder {
         value: &Bound<'py, PyAny>,
         field: &Field,
     ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
-        // Same AttributeError -> Schema-mismatch conversion as `dump`, for the
-        // streaming dump path.
-        match value.getattr(&field.name) {
-            Ok(v) => Ok(Some(v)),
-            Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                // `cls.__name__` is read only if this error is rendered.
-                Err(invalid_type_dump_err_with_cause(
-                    self.cls.clone_ref(value.py()),
-                    value,
-                    e,
-                ))
-            }
-            Err(e) => Err(e.into()),
-        }
+        self.read_field(value, field).map(Some)
     }
 }
 
@@ -1854,6 +1894,7 @@ pub struct EnumEncoder {
     pub(crate) enum_items: Arc<str>,
     pub(crate) load_map: Py<PyDict>,
     pub(crate) dump_map: IntMap<usize, Py<PyAny>>,
+    pub(crate) str_load_map: StrLoadMap,
 }
 
 impl Encoder for EnumEncoder {
@@ -1912,6 +1953,7 @@ impl Encoder for EnumEncoder {
             instance_path,
             ctx,
             &self.enum_items,
+            &self.str_load_map,
             |v, p, c| self.load(v, p, c),
         )
     }
@@ -1927,6 +1969,7 @@ pub struct LiteralEncoder {
     pub(crate) enum_items: Arc<str>,
     pub(crate) load_map: Py<PyDict>,
     pub(crate) dump_map: Py<PyDict>,
+    pub(crate) str_load_map: StrLoadMap,
 }
 
 impl Encoder for LiteralEncoder {
@@ -1983,6 +2026,7 @@ impl Encoder for LiteralEncoder {
             instance_path,
             ctx,
             &self.enum_items,
+            &self.str_load_map,
             |v, p, c| self.load(v, p, c),
         )
     }

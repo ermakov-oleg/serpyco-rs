@@ -5,11 +5,13 @@ use std::sync::{Arc, OnceLock};
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyByteArray, PyBytes, PyDict, PyList, PyMapping, PyMemoryView, PyString};
+use pyo3::types::{
+    PyByteArray, PyBytes, PyDict, PyList, PyMapping, PyMemoryView, PyString, PyType,
+};
 use pyo3::{intern, PyAny, PyResult};
 
 use crate::format::{EncodedKey, Parser, Writer};
-use crate::python::{get_object_type, BaseTypeInfo, EntityFieldInfo, Type};
+use crate::python::{get_object_type, BaseTypeInfo, EntityFieldInfo, StrLoadMap, Type};
 use crate::serde_error::SerdeError;
 use crate::serializer::encoders::{
     BooleanEncoder, BytesEncoder, CustomTypeEncoder, DiscriminatorKey, FloatEncoder, IntEncoder,
@@ -296,6 +298,7 @@ pub fn get_encoder(
                 enum_items: type_info.items_repr.as_str().into(),
                 load_map: type_info.load_map.clone_ref(py),
                 dump_map: type_info.dump_map.clone_ref(py),
+                str_load_map: clone_str_load_map(py, &type_info.str_load_map),
             }),
         )?,
         Type::Optional(type_info, base_type, python_object_id) => {
@@ -418,8 +421,13 @@ pub fn get_encoder(
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
         }
         Type::Entity(type_info, base_type, python_object_id) => {
-            let fields =
+            let mut fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
+            apply_slot_offsets(
+                type_info.cls.bind(py).cast()?,
+                &mut fields,
+                type_info.is_frozen,
+            );
 
             let format_routing = build_format_routing(&fields);
             let has_flatten = fields.iter().any(|f| f.is_flattened);
@@ -471,6 +479,7 @@ pub fn get_encoder(
                 enum_items: type_info.items_repr.as_str().into(),
                 load_map: type_info.load_map.clone_ref(py),
                 dump_map: type_info.dump_map.clone(),
+                str_load_map: clone_str_load_map(py, &type_info.str_load_map),
             }),
         )?,
         Type::Custom(base_type) => {
@@ -578,10 +587,32 @@ fn iterate_on_fields(
                 .map(|value| value.clone_ref(py)),
             is_flattened: field.is_flattened,
             is_dict_flatten: field.is_dict_flatten,
+            slot_offset: None,
         };
         fields.push(fld);
     }
     Ok(fields)
+}
+
+/// Resolve each field's `__slots__` offset so the entity encoder can address the
+/// instance directly instead of going through `getattr`/`setattr`.
+///
+/// Silent no-op unless the whole class checks out: a single field that is not a
+/// plain slot leaves every field on the descriptor path, so the two never mix.
+fn apply_slot_offsets(cls: &Bound<'_, PyType>, fields: &mut [Field], is_frozen: bool) {
+    let names: Vec<&Py<PyString>> = fields.iter().map(|f| &f.name).collect();
+    let Some(offsets) = crate::python::slots::resolve(cls, &names, is_frozen) else {
+        return;
+    };
+    for (field, offset) in fields.iter_mut().zip(offsets.iter()) {
+        field.slot_offset = Some(*offset);
+    }
+}
+
+fn clone_str_load_map(py: Python<'_>, map: &StrLoadMap) -> StrLoadMap {
+    map.iter()
+        .map(|(k, v)| (k.clone(), v.clone_ref(py)))
+        .collect()
 }
 
 type EncoderStateValue = Arc<OnceLock<Arc<TEncoder>>>;
