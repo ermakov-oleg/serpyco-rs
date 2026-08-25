@@ -9,6 +9,12 @@ repository = "https://github.com/ermakov-oleg/serpyco-rs"
 name = "serpyco_rs"
 crate-type = ["cdylib"]
 
+[features]
+# Benchmark-only: builds `src/bench_codec`, the specialized GitHub-issue JSON
+# codec used by `bench/experiments/specialized_json_codec`. Never enabled for
+# released wheels.
+bench-codec = []
+
 [dependencies]
 pyo3 = { version = "0.29", features = ["extension-module", "py-clone", "num-bigint"] }
 pyo3-ffi = "0.29"
