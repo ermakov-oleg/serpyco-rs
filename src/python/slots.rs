@@ -12,6 +12,31 @@
 //! an instance `__dict__`, a non-slot field, a custom `__setattr__`/`__getattr__`
 //! — disables the whole optimization for that entity and the descriptor path
 //! stays in use.
+//!
+//! A class stays mutable after the serializer is built, so "proved once" is not
+//! enough: replacing a field with a `property`, or installing a `__setattr__`,
+//! would leave the offsets pointing at storage the attribute protocol no longer
+//! uses. [`resolve`] therefore also records the class's `tp_version_tag`, and
+//! every access re-checks it — CPython bumps it on any change to the type or
+//! its bases, the same signal its own inline caches watch.
+//!
+//! A stale tag means "re-check", not "give up for good". Perfectly ordinary code
+//! mutates the class once and never again — the first `pickle` or `copy.deepcopy`
+//! of a slots instance makes `copyreg` cache `__slotnames__` in the class dict —
+//! and a serializer that lost the fast path there would never get it back. So a
+//! mismatch re-runs [`resolve`]: if the layout still holds, the new version is
+//! adopted and the next call is fast again; if it does not, the entity drops to
+//! the descriptor path permanently.
+//!
+//! The whole thing is off on free-threaded builds. A direct store is only sound
+//! while nothing else can reach the instance, and that does not hold: user code
+//! runs mid-load (a `default_factory`, a custom encoder) and can pull the
+//! half-built object out of `gc.get_objects()`. Once it has escaped, a plain
+//! store races with a descriptor read in another thread, which CPython
+//! synchronizes with a critical section and an atomic store that this cannot
+//! reproduce from the outside.
+
+use std::os::raw::c_uint;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyType};
@@ -46,9 +71,30 @@ const T_OBJECT_EX: std::os::raw::c_int = 16;
 /// `Py_READONLY`.
 const READONLY: std::os::raw::c_int = 1;
 
-/// Byte offsets of an entity's fields, in the order they were passed to
-/// [`resolve`]. Present only when every one of them was verified.
-pub(crate) type SlotOffsets = Box<[Py_ssize_t]>;
+/// A verified slot layout: one byte offset per field, in the order the names
+/// were passed to [`resolve`], plus the class version it was verified against.
+pub(crate) struct SlotLayout {
+    pub(crate) offsets: Box<[Py_ssize_t]>,
+    /// `tp_version_tag` at verification time; [`version_of`] must still match
+    /// it before any offset is used.
+    pub(crate) version: c_uint,
+}
+
+/// The class's current `tp_version_tag`. CPython invalidates it (to 0, then a
+/// fresh value on the next lookup) whenever the type or one of its bases is
+/// modified, so an unequal value means the verified layout is stale.
+///
+/// This is the same invariant CPython's own inline caches rest on: a C
+/// extension that edits a type dict without `PyType_Modified` would defeat both.
+/// Once the interpreter runs out of version numbers it stops handing them out,
+/// leaving 0 here — which reads as "stale" and simply retires the fast path.
+///
+/// # Safety
+/// `tp` must be a live type object.
+#[inline(always)]
+pub(crate) unsafe fn version_of(tp: *mut ffi::PyTypeObject) -> c_uint {
+    (*tp).tp_version_tag
+}
 
 /// Resolve and verify the slot offsets of `names` on `cls`.
 ///
@@ -63,7 +109,12 @@ pub(crate) fn resolve(
     cls: &Bound<'_, PyType>,
     names: &[&Py<PyString>],
     is_frozen: bool,
-) -> Option<SlotOffsets> {
+) -> Option<SlotLayout> {
+    // See the module docs: sound only while the instance cannot be reached from
+    // another thread, which free-threaded builds cannot guarantee.
+    if cfg!(Py_GIL_DISABLED) {
+        return None;
+    }
     let py = cls.py();
     let tp = cls.as_type_ptr();
     // Safety: `tp` is a live type object for as long as `cls` is bound.
@@ -102,8 +153,15 @@ pub(crate) fn resolve(
     for name in names {
         offsets.push(member_offset(cls, name.bind(py), basicsize)?);
     }
-    let offsets: SlotOffsets = offsets.into_boxed_slice();
-    verify(cls, names, &offsets).ok()?.then_some(offsets)
+    let offsets = offsets.into_boxed_slice();
+    if !verify(cls, names, &offsets).ok()? {
+        return None;
+    }
+    // Read the tag last: `member_offset` and `verify` both go through
+    // `_PyType_Lookup`, which is what assigns one. A type that still has no
+    // version cannot be guarded, so it does not get the fast path.
+    let version = unsafe { version_of(tp) };
+    (version != 0).then_some(SlotLayout { offsets, version })
 }
 
 /// Offset of `name`'s `__slots__` member, or `None` if it is not one.
@@ -169,15 +227,10 @@ pub(crate) unsafe fn store_slot(obj: *mut ffi::PyObject, offset: Py_ssize_t, val
 
 /// Read a slot, or `None` if the field was never assigned.
 ///
-/// Only compiled for GIL builds. Writing goes into an instance this thread just
-/// allocated and has not published yet, but *reading* races with any other
-/// thread mutating the same object: on a free-threaded build `PyMember_GetOne`
-/// pairs an atomic load with a try-incref to make that safe, and a plain load
-/// followed by an incref cannot. There the descriptor path stays in use.
+/// Never reached on free-threaded builds: [`resolve`] hands out no layout there.
 ///
 /// # Safety
 /// Same class invariant as [`store_slot`].
-#[cfg(not(Py_GIL_DISABLED))]
 #[inline(always)]
 pub(crate) unsafe fn read_slot<'py>(
     py: Python<'py>,

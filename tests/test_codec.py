@@ -1439,3 +1439,63 @@ def test_entity_load_duplicate_key_last_wins():
 
     s = Serializer(M, codec=JSON)
     assert s.load(b'{"a": 9, "b": "x", "c": true, "a": 1, "d": 2}') == M(a=1, b='x', c=True, d=2)
+
+
+# The format load paths look a string-valued Enum/Literal member up in a
+# Rust-side map keyed by the wire text, instead of building a Python `str` and
+# probing the load map with it. That map is only ever an accelerator, so it must
+# hold nothing whose Python-level lookup could disagree with a byte comparison.
+
+
+@parametrize_codec
+def test_enum_with_a_str_subclass_value_matches_the_dict_path(codec):
+    class NeverEqual(str):
+        # A `str` subclass may define what equality means; a byte comparison
+        # cannot see that, so such a member must not be resolved by one.
+        def __eq__(self, other: object) -> bool:
+            return False
+
+        def __hash__(self) -> int:
+            return hash('never-equal')
+
+    class Weird(Enum):
+        A = NeverEqual('a')
+
+    codec_serializer = Serializer(Weird, codec=codec)
+    dict_serializer = Serializer(Weird)
+
+    with pytest.raises(SchemaValidationError):
+        dict_serializer.load('a')
+    with pytest.raises(SchemaValidationError):
+        codec_serializer.load(dump_any(codec, 'a'))
+
+
+@parametrize_codec
+def test_literal_with_an_unencodable_value_still_builds(codec):
+    # A lone surrogate has no UTF-8 form to key on. It must be skipped, not
+    # turned into a construction error for the whole serializer.
+    serializer = Serializer(Literal['ok', '\ud800'], codec=codec)
+    assert serializer.load(dump_any(codec, 'ok')) == 'ok'
+
+
+@parametrize_codec
+def test_enum_with_an_unencodable_value_still_builds(codec):
+    class Surrogate(Enum):
+        OK = 'ok'
+        BROKEN = '\ud800'
+
+    serializer = Serializer(Surrogate, codec=codec)
+    assert serializer.load(dump_any(codec, 'ok')) is Surrogate.OK
+
+
+@parametrize_codec
+def test_int_enum_from_string_is_unaffected(codec):
+    # `try_cast_from_string` resolves int members through the load map; the
+    # string cache holds none of them, so this has to keep working via the miss.
+    class Numbers(IntEnum):
+        ONE = 1
+
+    serializer = Serializer(Numbers, codec=codec)
+    assert serializer.load(dump_any(codec, 1)) is Numbers.ONE
+    with pytest.raises(SchemaValidationError):
+        serializer.load(dump_any(codec, 'nope'))

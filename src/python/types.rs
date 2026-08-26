@@ -2,7 +2,7 @@ use std::fmt;
 
 use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::{PyAnyMethods, PyModule, PyStringMethods};
+use pyo3::prelude::{PyAnyMethods, PyModule};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyInt, PyList, PyListMethods, PySet, PyString, PyType};
 use pyo3::{intern, Bound, Py, PyAny, PyResult, Python};
@@ -293,20 +293,25 @@ impl DiscriminatedUnionTypeInfo {
 ///
 /// The format load paths read the JSON string as `&str`; looking the member up
 /// here avoids building a Python `str` and hashing it just to probe `load_map`.
-/// It only ever holds members whose value is a `str`, so a miss simply falls
-/// back to `load_map` and every other case (int members, `try_cast_from_string`,
-/// the error text) keeps its existing behaviour.
+/// A miss falls back to `load_map`, so it is only ever an accelerator — which
+/// means it must hold nothing whose Python-level lookup could disagree with a
+/// byte comparison:
+///
+/// * **exact `str` only.** A `str` subclass may override `__eq__`/`__hash__`,
+///   and `load_map` would honour that while this map cannot see it.
+/// * **encodable values only.** A member whose value contains a lone surrogate
+///   has no UTF-8 form to key on. Skipping it keeps the serializer buildable —
+///   such a value simply never matches here, exactly as before.
 pub type StrLoadMap = FxHashMap<Box<str>, Py<PyAny>>;
 
-fn add_str_member(
-    map: &mut StrLoadMap,
-    value: &Bound<'_, PyAny>,
-    member: &Bound<'_, PyAny>,
-) -> PyResult<()> {
-    if let Ok(text) = value.cast::<PyString>() {
-        map.insert(text.to_cow()?.into(), member.clone().unbind());
+fn add_str_member(map: &mut StrLoadMap, value: &Bound<'_, PyAny>, member: &Bound<'_, PyAny>) {
+    if !value.is_exact_instance_of::<PyString>() {
+        return;
     }
-    Ok(())
+    let Ok(text) = value.extract::<std::borrow::Cow<'_, str>>() else {
+        return;
+    };
+    map.insert(text.into(), member.clone().unbind());
 }
 
 #[derive(Clone, Debug)]
@@ -331,7 +336,7 @@ impl EnumTypeInfo {
             let py_value_id = py_value.as_ptr() as *const _ as usize;
             dump_map.insert(py_value_id, value.clone().unbind());
             load_map.set_item(&value, &py_value)?;
-            add_str_member(&mut str_load_map, &value, &py_value)?;
+            add_str_member(&mut str_load_map, &value, &py_value);
             items_repr.push(fmt_py(&value));
 
             if let Ok(value) = value.cast::<PyInt>() {
@@ -374,7 +379,7 @@ impl LiteralTypeInfo {
 
             dump_map.set_item(&py_value, value.clone().unbind())?;
             load_map.set_item(&value, &py_value)?;
-            add_str_member(&mut str_load_map, &value, &py_value)?;
+            add_str_member(&mut str_load_map, &value, &py_value);
             items_repr.push(fmt_py(&value));
 
             if let Ok(value) = value.cast::<PyInt>() {

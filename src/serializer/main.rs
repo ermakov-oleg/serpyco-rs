@@ -423,7 +423,7 @@ pub fn get_encoder(
         Type::Entity(type_info, base_type, python_object_id) => {
             let mut fields =
                 iterate_on_fields(py, &type_info.fields, encoder_state, naive_datetime_to_utc)?;
-            apply_slot_offsets(
+            let slot_version = apply_slot_offsets(
                 type_info.cls.bind(py).cast()?,
                 &mut fields,
                 type_info.is_frozen,
@@ -443,6 +443,7 @@ pub fn get_encoder(
                 used_keys: type_info.used_keys.clone_ref(py),
                 format_routing,
                 has_flatten,
+                slot_version: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(slot_version)),
             };
 
             encoder_state.create_and_register(py, encoder, base_type, python_object_id)?
@@ -599,14 +600,21 @@ fn iterate_on_fields(
 ///
 /// Silent no-op unless the whole class checks out: a single field that is not a
 /// plain slot leaves every field on the descriptor path, so the two never mix.
-fn apply_slot_offsets(cls: &Bound<'_, PyType>, fields: &mut [Field], is_frozen: bool) {
+/// Returns the class version the offsets were verified against, or 0 when the
+/// class did not qualify — the encoder treats 0 as "no fast path".
+fn apply_slot_offsets(
+    cls: &Bound<'_, PyType>,
+    fields: &mut [Field],
+    is_frozen: bool,
+) -> std::os::raw::c_uint {
     let names: Vec<&Py<PyString>> = fields.iter().map(|f| &f.name).collect();
-    let Some(offsets) = crate::python::slots::resolve(cls, &names, is_frozen) else {
-        return;
+    let Some(layout) = crate::python::slots::resolve(cls, &names, is_frozen) else {
+        return 0;
     };
-    for (field, offset) in fields.iter_mut().zip(offsets.iter()) {
+    for (field, offset) in fields.iter_mut().zip(layout.offsets.iter()) {
         field.slot_offset = Some(*offset);
     }
+    layout.version
 }
 
 fn clone_str_load_map(py: Python<'_>, map: &StrLoadMap) -> StrLoadMap {
