@@ -4,8 +4,9 @@ use nohash_hasher::IntMap;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{PyAnyMethods, PyModule};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyInt, PyList, PyListMethods, PySet, PyType};
+use pyo3::types::{PyDict, PyInt, PyList, PyListMethods, PySet, PyString, PyType};
 use pyo3::{intern, Bound, Py, PyAny, PyResult, Python};
+use rustc_hash::FxHashMap;
 
 use crate::python::fmt_py;
 
@@ -288,11 +289,37 @@ impl DiscriminatedUnionTypeInfo {
     }
 }
 
+/// String-valued enum/literal members keyed by their wire text.
+///
+/// The format load paths read the JSON string as `&str`; looking the member up
+/// here avoids building a Python `str` and hashing it just to probe `load_map`.
+/// A miss falls back to `load_map`, so it is only ever an accelerator — which
+/// means it must hold nothing whose Python-level lookup could disagree with a
+/// byte comparison:
+///
+/// * **exact `str` only.** A `str` subclass may override `__eq__`/`__hash__`,
+///   and `load_map` would honour that while this map cannot see it.
+/// * **encodable values only.** A member whose value contains a lone surrogate
+///   has no UTF-8 form to key on. Skipping it keeps the serializer buildable —
+///   such a value simply never matches here, exactly as before.
+pub type StrLoadMap = FxHashMap<Box<str>, Py<PyAny>>;
+
+fn add_str_member(map: &mut StrLoadMap, value: &Bound<'_, PyAny>, member: &Bound<'_, PyAny>) {
+    if !value.is_exact_instance_of::<PyString>() {
+        return;
+    }
+    let Ok(text) = value.extract::<std::borrow::Cow<'_, str>>() else {
+        return;
+    };
+    map.insert(text.into(), member.clone().unbind());
+}
+
 #[derive(Clone, Debug)]
 pub struct EnumTypeInfo {
     pub items_repr: String,
     pub load_map: Py<PyDict>,
     pub dump_map: IntMap<usize, Py<PyAny>>,
+    pub str_load_map: StrLoadMap,
 }
 
 impl EnumTypeInfo {
@@ -301,6 +328,7 @@ impl EnumTypeInfo {
         let items = items.cast::<PyList>()?;
         let load_map = PyDict::new(type_info.py());
         let mut dump_map = IntMap::default();
+        let mut str_load_map = StrLoadMap::default();
         let mut items_repr = Vec::with_capacity(items.len());
 
         for py_value in items.iter() {
@@ -308,6 +336,7 @@ impl EnumTypeInfo {
             let py_value_id = py_value.as_ptr() as *const _ as usize;
             dump_map.insert(py_value_id, value.clone().unbind());
             load_map.set_item(&value, &py_value)?;
+            add_str_member(&mut str_load_map, &value, &py_value);
             items_repr.push(fmt_py(&value));
 
             if let Ok(value) = value.cast::<PyInt>() {
@@ -320,6 +349,7 @@ impl EnumTypeInfo {
             items_repr: format!("[{}]", items_repr.join(", ")),
             load_map: load_map.unbind(),
             dump_map,
+            str_load_map,
         })
     }
 }
@@ -329,6 +359,7 @@ pub struct LiteralTypeInfo {
     pub items_repr: String,
     pub load_map: Py<PyDict>,
     pub dump_map: Py<PyDict>,
+    pub str_load_map: StrLoadMap,
 }
 
 impl LiteralTypeInfo {
@@ -337,6 +368,7 @@ impl LiteralTypeInfo {
         let args = args.cast::<PyList>()?;
         let load_map = PyDict::new(type_info.py());
         let dump_map = PyDict::new(type_info.py());
+        let mut str_load_map = StrLoadMap::default();
         let mut items_repr = Vec::with_capacity(args.len());
 
         for py_value in args.iter() {
@@ -347,6 +379,7 @@ impl LiteralTypeInfo {
 
             dump_map.set_item(&py_value, value.clone().unbind())?;
             load_map.set_item(&value, &py_value)?;
+            add_str_member(&mut str_load_map, &value, &py_value);
             items_repr.push(fmt_py(&value));
 
             if let Ok(value) = value.cast::<PyInt>() {
@@ -359,6 +392,7 @@ impl LiteralTypeInfo {
             items_repr: format!("[{}]", items_repr.join(", ")),
             load_map: load_map.unbind(),
             dump_map: dump_map.unbind(),
+            str_load_map,
         })
     }
 }

@@ -59,6 +59,11 @@ pub(crate) fn parse_date<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'p
 #[inline]
 fn time_as_tzinfo<'py>(py: Python<'py>, time: &Time) -> PyResult<Option<Bound<'py, PyTzInfo>>> {
     match time.tz_offset {
+        // `Z` / `+00:00` is the overwhelmingly common case, and CPython's
+        // `timezone.utc` singleton is exactly what `PyTimeZone_FromOffset` of a
+        // zero delta would return — so take it straight from the datetime C API
+        // instead of allocating a `timedelta` and interning a tzinfo per value.
+        Some(0) => Ok(Some(PyTzInfo::utc(py)?.to_owned())),
         Some(offset) => {
             let delta = PyDelta::new(py, 0, offset, 0, true)?;
 
@@ -147,7 +152,13 @@ fn to_tz_offset(
     if tzinfo.is_none() {
         return Ok(None);
     }
-    let offset = tzinfo.unwrap().call_method1("utcoffset", (datetime,))?;
+    let tzinfo = tzinfo.unwrap();
+    // `timezone.utc.utcoffset(...)` is always zero, so recognizing the singleton
+    // by identity saves a Python-level call on the dominant case.
+    if tzinfo.is(PyTzInfo::utc(tzinfo.py())?) {
+        return Ok(Some(0));
+    }
+    let offset = tzinfo.call_method1("utcoffset", (datetime,))?;
     if offset.is_none() {
         return Ok(None);
     }

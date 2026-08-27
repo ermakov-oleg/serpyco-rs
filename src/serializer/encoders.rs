@@ -5,6 +5,8 @@ use smallvec::{smallvec, SmallVec};
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Debug;
+use std::os::raw::c_uint;
+use std::sync::atomic::{AtomicU32, Ordering as AtomicOrdering};
 use std::sync::{Arc, OnceLock};
 
 use dyn_clone::{clone_trait_object, DynClone};
@@ -24,12 +26,15 @@ use crate::format::bridge::{
     wrong_type_at_cursor, wrong_type_err,
 };
 use crate::format::{EncodedKey, Kind, ParsedInt, ParsedNumber, Parser, Writer};
+use crate::python::slots::{
+    read_slot, resolve as slots_resolve, store_slot, version_of as type_version,
+};
 use crate::python::{
     create_instance, create_py_dict_known_size, create_py_list, create_py_string, create_py_tuple,
     dump_date, dump_datetime, dump_time, generic_set_attr, parse_date, parse_datetime, parse_time,
     py_dict_set_item, py_list_get_item, py_list_set_item, py_tuple_set_item, set_attr_unchecked,
 };
-use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StringTypeInfo};
+use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StrLoadMap, StringTypeInfo};
 use crate::serde_error::{Message, SchemaError, SerdeError, SerdeResult};
 use crate::validator::validators::{
     check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
@@ -793,11 +798,19 @@ fn load_enum_scalar<'py>(
     instance_path: &InstancePath,
     ctx: &Context,
     enum_items: &str,
+    str_load_map: &StrLoadMap,
     load: impl Fn(&Bound<'py, PyAny>, &InstancePath, &Context) -> SerdeResult<Bound<'py, PyAny>>,
 ) -> SerdeResult<Bound<'py, PyAny>> {
     match parser.peek()? {
         Kind::Str => {
-            let key = parser.take_pystring_known(py)?.into_any();
+            let text = parser.take_str_known()?;
+            // A hit skips building the Python `str` and hashing it; a miss
+            // rebuilds it and takes the ordinary path, so int members,
+            // `try_cast_from_string` and the error text are untouched.
+            if let Some(member) = str_load_map.get(text) {
+                return Ok(member.bind(py).clone());
+            }
+            let key = create_py_string(py, text)?.into_any();
             load(&key, instance_path, ctx)
         }
         Kind::Num => {
@@ -1339,6 +1352,10 @@ pub struct EntityEncoder {
     /// Every dump emits exactly `fields.len()` entries (no omit_none on optional
     /// fields), so sized formats can write an exact map header.
     pub(crate) dump_sized: bool,
+    /// `tp_version_tag` the fields' `slot_offset`s were last verified against;
+    /// 0 once the class stops qualifying. Shared between clones of this encoder
+    /// so one re-validation serves all of them. See `python::slots`.
+    pub(crate) slot_version: Arc<AtomicU32>,
 }
 
 #[derive(Debug, Clone)]
@@ -1354,6 +1371,10 @@ pub struct Field {
     pub(crate) default_factory: Option<Py<PyAny>>,
     pub(crate) is_flattened: bool,
     pub(crate) is_dict_flatten: bool,
+    /// Byte offset of this field's `__slots__` member, when the owning entity's
+    /// layout was verified by `python::slots::resolve`. `None` keeps the
+    /// descriptor path (TypedDict fields are always `None`).
+    pub(crate) slot_offset: Option<pyo3_ffi::Py_ssize_t>,
 }
 
 impl Field {
@@ -1400,6 +1421,50 @@ impl Field {
 }
 
 impl EntityEncoder {
+    /// Whether the verified slot layout still describes the class.
+    ///
+    /// The class stays mutable after the serializer is built: replacing a field
+    /// with a `property`, or installing a `__setattr__`, must send every field
+    /// back to the descriptor path. CPython bumps `tp_version_tag` on any such
+    /// change, so one comparison per access is enough to notice.
+    #[inline(always)]
+    fn slots_usable(&self, py: Python<'_>) -> bool {
+        let expected = self.slot_version.load(AtomicOrdering::Relaxed);
+        if expected == 0 {
+            return false; // the class never qualified, or stopped qualifying
+        }
+        let current = unsafe { type_version(self.cls.bind(py).as_type_ptr()) };
+        expected == current || self.revalidate_slots(py, current)
+    }
+
+    /// The class changed since its layout was verified. Re-verify once: a
+    /// one-off mutation (`copyreg` caching `__slotnames__` on the first pickle,
+    /// say) leaves the offsets intact and only the version needs refreshing,
+    /// while a real change to the attribute protocol retires the fast path.
+    #[cold]
+    #[inline(never)]
+    fn revalidate_slots(&self, py: Python<'_>, current: c_uint) -> bool {
+        let Ok(cls) = self.cls.bind(py).cast::<PyType>() else {
+            self.slot_version.store(0, AtomicOrdering::Relaxed);
+            return false;
+        };
+        let names: Vec<&Py<PyString>> = self.fields.iter().map(|f| &f.name).collect();
+        let same_layout = slots_resolve(cls, &names, self.is_frozen).is_some_and(|layout| {
+            self.fields
+                .iter()
+                .zip(layout.offsets.iter())
+                .all(|(field, offset)| field.slot_offset == Some(*offset))
+        });
+        // `current` was read before re-resolving, so adopting it can only ever
+        // under-claim: a mutation racing with this check leaves a stale value
+        // that the next call notices.
+        self.slot_version.store(
+            if same_layout { current } else { 0 },
+            AtomicOrdering::Relaxed,
+        );
+        same_layout
+    }
+
     /// Set a field on the instance; frozen entities disallow the fast unchecked setattr.
     #[inline(always)]
     fn set_field(
@@ -1408,12 +1473,68 @@ impl EntityEncoder {
         field: &Field,
         val: Bound<'_, PyAny>,
     ) -> SerdeResult<()> {
+        if let Some(offset) = field.slot_offset {
+            if self.slots_usable(obj.py()) {
+                // Safety: every caller passes an instance this encoder just
+                // built with `create_instance(self.cls)`, the offset was
+                // verified against a probe of that same class, and the version
+                // check above says the class has not changed since.
+                unsafe { store_slot(obj.as_ptr(), offset, val) };
+                return Ok(());
+            }
+        }
         if self.is_frozen {
             generic_set_attr(obj, field.name.as_ptr(), val)?;
         } else {
             set_attr_unchecked(obj, field.name.as_ptr(), val)?;
         }
         Ok(())
+    }
+
+    /// Read a field for dumping, skipping the descriptor where the layout allows.
+    ///
+    /// Restricted to exact instances of `cls`: a subclass may shadow the
+    /// attribute with its own descriptor, and an unrelated object — which
+    /// untagged-union probing feeds in on purpose — must still raise
+    /// `AttributeError` rather than have its memory read at this offset.
+    ///
+    /// Free-threaded builds always take the descriptor path, as does a class
+    /// that has been modified since its layout was verified.
+    #[inline(always)]
+    fn read_field<'py>(
+        &self,
+        value: &Bound<'py, PyAny>,
+        field: &Field,
+    ) -> SerdeResult<Bound<'py, PyAny>> {
+        if let Some(offset) = field.slot_offset {
+            let py = value.py();
+            if std::ptr::eq(
+                unsafe { pyo3::ffi::Py_TYPE(value.as_ptr()) },
+                self.cls.bind(py).as_type_ptr(),
+            ) && self.slots_usable(py)
+            {
+                // A null slot means the attribute was never assigned; fall
+                // through so the descriptor raises the proper AttributeError.
+                if let Some(val) = unsafe { read_slot(py, value.as_ptr(), offset) } {
+                    return Ok(val);
+                }
+            }
+        }
+        match value.getattr(&field.name) {
+            Ok(v) => Ok(v),
+            // Missing attr means `value` isn't this entity's shape: surface a Schema
+            // mismatch (not AttributeError) so an untagged union skips on, keeping
+            // the original as `cause` since it may come from a user property.
+            Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
+                // `cls.__name__` is read only if this error is rendered.
+                Err(invalid_type_dump_err_with_cause(
+                    self.cls.clone_ref(value.py()),
+                    value,
+                    e,
+                ))
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -1423,21 +1544,7 @@ impl Encoder for EntityEncoder {
         let _guard = ctx.enter_depth()?;
         let dict = create_py_dict_known_size(value.py(), self.fields.len())?;
         for field in &self.fields {
-            let field_val = match value.getattr(&field.name) {
-                Ok(v) => v,
-                // Missing attr means `value` isn't this entity's shape: surface a Schema
-                // mismatch (not AttributeError) so an untagged union skips on, keeping
-                // the original as `cause` since it may come from a user property.
-                Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                    // `cls.__name__` is read only if this error is rendered.
-                    return Err(invalid_type_dump_err_with_cause(
-                        self.cls.clone_ref(value.py()),
-                        value,
-                        e,
-                    ));
-                }
-                Err(e) => return Err(e.into()),
-            };
+            let field_val = self.read_field(value, field)?;
             let dump_result = field.encoder.dump(&field_val, ctx)?;
             if field.required || !self.omit_none || !dump_result.is_none() {
                 if field.is_flattened {
@@ -1550,20 +1657,7 @@ impl StreamingObject for EntityEncoder {
         value: &Bound<'py, PyAny>,
         field: &Field,
     ) -> SerdeResult<Option<Bound<'py, PyAny>>> {
-        // Same AttributeError -> Schema-mismatch conversion as `dump`, for the
-        // streaming dump path.
-        match value.getattr(&field.name) {
-            Ok(v) => Ok(Some(v)),
-            Err(e) if e.is_instance_of::<PyAttributeError>(value.py()) => {
-                // `cls.__name__` is read only if this error is rendered.
-                Err(invalid_type_dump_err_with_cause(
-                    self.cls.clone_ref(value.py()),
-                    value,
-                    e,
-                ))
-            }
-            Err(e) => Err(e.into()),
-        }
+        self.read_field(value, field).map(Some)
     }
 }
 
@@ -1854,6 +1948,7 @@ pub struct EnumEncoder {
     pub(crate) enum_items: Arc<str>,
     pub(crate) load_map: Py<PyDict>,
     pub(crate) dump_map: IntMap<usize, Py<PyAny>>,
+    pub(crate) str_load_map: StrLoadMap,
 }
 
 impl Encoder for EnumEncoder {
@@ -1912,6 +2007,7 @@ impl Encoder for EnumEncoder {
             instance_path,
             ctx,
             &self.enum_items,
+            &self.str_load_map,
             |v, p, c| self.load(v, p, c),
         )
     }
@@ -1927,6 +2023,7 @@ pub struct LiteralEncoder {
     pub(crate) enum_items: Arc<str>,
     pub(crate) load_map: Py<PyDict>,
     pub(crate) dump_map: Py<PyDict>,
+    pub(crate) str_load_map: StrLoadMap,
 }
 
 impl Encoder for LiteralEncoder {
@@ -1983,6 +2080,7 @@ impl Encoder for LiteralEncoder {
             instance_path,
             ctx,
             &self.enum_items,
+            &self.str_load_map,
             |v, p, c| self.load(v, p, c),
         )
     }
