@@ -46,7 +46,7 @@ use pyo3_ffi::Py_ssize_t;
 use super::py::{create_instance, generic_set_attr};
 
 /// `PyMemberDef` from CPython's `object.h`; the layout is stable across
-/// 3.10 … 3.14 and is what a `__slots__` descriptor points at.
+/// 3.10 … 3.15 and is what a `__slots__` descriptor points at.
 #[repr(C)]
 struct PyMemberDef {
     name: *const std::os::raw::c_char,
