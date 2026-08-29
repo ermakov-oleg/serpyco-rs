@@ -17,7 +17,7 @@ LIBS = (
 
 
 # Resolved per test rather than at import time: the PGO profile run selects the
-# codec contenders only, and it runs in the build matrix (3.10 … 3.14t) where the
+# codec contenders only, and it runs in the build matrix (3.10 … 3.15t) where the
 # comparison libs are not installed.
 #
 # ``wire`` converts the JSON fixture into the contender's native byte form

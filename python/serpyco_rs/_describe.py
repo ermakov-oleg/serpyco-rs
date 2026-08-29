@@ -1,4 +1,5 @@
 import dataclasses
+import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, time
@@ -611,13 +612,43 @@ def _generate_name(cls: Any, ref: str) -> str:
     We need unique name to avoid name conflicts in generated json schema,
     when we have one entity with different Annotated metadata (like FieldFormat).
     """
-    name = repr(cls).removeprefix("<class '").removesuffix("'>")
+    name = _type_repr(cls).removeprefix("<class '").removesuffix("'>")
     if name not in _NAME_CACHE:
         _NAME_CACHE[name] = 0
         return name
 
     _NAME_CACHE[name] += 1
     return f'{name}{_NAME_CACHE[name]}'
+
+
+def _type_repr(t: Any) -> str:
+    """Keep PEP 695 type alias names stable across supported Python versions.
+
+    Python 3.15 qualifies aliases nested in another type with their module and
+    qualname, while older versions use the short alias name.
+    """
+    result = repr(t)
+    pending = [t]
+    seen: set[int] = set()
+
+    while pending:
+        item = pending.pop()
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+
+        origin = get_origin(item)
+        alias = item if is_typealiastype(item) else origin if is_typealiastype(origin) else None
+        if alias is not None:
+            module = getattr(alias, '__module__', None)
+            qualname = getattr(alias, '__qualname__', None)
+            if module and qualname:
+                qualified_name = re.escape(f'{module}.{qualname}')
+                result = re.sub(rf'(?<![\w.]){qualified_name}(?![\w.])', repr(alias), result)
+
+        pending.extend(get_args(item))
+
+    return result
 
 
 def _get_globals(t: Any) -> dict[str, Any]:
