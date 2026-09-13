@@ -27,6 +27,10 @@ _install-wheel wheel_dir="wheels":
 build: (_sync "dev")
     {{uv}} run --no-sync maturin develop --release
 
+# Local: rebuild extension with PGO (needs `rustup component add llvm-tools`)
+build-pgo: (_sync "dev")
+    {{uv}} run --no-sync maturin develop --release --pgo
+
 # Note: `uv sync --no-install-project` installs runtime dependencies but skips
 # the project itself; `uv pip install` is required because `uv sync` would
 # rebuild the project from source via its build-backend, ignoring local wheels.
@@ -130,17 +134,6 @@ _run-test-rc-leaks target="bench":
 test-rc-leaks target="bench": build (_sync "bench-compare") (_run-test-rc-leaks target)
 
 ci-test-rc-leaks target="bench": (_sync-ci "bench-compare") (_install-wheel "wheels") (_run-test-rc-leaks target)
-
-# The codec (bytes) benches must stay listed: code left out of the profile is
-# compiled as cold, worth -21%..-35% on the codec path. Competitors are deselected.
-[doc("CI PGO: install instrumented wheel + bench deps, run targeted benches to gather profile data")]
-ci-pgo-collect wheel_dir="pgo-wheel": (_sync-ci "pgo") (_install-wheel wheel_dir)
-    {{uv}} run --no-sync pytest \
-        bench/test_encoders.py bench/test_codec_encoders.py \
-        bench/test_flatten.py bench/test_full.py \
-        bench/compare/test_github_issue.py bench/compare/test_github_issue_bytes.py \
-        -k "not mashumaro and not msgspec and not orjson and not ormsgpack" \
-        --benchmark-min-time=0.2 --benchmark-max-time=0.4
 
 # Setup environment for pytest-codspeed (deps only; runner is invoked via the CodSpeed action)
 _bench-codespeed-setup: (_sync "codspeed")

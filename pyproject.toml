@@ -5,6 +5,9 @@ build-backend = "maturin"
 [tool.maturin]
 python-source = "python"
 module-name = "serpyco_rs._serpyco_rs"
+# The codec (bytes) benches must stay listed: code left out of the profile is
+# compiled as cold, worth -21%..-35% on the codec path.
+pgo-command = 'uv sync --active --locked --group pgo --no-install-project --inexact && python -m pytest bench/test_encoders.py bench/test_codec_encoders.py bench/test_flatten.py bench/test_full.py bench/compare/test_github_issue.py bench/compare/test_github_issue_bytes.py -k "not mashumaro and not msgspec and not orjson and not ormsgpack" --benchmark-min-time=0.2 --benchmark-max-time=0.4'
 
 [project]
 name = "serpyco-rs"
@@ -36,7 +39,7 @@ dev = [
     "pytest",
     "coverage[toml]",
     "attrs",
-    "maturin>=1,<2",
+    "maturin>=1.15,<2",
     "pytz",
     "python-dateutil",
     "multidict",
@@ -57,7 +60,7 @@ bench = [
     "pytest-benchmark[histogram]",
     "tabulate",
 ]
-# Installed in every build-matrix job (3.10 … 3.15t), so it must stay light: libs
+# Installed in every PGO build-matrix job (3.10 … 3.15t), so it must stay light: libs
 # like orjson lack wheels for some of those interpreters and would build from source.
 pgo = [
     { include-group = "bench" },

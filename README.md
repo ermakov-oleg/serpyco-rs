@@ -80,6 +80,13 @@ $ just type-check # pyright + mypy
 $ just bench      # benchmarks vs competitors
 ```
 
+Release wheels are built with PGO. To reproduce that build locally:
+
+```bash
+$ rustup component add llvm-tools
+$ just build-pgo
+```
+
 Run tests with Python and Rust coverage:
 
 ```bash

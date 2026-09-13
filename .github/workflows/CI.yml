@@ -47,7 +47,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        id: python
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
@@ -57,50 +56,10 @@ jobs:
           version: "0.11.19"
           enable-cache: false
 
-      - name: Pin uv to the build interpreter
-        shell: bash
-        run: echo "UV_PYTHON=${{ steps.python.outputs.python-path }}" >> "$GITHUB_ENV"
-
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
-
       - name: Install rust stable
-        id: rust-toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: llvm-tools
-
-      - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
-        if: env.PGO == 'true'
-        with:
-          manylinux: auto
-          target: ${{ matrix.target }}
-          sccache: "true"
-          args: >
-            --release
-            --sdist
-            --interpreter ${{ matrix.python-version }}
-            --out pgo-wheel
-        env:
-          RUSTFLAGS: "-Cprofile-generate=${{ github.workspace }}/target/profdata"
-
-      - name: Get rust host
-        if: env.PGO == 'true'
-        run: echo RUST_HOST=$(rustc -Vv | grep host | cut -d ' ' -f 2) >> "$GITHUB_ENV"
-        shell: bash
-
-      - name: Generate pgo data
-        if: env.PGO == 'true'
-        shell: bash
-        run: |
-          just ci-pgo-collect
-          rustup run stable bash -c 'echo LLVM_PROFDATA=$RUSTUP_HOME/toolchains/$RUSTUP_TOOLCHAIN/lib/rustlib/${{ env.RUST_HOST }}/bin/llvm-profdata >> "$GITHUB_ENV"'
-
-      #      - name: Setup upterm session
-      #        uses: lhotari/action-upterm@v1
-
-      - name: Merge pgo data
-        if: env.PGO == 'true'
-        run: ${{ env.LLVM_PROFDATA }} merge -o ${{ github.workspace }}/merged.profdata ${{ github.workspace }}/target/profdata
 
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
@@ -109,13 +68,14 @@ jobs:
           command: build
           target: ${{ matrix.target }}
           sccache: "true"
+          rustup-components: llvm-tools
+          before-script-linux: ${{ env.PGO == 'true' && 'curl -LsSf https://astral.sh/uv/0.11.19/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh' || '' }}
           args: >
             --release
             --sdist
             --interpreter ${{ matrix.python-version }}
             --out dist
-        env:
-          RUSTFLAGS: ${{ env.PGO == 'true' && format('-Cprofile-use={0}/merged.profdata', github.workspace) || '' }}
+            ${{ env.PGO == 'true' && '--pgo' || '' }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
