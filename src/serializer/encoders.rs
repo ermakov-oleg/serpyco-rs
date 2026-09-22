@@ -37,10 +37,10 @@ use crate::python::{
 use crate::python::{DecimalTypeInfo, FloatTypeInfo, IntegerTypeInfo, StrLoadMap, StringTypeInfo};
 use crate::serde_error::{Message, SchemaError, SerdeError, SerdeResult};
 use crate::validator::validators::{
-    check_bounds, check_length, check_sequence_bounds, check_sequence_size, invalid_enum_item,
-    invalid_type, invalid_type_dump, invalid_type_dump_err, invalid_type_dump_err_with_cause,
-    invalid_type_err, missing_required_property, no_encoder_for_discriminator, sequence_size_err,
-    sequence_size_ordering, str_as_bool,
+    check_bounds, check_int_bounds, check_length, check_sequence_bounds, check_sequence_size,
+    invalid_enum_item, invalid_type, invalid_type_dump, invalid_type_dump_err,
+    invalid_type_dump_err_with_cause, invalid_type_err, missing_required_property,
+    no_encoder_for_discriminator, sequence_size_err, sequence_size_ordering, str_as_bool,
 };
 use crate::validator::{Context, InstancePath};
 
@@ -267,7 +267,7 @@ impl Encoder for IntEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.cast_exact::<PyInt>() {
-            check_bounds!(val.extract()?, self.type_info, instance_path)?;
+            check_int_bounds(val, &self.type_info, instance_path)?;
             return Ok(value.clone());
         }
         if ctx.try_cast_from_string {
@@ -361,7 +361,7 @@ impl Encoder for FloatEncoder {
         ctx: &Context,
     ) -> SerdeResult<Bound<'a, PyAny>> {
         if let Ok(val) = value.cast::<PyInt>() {
-            check_bounds!(val.extract()?, self.type_info, instance_path)?;
+            check_int_bounds(val, &self.type_info, instance_path)?;
             return Ok(value.clone());
         }
         if let Ok(val) = value.cast::<PyFloat>() {
@@ -459,7 +459,7 @@ impl Encoder for DecimalEncoder {
             check_bounds!(val.value(), self.type_info, instance_path)?;
             true
         } else if let Ok(val) = value.cast::<PyInt>() {
-            check_bounds!(val.extract()?, self.type_info, instance_path)?;
+            check_int_bounds(val, &self.type_info, instance_path)?;
             true
         } else if let Ok(val) = value.cast::<PyString>() {
             match val.to_str()?.parse::<f64>() {

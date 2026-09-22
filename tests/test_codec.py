@@ -13,6 +13,7 @@ from typing_extensions import NotRequired, TypedDict
 
 import serpyco_rs
 from serpyco_rs import JSON, MSGPACK, SchemaValidationError, Serializer, ValidationError
+from serpyco_rs._impl import ErrorItem
 from serpyco_rs._custom_types import CustomType
 from serpyco_rs.metadata import CustomEncoder, Discriminator, Flatten, Max, MaxLength, Min, MinLength
 
@@ -290,6 +291,50 @@ def test_big_int_roundtrip(codec, big):
     s = Serializer(int, codec=codec)
     assert s.load(s.dump(big)) == big
     assert load_any(codec, s.dump(big)) == big
+
+
+# msgpack cannot encode ints beyond u64 / below i64, so the wire value differs per codec.
+parametrize_big_int = pytest.mark.parametrize(
+    ('codec', 'big'), [(JSON, 2**100), (MSGPACK, 2**63)], ids=['json', 'msgpack']
+)
+
+
+@parametrize_big_int
+def test_big_int_load__only_min_bound_accepts(codec, big):
+    s = Serializer(Annotated[int, Min(0)], codec=codec)
+    assert s.load(dump_any(codec, big)) == big
+
+
+@parametrize_big_int
+def test_big_int_load__bounded_raises_schema_error(codec, big):
+    s = Serializer(Annotated[int, Min(0), Max(100)], codec=codec)
+    with pytest.raises(SchemaValidationError) as e:
+        s.load(dump_any(codec, big))
+    assert e.value.errors == [ErrorItem(message=f'{big} is greater than the maximum of 100', instance_path='')]
+
+
+def test_big_negative_int_load__json():
+    big = -(2**63) - 1
+    assert Serializer(Annotated[int, Max(100)], codec=JSON).load(dump_any(JSON, big)) == big
+    with pytest.raises(SchemaValidationError) as e:
+        Serializer(Annotated[int, Min(0), Max(100)], codec=JSON).load(dump_any(JSON, big))
+    assert e.value.errors == [ErrorItem(message=f'{big} is less than the minimum of 0', instance_path='')]
+
+
+@pytest.mark.parametrize(('codec', 'big'), [(JSON, 10**400), (MSGPACK, 2**63)], ids=['json', 'msgpack'])
+def test_big_int_on_float_field(codec, big):
+    assert Serializer(float, codec=codec).load(dump_any(codec, big)) == big
+    with pytest.raises(SchemaValidationError) as e:
+        Serializer(Annotated[float, Max(1.5)], codec=codec).load(dump_any(codec, big))
+    # msgpack's 2**63 fits f64, so its message renders the float; JSON's 10**400 renders the int.
+    assert 'is greater than the maximum of 1.5' in e.value.errors[0].message
+
+
+@parametrize_big_int
+def test_big_int_on_decimal_field(codec, big):
+    assert Serializer(Decimal, codec=codec).load(dump_any(codec, big)) == Decimal(big)
+    with pytest.raises(SchemaValidationError):
+        Serializer(Annotated[Decimal, Max(100)], codec=codec).load(dump_any(codec, big))
 
 
 @parametrize_codec

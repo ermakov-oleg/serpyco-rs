@@ -4,12 +4,14 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from enum import Enum, IntEnum
-from typing import Generic, Literal, Optional, TypeVar
+from typing import Annotated, Generic, Literal, Optional, TypeVar
 from zoneinfo import ZoneInfo
 
 import pytest
 from dateutil.tz import tzoffset
 from serpyco_rs import SchemaValidationError, Serializer, ValidationError
+from serpyco_rs._impl import ErrorItem
+from serpyco_rs.metadata import Max, Min
 from typing_extensions import Never, TypedDict
 
 
@@ -89,17 +91,58 @@ def test_int_dump_large__pass_through():
     assert serializer.dump(-big) == -big
 
 
-def test_int_load_large__raises_overflow():
-    """`load` is limited to i64 range; values outside raise OverflowError.
+BIG_INTS = [2**63, -(2**63) - 1, 2**100, 9223372126854869314]
 
-    This documents the current limitation. The error type is intentionally
-    distinct from SchemaValidationError because the validation passes
-    (it *is* an integer) — the failure happens later when converting to
-    Rust's `i64`.
-    """
-    serializer = Serializer(int)
-    with pytest.raises(OverflowError):
-        serializer.load(2**100)
+
+@pytest.mark.parametrize('value', BIG_INTS)
+def test_int_load_large__unbounded_accepts(value):
+    """An unbounded `int` accepts Python ints outside the i64 range as-is."""
+    assert Serializer(int).load(value) == value
+
+
+@pytest.mark.parametrize(
+    ('value', 'err'),
+    [
+        (2**63, f'{2**63} is greater than the maximum of 100'),
+        (-(2**63) - 1, f'{-(2**63) - 1} is less than the minimum of 0'),
+    ],
+)
+def test_int_load_large__bounded_raises_schema_error(value, err):
+    s = Serializer(Annotated[int, Min(0), Max(100)])
+    with pytest.raises(SchemaValidationError) as e:
+        s.load(value)
+    assert e.value.errors == [ErrorItem(message=err, instance_path='')]
+
+
+def test_int_load_large__opposite_bound_only_accepts():
+    assert Serializer(Annotated[int, Min(0)]).load(2**63) == 2**63
+    assert Serializer(Annotated[int, Max(100)]).load(-(2**63) - 1) == -(2**63) - 1
+
+
+def test_float_load_large_int__unbounded_accepts():
+    big = 10**400
+    assert Serializer(float).load(big) == big
+
+
+@pytest.mark.parametrize(
+    ('type', 'value', 'err'),
+    [
+        (Annotated[float, Max(1.5)], 10**400, f'{10**400} is greater than the maximum of 1.5'),
+        (Annotated[float, Min(0)], -(10**400), f'{-(10**400)} is less than the minimum of 0'),
+    ],
+)
+def test_float_load_large_int__bounded_raises_schema_error(type, value, err):
+    with pytest.raises(SchemaValidationError) as e:
+        Serializer(type).load(value)
+    assert e.value.errors == [ErrorItem(message=err, instance_path='')]
+
+
+def test_decimal_load_large_int():
+    big = 10**400
+    assert Serializer(Decimal).load(big) == Decimal(big)
+    with pytest.raises(SchemaValidationError) as e:
+        Serializer(Annotated[Decimal, Max(100)]).load(big)
+    assert e.value.errors == [ErrorItem(message=f'{big} is greater than the maximum of 100', instance_path='')]
 
 
 def test_dict_encoder():
