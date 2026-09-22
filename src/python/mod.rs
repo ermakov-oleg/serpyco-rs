@@ -11,6 +11,6 @@ pub(crate) use dateutil::{
 pub(crate) use py::*;
 pub(crate) use types::{
     get_object_type, BaseTypeInfo, DecimalTypeInfo, EntityFieldInfo, FloatTypeInfo,
-    IntegerTypeInfo, StrLoadMap, StringTypeInfo, Type,
+    IntegerTypeInfo, NumberTypeInfo, StrLoadMap, StringTypeInfo, Type,
 };
 pub(crate) use utils::fmt_py;

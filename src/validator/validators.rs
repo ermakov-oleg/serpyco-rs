@@ -1,9 +1,11 @@
+use crate::python::NumberTypeInfo;
 use crate::serde_error::{Expected, Message, SchemaError, SerdeError};
 use crate::validator::InstancePath;
 
+use pyo3::exceptions::PyOverflowError;
 use pyo3::prelude::PyAnyMethods;
-use pyo3::types::{PyList, PySequence, PyString};
-use pyo3::{Bound, PyAny, PyErr};
+use pyo3::types::{PyInt, PyList, PySequence, PyString};
+use pyo3::{Bound, FromPyObject, PyAny, PyErr};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -82,6 +84,55 @@ macro_rules! check_bounds {
             $path,
         )
     };
+}
+
+/// Bounds check for a Python `int` whose value may not fit the bound type `T`
+/// (i64 for int fields, f64 for float/decimal fields).
+#[inline(always)]
+pub fn check_int_bounds<T>(
+    val: &Bound<'_, PyInt>,
+    type_info: &NumberTypeInfo<T>,
+    instance_path: &InstancePath,
+) -> Result<(), SerdeError>
+where
+    T: PartialOrd + Display + Copy + for<'a, 'py> FromPyObject<'a, 'py>,
+{
+    match val.extract::<T>() {
+        Ok(v) => check_bounds!(v, type_info, instance_path),
+        Err(e) => int_overflow_bounds(val, e.into(), type_info, instance_path),
+    }
+}
+
+/// An int outside `T` is necessarily beyond any `max` (positive) or `min`
+/// (negative), so inclusivity does not matter here.
+#[cold]
+#[inline(never)]
+fn int_overflow_bounds<T>(
+    val: &Bound<'_, PyInt>,
+    err: PyErr,
+    type_info: &NumberTypeInfo<T>,
+    instance_path: &InstancePath,
+) -> Result<(), SerdeError>
+where
+    T: Display + Copy,
+{
+    if !err.is_instance_of::<PyOverflowError>(val.py()) {
+        return Err(err.into());
+    }
+    let negative = val.lt(0)?;
+    match (negative, type_info.min, type_info.max) {
+        (false, _, Some(max)) => Err(SchemaError::new(
+            format!("{val} is greater than the maximum of {max}"),
+            instance_path,
+        )
+        .into()),
+        (true, Some(min), _) => Err(SchemaError::new(
+            format!("{val} is less than the minimum of {min}"),
+            instance_path,
+        )
+        .into()),
+        _ => Ok(()),
+    }
 }
 
 pub fn check_min_length(
