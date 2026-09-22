@@ -40,9 +40,9 @@ jobs:
             target: universal2-apple-darwin
     name: Build on ${{ matrix.os}} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    # Non-tag PGO is limited to the combinations the benchmark jobs install.
+    # Non-tag PGO runs on one interpreter per OS so the Windows `cmd /C` path is exercised in PRs.
     env:
-      PGO: ${{ startsWith(github.ref, 'refs/tags/') || (matrix.python-version == '3.13' && matrix.os != 'windows-latest') }}
+      PGO: ${{ startsWith(github.ref, 'refs/tags/') || matrix.python-version == '3.13' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
